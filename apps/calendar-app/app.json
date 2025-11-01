@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Calendar Connection",
+    "slug": "calendar-connection",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/CalendarConnectionv2AppIcon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "myworkouts",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ebraithwaite3.MyWorkouts",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e7f5f3db-cf61-439b-97c4-7595a8b68403"
+      }
+    }
+  }
+}

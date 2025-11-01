@@ -1,0 +1,12 @@
+{
+  "name": "my-life-apps",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "workout": "cd apps/workout-app && npm start",
+    "calendar": "cd apps/calendar-app && npm start"
+  }
+}
