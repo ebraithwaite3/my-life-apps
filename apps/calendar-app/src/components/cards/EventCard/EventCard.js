@@ -2,7 +2,7 @@ import React, { useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useTheme } from '../../../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { DateTime } from 'luxon';
 
 const EventCard = ({ 

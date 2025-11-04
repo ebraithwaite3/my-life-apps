@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from "@my-apps/contexts";
 import { useData } from '../contexts/DataContext';
 import { useCalendarActions } from '../hooks/useCalendarActions';
 import { Ionicons } from '@expo/vector-icons';

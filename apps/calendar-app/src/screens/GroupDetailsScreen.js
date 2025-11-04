@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 
 const GroupDetailsScreen = ({ route, navigation }) => {
   const { theme, getSpacing, getTypography } = useTheme();

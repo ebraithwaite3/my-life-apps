@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { View, Text, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { useTheme } from "../../../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import ExpandableCalendarsSection from "./ExpandableCalendarsSection";
 import ExpandableMembersSection from "./ExpandableMembersSection";
 import { useGroupActions } from "../../../hooks";

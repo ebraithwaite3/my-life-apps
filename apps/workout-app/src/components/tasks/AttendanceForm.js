@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useCallback } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { Switch, Text, View } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 
 const AttendanceForm = ({ taskData, setTaskData, setErrors }) => {
   const { theme, getSpacing, getTypography } = useTheme();

@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../../../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import { useGroupActions } from "../../../hooks";
 import { useData } from "../../../contexts/DataContext";
 import { updateDocument } from "../../../services/firestoreService";

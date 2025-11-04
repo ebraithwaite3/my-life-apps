@@ -1,6 +1,6 @@
 import React, { memo, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 
 const CalendarDay = memo(({ 
   day, 

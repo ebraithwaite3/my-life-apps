@@ -11,7 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 import QuantityTracker from '../QuantityTracker';
 import * as Crypto from 'expo-crypto';
 

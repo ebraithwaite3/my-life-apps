@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 import QuantityTracker from '../QuantityTracker';
 
 const ShoppingListItem = ({ 

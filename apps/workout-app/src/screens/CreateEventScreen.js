@@ -8,7 +8,7 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 
 const CreateEventScreen = ({ navigation }) => {
   const { theme, getSpacing, getTypography } = useTheme();

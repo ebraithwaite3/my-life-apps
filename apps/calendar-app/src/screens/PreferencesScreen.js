@@ -4,22 +4,39 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Switch,
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
+import { ToggleRow, SelectModal } from "@my-apps/ui";  // 👈 Import shared components
 import { useData } from "../contexts/DataContext";
 import { useAuth } from "../contexts/AuthContext";
 import { updateUserDoc } from "../services/firestoreService";
 import ChecklistCard from "../components/cards/ChecklistCard/ChecklistCard";
 import EditChecklist from "../components/cards/ChecklistCard/EditChecklist";
 
+const defaultPreferences = {
+  defaultLoadingPage: "Today",
+  notifications: false,
+  notifyFor: {
+    groupActivity: false,
+    newTasks: false,
+    deletedTasks: false,
+    newEvents: false,
+    updatedEvents: false,
+    deletedEvents: false,
+  },
+};
+
 const PreferencesScreen = ({navigation, route}) => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
   const { preferences, user, groups } = useData();
-  const [updatedPreferences, setUpdatedPreferences] = useState(preferences);
+  const initialPrefs =
+    preferences && Object.keys(preferences).length
+      ? { ...defaultPreferences, ...preferences, notifyFor: { ...defaultPreferences.notifyFor, ...preferences.notifyFor } }
+      : defaultPreferences;
+  const [updatedPreferences, setUpdatedPreferences] = useState(initialPrefs);
   const [hasChanges, setHasChanges] = useState(false);
   const [notificationDetailsOpen, setNotificationDetailsOpen] = useState(false);
   const [checklistsOpen, setChecklistsOpen] = useState(false);
@@ -46,12 +63,20 @@ const PreferencesScreen = ({navigation, route}) => {
   }, [openChecklists]);
 
   useEffect(() => {
-    setUpdatedPreferences(preferences);
+    const mergedPrefs =
+      preferences && Object.keys(preferences).length
+        ? { ...defaultPreferences, ...preferences, notifyFor: { ...defaultPreferences.notifyFor, ...preferences.notifyFor } }
+        : defaultPreferences;
+    setUpdatedPreferences(mergedPrefs);
   }, [preferences]);
 
   useEffect(() => {
+    const currentBase =
+      preferences && Object.keys(preferences).length
+        ? { ...defaultPreferences, ...preferences, notifyFor: { ...defaultPreferences.notifyFor, ...preferences.notifyFor } }
+        : defaultPreferences;
     const changesMade =
-      JSON.stringify(preferences) !== JSON.stringify(updatedPreferences);
+      JSON.stringify(currentBase) !== JSON.stringify(updatedPreferences);
     setHasChanges(changesMade);
   }, [preferences, updatedPreferences]);
 
@@ -79,10 +104,10 @@ const PreferencesScreen = ({navigation, route}) => {
   }, [user]);
   console.log("Saved Checklists:", savedChecklists);
 
-  const handleRadioChange = (key, value) => {
+  const handleSelectDefaultPage = (value) => {
     setUpdatedPreferences((prev) => ({
       ...prev,
-      [key]: value,
+      defaultLoadingPage: value,
     }));
   };
 
@@ -94,29 +119,18 @@ const PreferencesScreen = ({navigation, route}) => {
       };
       if (!value) {
         newPrefs.notifyFor = {
-          ...prev.notifyFor,
-          groupActivity: false,
-          newTasks: false,
-          deletedTasks: false,
-          newEvents: false,
-          updatedEvents: false,
-          deletedEvents: false,
+          ...defaultPreferences.notifyFor,
         };
         setNotificationDetailsOpen(false);
       } else {
-        if (preferences.notifications) {
+        if (preferences?.notifications) {
           newPrefs.notifyFor = {
-            ...prev.notifyFor,
-            groupActivity: preferences.notifyFor?.groupActivity || false,
-            newTasks: preferences.notifyFor?.newTasks || false,
-            deletedTasks: preferences.notifyFor?.deletedTasks || false,
-            newEvents: preferences.notifyFor?.newEvents || false,
-            updatedEvents: preferences.notifyFor?.updatedEvents || false,
-            deletedEvents: preferences.notifyFor?.deletedEvents || false,
+            ...defaultPreferences.notifyFor,
+            ...preferences.notifyFor,
           };
         } else {
           newPrefs.notifyFor = {
-            ...prev.notifyFor,
+            ...defaultPreferences.notifyFor,
             groupActivity: true,
             newTasks: true,
             deletedTasks: true,
@@ -167,7 +181,11 @@ const PreferencesScreen = ({navigation, route}) => {
   };
 
   const handleCancel = () => {
-    setUpdatedPreferences(preferences);
+    const merged =
+      preferences && Object.keys(preferences).length
+        ? { ...defaultPreferences, ...preferences, notifyFor: { ...defaultPreferences.notifyFor, ...preferences.notifyFor } }
+        : defaultPreferences;
+    setUpdatedPreferences(merged);
     setNotificationDetailsOpen(false);
   };
 
@@ -192,56 +210,11 @@ const PreferencesScreen = ({navigation, route}) => {
       paddingHorizontal: getSpacing.md,
       marginBottom: getSpacing.xl,
     },
-    settingHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: getSpacing.sm,
-    },
     settingTitle: {
       ...getTypography.h3,
       color: theme.text.primary,
       fontWeight: "bold",
-    },
-    optionsContainer: {
-      flexDirection: "row",
-      justifyContent: "flex-start",
-      alignItems: "center",
-    },
-    radioOption: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginRight: getSpacing.lg,
-      paddingVertical: getSpacing.sm,
-    },
-    radioCircle: {
-      height: 20,
-      width: 20,
-      borderRadius: 10,
-      borderWidth: 2,
-      borderColor: theme.border,
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: getSpacing.sm,
-    },
-    selectedRadioCircle: {
-      borderColor: theme.primary,
-    },
-    radioInnerCircle: {
-      height: 10,
-      width: 10,
-      borderRadius: 5,
-      backgroundColor: theme.primary,
-    },
-    radioLabel: {
-      ...getTypography.body,
-      color: theme.text.primary,
-    },
-    notificationMainRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      width: "100%",
+      marginBottom: getSpacing.sm,
     },
     notificationDetailsButton: {
       flexDirection: "row",
@@ -260,16 +233,6 @@ const PreferencesScreen = ({navigation, route}) => {
       paddingLeft: getSpacing.md,
       borderLeftWidth: 2,
       borderLeftColor: theme.border,
-    },
-    notificationDetailItem: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingVertical: getSpacing.sm,
-    },
-    notificationDetailLabel: {
-      ...getTypography.body,
-      color: theme.text.primary,
     },
     // New styles for checklist section
     checklistsContainer: {
@@ -345,27 +308,13 @@ const PreferencesScreen = ({navigation, route}) => {
       notificationIcon: {
         marginLeft: getSpacing.sm,
       },
+      settingHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: getSpacing.sm,
+      },
   });
-
-  const RadioButton = ({ label, value, selectedValue, onSelect }) => (
-    <TouchableOpacity
-      style={styles.radioOption}
-      onPress={() => onSelect(value)}
-      accessible={true}
-      accessibilityLabel={label}
-      accessibilityState={{ selected: value === selectedValue }}
-    >
-      <View
-        style={[
-          styles.radioCircle,
-          value === selectedValue && styles.selectedRadioCircle,
-        ]}
-      >
-        {value === selectedValue && <View style={styles.radioInnerCircle} />}
-      </View>
-      <Text style={styles.radioLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
 
   const notificationDetails = [
     { key: "groupActivity", label: "Group Activity" },
@@ -388,70 +337,56 @@ const PreferencesScreen = ({navigation, route}) => {
 
         <View style={styles.settingContainer}>
           <Text style={styles.settingTitle}>Default Loading Page</Text>
-          <View style={styles.optionsContainer}>
-            {defaultLoadingPageOptions.map((option) => (
-              <RadioButton
-                key={option.value}
-                label={option.label}
-                value={option.value}
-                selectedValue={updatedPreferences.defaultLoadingPage}
-                onSelect={(val) => handleRadioChange("defaultLoadingPage", val)}
-              />
-            ))}
-          </View>
+          {/* 👇 REPLACED: Radio buttons with clean SelectModal */}
+          <SelectModal
+            title="Default Loading Page"
+            placeholder="— Select default page —"
+            value={updatedPreferences.defaultLoadingPage || ""}
+            options={defaultLoadingPageOptions}
+            onSelect={handleSelectDefaultPage}
+            getLabel={(item) => item.label}
+            getValue={(item) => item.value}
+          />
         </View>
 
         <View style={styles.settingContainer}>
-          <View style={styles.notificationMainRow}>
-            <Text style={styles.settingTitle}>Notifications</Text>
-            <Switch
-              onValueChange={handleNotificationsToggle}
-              value={updatedPreferences.notifications}
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={
-                updatedPreferences.notifications
-                  ? theme.text.inverse
-                  : theme.border
-              }
-            />
-          </View>
+          {/* 👇 REPLACED: Main Switch with clean ToggleRow */}
+          <ToggleRow
+            title="Notifications"
+            value={updatedPreferences.notifications || false}
+            onValueChange={handleNotificationsToggle}
+          />
 
           {updatedPreferences.notifications && (
-            <TouchableOpacity
-              style={styles.notificationDetailsButton}
-              onPress={() => setNotificationDetailsOpen(!notificationDetailsOpen)}
-            >
-              <Text style={styles.notificationDetailsText}>
-                Edit Specific Notifications
-              </Text>
-              <Ionicons
-                name={notificationDetailsOpen ? "chevron-up" : "chevron-down"}
-                size={20}
-                color={theme.text.secondary}
-              />
-            </TouchableOpacity>
-          )}
+            <>
+              <TouchableOpacity
+                style={styles.notificationDetailsButton}
+                onPress={() => setNotificationDetailsOpen(!notificationDetailsOpen)}
+              >
+                <Text style={styles.notificationDetailsText}>
+                  Edit Specific Notifications
+                </Text>
+                <Ionicons
+                  name={notificationDetailsOpen ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color={theme.text.secondary}
+                />
+              </TouchableOpacity>
 
-          {updatedPreferences.notifications && notificationDetailsOpen && (
-            <View style={styles.notificationDetailsList}>
-              {notificationDetails.map((item) => (
-                <View key={item.key} style={styles.notificationDetailItem}>
-                  <Text style={styles.notificationDetailLabel}>{item.label}</Text>
-                  <Switch
-                    onValueChange={(value) =>
-                      handleSpecificNotificationToggle(item.key, value)
-                    }
-                    value={updatedPreferences.notifyFor?.[item.key] || false}
-                    trackColor={{ false: theme.border, true: theme.primary }}
-                    thumbColor={
-                      updatedPreferences.notifyFor?.[item.key]
-                        ? theme.text.inverse
-                        : theme.border
-                    }
-                  />
+              {notificationDetailsOpen && (
+                <View style={styles.notificationDetailsList}>
+                  {notificationDetails.map((item) => (
+                    <ToggleRow
+                      key={item.key}
+                      title={item.label}
+                      value={updatedPreferences.notifyFor?.[item.key] || false}
+                      onValueChange={(value) => handleSpecificNotificationToggle(item.key, value)}
+                      containerStyle={{ marginTop: getSpacing.sm }}
+                    />
+                  ))}
                 </View>
-              ))}
-            </View>
+              )}
+            </>
           )}
         </View>
 

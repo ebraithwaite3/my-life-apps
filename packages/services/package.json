@@ -1,0 +1,9 @@
+{
+  "name": "@my-apps/services",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "dependencies": {
+    "firebase": "*",
+    "@react-native-async-storage/async-storage": "*"
+  }
+}

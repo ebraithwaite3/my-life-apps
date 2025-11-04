@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   SafeAreaView,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { useData } from '../contexts/DataContext';
 import { useGroupActions } from '../hooks';
 import { Ionicons } from '@expo/vector-icons';

@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   Modal,
 } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 import QuantityTracker from '../QuantityTracker';
 import { DateTime } from 'luxon';
 

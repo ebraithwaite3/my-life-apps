@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import { View, Text, TouchableOpacity, Alert, TextInput, Modal, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 import { useData } from '../../contexts/DataContext';
 import { updateUserDoc } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';

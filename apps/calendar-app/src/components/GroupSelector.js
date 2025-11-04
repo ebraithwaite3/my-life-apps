@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 
 const GroupSelector = ({ 
   userGroups, 

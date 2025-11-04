@@ -6,7 +6,8 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 
 const AddScreen = ({ navigation }) => {
   const { theme, getSpacing, getTypography } = useTheme();

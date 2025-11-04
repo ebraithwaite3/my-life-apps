@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import { useData } from "../contexts/DataContext";
 import { useGroceryActions } from "../hooks";
 import CategorySectionForLists from "../components/groceries/CategorySectionForLists";

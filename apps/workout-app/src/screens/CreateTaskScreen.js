@@ -13,7 +13,7 @@ import {
   Dimensions,
   Alert
 } from "react-native";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import { useData } from "../contexts/DataContext";
 import * as Crypto from "expo-crypto";
 import EventHeader from "../components/EventHeader";

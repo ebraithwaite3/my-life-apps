@@ -1,6 +1,6 @@
 import React, { useMemo, memo, useCallback } from "react";
 import { View, Text, StyleSheet, Dimensions } from "react-native";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import { DateTime } from "luxon";
 import CalendarDay from "./CalendarDay";
 

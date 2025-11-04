@@ -1,7 +1,10 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
-import { CustomThemeProvider, useTheme } from './src/contexts/ThemeContext';
+// import { useTheme } from '@my-apps/contexts';
+// import { CustomThemeProvider } from '@my-apps/contexts';
+import { CustomThemeProvider, useTheme } from '@my-apps/contexts';
+
 import { DataProvider } from './src/contexts/DataContext';
 import LoginScreen from './src/screens/LoginScreen';
 import MainNavigator from './src/navigation/MainNavigator';
@@ -9,6 +12,9 @@ import Toast from 'react-native-toast-message';
 
 // 1. Import GestureHandlerRootView
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+import { Theme } from '@my-apps/config';
+console.log('Loaded theme from config:', Theme);
 
 // Main app component that uses all contexts
 const MainApp = () => {

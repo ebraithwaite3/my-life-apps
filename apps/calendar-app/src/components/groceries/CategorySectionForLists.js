@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import FoodItemForList from "./FoodItemForList";
 import QuickAddModal from "./QuickAddModal";
 import { useGroceryActions } from "../../hooks";

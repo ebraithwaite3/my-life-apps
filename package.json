@@ -1,12 +1,24 @@
 {
   "name": "my-life-apps",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "nohoist": [
+      "**/react-native",
+      "**/react-native/**",
+      "**/expo",
+      "**/expo/**",
+      "**/@react-native-community/**",
+      "**/react-native-*",
+      "**/react-native-*/**"
+    ]
+  },
   "scripts": {
     "workout": "cd apps/workout-app && npm start",
-    "calendar": "cd apps/calendar-app && npm start"
+    "calendar": "cd apps/calendar-app && npm start",
+    "organizer": "cd apps/organizer-app && npm start"
   }
 }

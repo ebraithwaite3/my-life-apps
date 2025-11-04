@@ -3,7 +3,8 @@ import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 
 const MealCard = ({ item, checkedInfo, onDelete, onClearMeal }) => {
   const { theme, getSpacing, getTypography } = useTheme();

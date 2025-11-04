@@ -4,13 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Switch,
   ScrollView,
-  Modal,
-  TouchableWithoutFeedback,
   Alert,
 } from "react-native";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
+import { ToggleRow, SelectModal } from "@my-apps/ui";  // 👈 Import both components
 import { useData } from "../contexts/DataContext";
 import { useAuth } from "../contexts/AuthContext";
 import { updateUserDoc } from "../services/firestoreService";
@@ -36,7 +34,6 @@ const PreferencesScreen = ({ navigation, route }) => {
 
   const [updatedPreferences, setUpdatedPreferences] = useState(initialPrefs);
   const [hasChanges, setHasChanges] = useState(false);
-  const [showChecklistPicker, setShowChecklistPicker] = useState(false);
   const [showEditChecklist, setShowEditChecklist] = useState(false);
 
   useEffect(() => {
@@ -69,7 +66,6 @@ const PreferencesScreen = ({ navigation, route }) => {
         checklistId: checklistId || "",
       },
     }));
-    setShowChecklistPicker(false);
   };
 
   const handleSave = async () => {
@@ -83,7 +79,6 @@ const PreferencesScreen = ({ navigation, route }) => {
       return;
     }
 
-    // Validate that if addChecklistToWorkout is true, checklistId must be set
     if (
       updatedPreferences.workoutPreferences?.addChecklistToWorkout &&
       !updatedPreferences.workoutPreferences?.checklistId
@@ -114,16 +109,12 @@ const PreferencesScreen = ({ navigation, route }) => {
   };
 
   const handleChecklistSaved = () => {
-    // Optional: You can refresh data or show a success message
     console.log("Checklist saved successfully!");
-    // The DataContext should automatically update with the new checklist
   };
 
-  // Check if save button should be disabled
   const isSaveDisabled = () => {
     if (!hasChanges) return true;
     
-    // If addChecklistToWorkout is enabled but no checklist selected, disable save
     if (
       updatedPreferences.workoutPreferences?.addChecklistToWorkout &&
       !updatedPreferences.workoutPreferences?.checklistId
@@ -155,42 +146,10 @@ const PreferencesScreen = ({ navigation, route }) => {
       paddingHorizontal: getSpacing.md,
       marginBottom: getSpacing.xl,
     },
-    settingRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      width: "100%",
-      marginBottom: getSpacing.xl,
-    },
-    settingTitle: {
-      ...getTypography.h3,
-      color: theme.text.primary,
-      fontWeight: "bold",
-    },
     subHeaderText: {
       ...getTypography.body,
       color: theme.text.secondary,
       marginBottom: getSpacing.sm,
-    },
-    checklistButton: {
-      width: "100%",
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      backgroundColor: theme.surface || theme.background,
-      paddingVertical: 12,
-      paddingHorizontal: 10,
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    checklistButtonText: {
-      fontSize: 16,
-      color: theme.text.primary,
-    },
-    checklistPlaceholder: {
-      fontSize: 16,
-      color: theme.text.secondary,
     },
     createChecklistButton: {
       width: "100%",
@@ -244,51 +203,6 @@ const PreferencesScreen = ({ navigation, route }) => {
       ...getTypography.button,
       color: theme.text.primary,
     },
-    checklistPickerOverlay: {
-      flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.6)",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    checklistPickerModal: {
-      backgroundColor: theme.surface,
-      borderRadius: getBorderRadius.lg,
-      width: "90%",
-      maxHeight: "60%",
-      marginHorizontal: getSpacing.lg,
-    },
-    checklistPickerHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingHorizontal: getSpacing.lg,
-      paddingVertical: getSpacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-    checklistPickerTitle: {
-      fontSize: getTypography.h4.fontSize,
-      fontWeight: "600",
-      color: theme.text.primary,
-    },
-    checklistPickerDone: {
-      fontSize: getTypography.body.fontSize,
-      fontWeight: "600",
-      color: theme.primary,
-    },
-    checklistOption: {
-      paddingHorizontal: getSpacing.lg,
-      paddingVertical: getSpacing.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
-    },
-    selectedChecklistOption: {
-      backgroundColor: theme.primary + "20",
-    },
-    checklistOptionText: {
-      fontSize: getTypography.body.fontSize,
-      color: theme.text.primary,
-    },
   });
 
   const selectedChecklistId = String(
@@ -311,45 +225,21 @@ const PreferencesScreen = ({ navigation, route }) => {
         <Text style={styles.title}>Preferences</Text>
 
         <View style={styles.settingContainer}>
-          <View style={styles.settingRow}>
-            <Text style={styles.settingTitle}>Sync Workouts to Calendar</Text>
-            <Switch
-              onValueChange={(value) =>
-                handleToggle("syncWorkoutsToCalendar", value)
-              }
-              value={
-                updatedPreferences.workoutPreferences?.syncWorkoutsToCalendar ||
-                false
-              }
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={
-                updatedPreferences.workoutPreferences?.syncWorkoutsToCalendar
-                  ? theme.text.inverse
-                  : theme.border
-              }
-            />
-          </View>
+          {/* 👇 REPLACED: Old verbose switch with clean ToggleRow */}
+          <ToggleRow
+            title="Sync Workouts to Calendar"
+            value={updatedPreferences.workoutPreferences?.syncWorkoutsToCalendar || false}
+            onValueChange={(value) => handleToggle("syncWorkoutsToCalendar", value)}
+          />
 
           {updatedPreferences.workoutPreferences?.syncWorkoutsToCalendar && (
             <>
-              <View style={styles.settingRow}>
-                <Text style={styles.settingTitle}>Add Checklist To Workout</Text>
-                <Switch
-                  onValueChange={(value) =>
-                    handleToggle("addChecklistToWorkout", value)
-                  }
-                  value={
-                    updatedPreferences.workoutPreferences
-                      ?.addChecklistToWorkout || false
-                  }
-                  trackColor={{ false: theme.border, true: theme.primary }}
-                  thumbColor={
-                    updatedPreferences.workoutPreferences?.addChecklistToWorkout
-                      ? theme.text.inverse
-                      : theme.border
-                  }
-                />
-              </View>
+              {/* 👇 REPLACED: Another clean ToggleRow */}
+              <ToggleRow
+                title="Add Checklist To Workout"
+                value={updatedPreferences.workoutPreferences?.addChecklistToWorkout || false}
+                onValueChange={(value) => handleToggle("addChecklistToWorkout", value)}
+              />
 
               {updatedPreferences.workoutPreferences?.addChecklistToWorkout && (
                 <View style={{ width: "100%", marginTop: 0 }}>
@@ -357,21 +247,16 @@ const PreferencesScreen = ({ navigation, route }) => {
 
                   {user?.savedChecklists?.length > 0 ? (
                     <>
-                      <TouchableOpacity
-                        style={styles.checklistButton}
-                        onPress={() => setShowChecklistPicker(true)}
-                      >
-                        <Text
-                          style={
-                            selectedChecklist
-                              ? styles.checklistButtonText
-                              : styles.checklistPlaceholder
-                          }
-                        >
-                          {selectedChecklist?.name || "— Pick a checklist —"}
-                        </Text>
-                        <Text style={styles.checklistButtonText}>›</Text>
-                      </TouchableOpacity>
+                      {/* 👇 CLEAN: Self-contained SelectModal - no state management needed! */}
+                      <SelectModal
+                        title="Select Checklist"
+                        placeholder="— Pick a checklist —"
+                        value={selectedChecklistId}
+                        options={user?.savedChecklists || []}
+                        onSelect={handleChecklistSelect}
+                        getLabel={(item) => item.name}
+                        getValue={(item) => String(item.id)}
+                      />
                       {!selectedChecklistId && (
                         <Text style={styles.warningText}>
                           ⚠️ Please select a checklist to save
@@ -397,24 +282,15 @@ const PreferencesScreen = ({ navigation, route }) => {
               )}
             </>
           )}
-          <View style={[styles.settingRow, { marginTop: getSpacing.xl }]}>
-            <Text style={styles.settingTitle}>Track Rep Goals</Text>
-            <Switch
-              onValueChange={(value) =>
-                handleToggle("trackRepGoals", value)
-              }
-              value={
-                updatedPreferences.workoutPreferences?.trackRepGoals ||
-                false
-              }
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={
-                updatedPreferences.workoutPreferences?.trackRepGoals
-                  ? theme.text.inverse
-                  : theme.border
-              }
-            />
-          </View>
+
+          {/* 👇 REPLACED: Third ToggleRow with optional subtitle */}
+          <ToggleRow
+            title="Track Rep Goals"
+            subtitle="Keep track of your target reps for each exercise"
+            value={updatedPreferences.workoutPreferences?.trackRepGoals || false}
+            onValueChange={(value) => handleToggle("trackRepGoals", value)}
+            containerStyle={{ marginTop: getSpacing.xl }}
+          />
         </View>
 
         {hasChanges && (
@@ -443,61 +319,11 @@ const PreferencesScreen = ({ navigation, route }) => {
         )}
       </ScrollView>
 
-      {/* Checklist Picker Modal */}
-      {showChecklistPicker && (
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showChecklistPicker}
-          onRequestClose={() => setShowChecklistPicker(false)}
-        >
-          <TouchableWithoutFeedback
-            onPress={() => setShowChecklistPicker(false)}
-          >
-            <View style={styles.checklistPickerOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.checklistPickerModal}>
-                  <View style={styles.checklistPickerHeader}>
-                    <Text style={styles.checklistPickerTitle}>
-                      Select Checklist
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setShowChecklistPicker(false)}
-                    >
-                      <Text style={styles.checklistPickerDone}>Done</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <ScrollView>
-                    {user?.savedChecklists?.map((checklist) => (
-                      <TouchableOpacity
-                        key={checklist.id}
-                        style={[
-                          styles.checklistOption,
-                          String(checklist.id) === selectedChecklistId &&
-                            styles.selectedChecklistOption,
-                        ]}
-                        onPress={() =>
-                          handleChecklistSelect(String(checklist.id))
-                        }
-                      >
-                        <Text style={styles.checklistOptionText}>
-                          {checklist.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
-      )}
-
       {/* Edit Checklist Modal */}
       <EditChecklist
         isVisible={showEditChecklist}
         onClose={() => setShowEditChecklist(false)}
-        checklist={null} // null = creating new checklist
+        checklist={null}
         user={user}
         onSave={handleChecklistSaved}
       />

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import { useData } from "../contexts/DataContext";
 import { useCalendarActions } from "../hooks/useCalendarActions";
 import { Ionicons } from "@expo/vector-icons";

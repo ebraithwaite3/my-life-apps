@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { useData } from '../contexts/DataContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 
 const SyncOverlay = () => {
   const { autoSyncInProgress, syncingCalendarIds, calendars } = useData();

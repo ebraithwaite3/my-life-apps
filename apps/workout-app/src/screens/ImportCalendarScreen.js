@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { useData } from '../contexts/DataContext';
 import { useCalendarActions } from '../hooks';
 import ColorSelector from '../components/ColorSelector';

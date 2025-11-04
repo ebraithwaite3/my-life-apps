@@ -1,7 +1,7 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
-import { CustomThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { useTheme, CustomThemeProvider } from '@my-apps/contexts';
 import { DataProvider } from './src/contexts/DataContext';
 import LoginScreen from './src/screens/LoginScreen';
 import MainNavigator from './src/navigation/MainNavigator';

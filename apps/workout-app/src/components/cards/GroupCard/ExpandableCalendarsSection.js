@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { useData } from '../../../contexts/DataContext';
 import { useGroupActions } from '../../../hooks';
 

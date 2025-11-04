@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView, // <-- ADDED
   Platform,             // <-- ADDED
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { useData } from '../contexts/DataContext';
 import EventHeader from '../components/EventHeader';
 import AttendanceCard from '../components/cards/TaskCards/Attendance/AttendanceCard';

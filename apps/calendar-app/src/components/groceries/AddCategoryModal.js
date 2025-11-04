@@ -11,7 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 
 const AddCategoryModal = ({ visible, onClose, onAdd, existingCategories }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();

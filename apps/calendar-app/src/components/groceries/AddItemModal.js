@@ -12,7 +12,8 @@ import {
   ScrollView,
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 import AutoAdd from './AutoAdd';
 import IngredientsList from './IngredientsList';
 import AddIngredientModal from './AddIngredientModal';

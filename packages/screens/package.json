@@ -1,0 +1,11 @@
+{
+  "name": "@my-apps/screens",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "dependencies": {
+    "react": "*",
+    "react-native": "*",
+    "@my-apps/ui": "*",
+    "@my-apps/contexts": "*"
+  }
+}

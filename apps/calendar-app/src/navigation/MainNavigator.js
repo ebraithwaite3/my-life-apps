@@ -1,14 +1,17 @@
 // src/navigation/MainNavigator.js
 import React, { useState, useEffect } from 'react';
 import { Text, View, TouchableOpacity } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useData } from '../contexts/DataContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts';
 import { useAuth } from '../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 👇 CHANGED: Import AppHeader from shared UI
+import { AppHeader } from '@my-apps/ui';
 
 // Main screens
 import TodayScreen from '../screens/TodayScreen';
@@ -25,7 +28,7 @@ import CreateTaskScreen from '../screens/CreateTaskScreen';
 import DayScreen from '../screens/DayScreen';
 import CalendarEditScreen from '../screens/CalendarEditScreen';
 import AddPublicCalendarsScreen from '../screens/AddPublicCalendarsScreen';
-import GroceryHomeScreen from '../screens/GroceryHomeScreen'; // <-- ADDED
+import GroceryHomeScreen from '../screens/GroceryHomeScreen';
 import GroceryInventoryScreen from '../screens/GroceryInventoryScreen';
 import GroceryBankScreen from '../screens/GroceryBankScreen';
 import GroceryShoppingListScreen from '../screens/GroceryShoppingListScreen';
@@ -36,15 +39,13 @@ import EventDetailsScreen from '../screens/EventDetailsScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
 import GroupDetailsScreen from '../screens/GroupDetailsScreen';
 
-import Header from '../components/Header';
-
 const Tab = createBottomTabNavigator();
 const TodayStack = createStackNavigator();
 const CalendarStack = createStackNavigator();
 const GroupsStack = createStackNavigator();
 const MessagesStack = createStackNavigator();
 const PreferencesStack = createStackNavigator();
-const GroceryStack = createStackNavigator(); // <-- ADDED
+const GroceryStack = createStackNavigator();
 
 // Stack navigators for each tab
 function TodayStackScreen() {
@@ -104,7 +105,6 @@ function PreferencesStackScreen() {
   );
 }
 
-// <-- ADDED: Grocery Stack
 function GroceryStackScreen() {
   return (
     <GroceryStack.Navigator screenOptions={{ headerShown: false }}>
@@ -113,8 +113,48 @@ function GroceryStackScreen() {
       <GroceryStack.Screen name="GroceryBank" component={GroceryBankScreen} />
       <GroceryStack.Screen name="GroceryMeals" component={GroceryMealsScreen} />
       <GroceryStack.Screen name="GroceryShoppingList" component={GroceryShoppingListScreen} />
-      {/* Add more grocery screens here as needed */}
     </GroceryStack.Navigator>
+  );
+}
+
+// 👇 NEW: Wrapper component to provide navigation context to AppHeader
+function HeaderWithNavigation({ onLogout }) {
+  const navigation = useNavigation();
+  const { user, calendars, isUserAdmin } = useData();
+
+  // Build app-specific menu items
+  const menuItems = [
+    { 
+      icon: '📅', 
+      label: `My Calendars (${calendars?.length || 0})`, 
+      onPress: () => navigation.navigate('Calendar', { screen: 'CalendarEdit' })
+    },
+    // Show Public Calendars if user is admin
+    ...(isUserAdmin ? [{
+      icon: '🌐',
+      label: 'Public Calendars',
+      onPress: () => navigation.navigate('Calendar', { screen: 'PublicCalendars' })
+    }] : []),
+    // Show Groceries if user has groceryId
+    ...(user?.groceryId ? [{
+      icon: '🛒',
+      label: 'Groceries',
+      onPress: () => navigation.navigate('Grocery', { screen: 'GroceryHome' })
+    }] : []),
+    // Logout
+    {
+      icon: '🚪',
+      label: 'Logout',
+      onPress: onLogout,
+      variant: 'danger'
+    }
+  ];
+
+  return (
+    <AppHeader
+      appName="My Calendar App"
+      menuItems={menuItems}
+    />
   );
 }
 
@@ -135,7 +175,7 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
       case 'Preferences':
         icon = focused ? '⚙️' : '🔧';
         break;
-        case 'Messages':
+      case 'Messages':
         icon = focused ? '💬' : '🗨️';
         break;
       default:
@@ -145,7 +185,6 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
     return <Text style={{ fontSize: 20 }}>{icon}</Text>;
   };
 
-  // Helper function to format badge count
   const formatBadgeCount = (count) => {
     if (count === 0) return null;
     if (count <= 99) return count.toString();
@@ -154,14 +193,13 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
 
   return (
     <>
-      <Header 
-        onProfilePress={() => console.log('Profile pressed')}
-        onLogout={onLogout}
-      />
+      {/* 👇 CHANGED: Use new HeaderWithNavigation wrapper */}
+      <HeaderWithNavigation onLogout={onLogout} />
+      
       <Tab.Navigator
         initialRouteName={initialRoute}
         screenOptions={({ route }) => ({
-          headerShown: false, // We'll use our custom header
+          headerShown: false,
           tabBarIcon: ({ focused }) => getTabBarIcon(route.name, focused),
           tabBarActiveTintColor: theme.primary,
           tabBarInactiveTintColor: theme.text?.secondary || '#999',
@@ -178,7 +216,6 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
             fontWeight: '500',
             marginTop: 4,
           },
-          // Badge styling
           tabBarBadgeStyle: {
             backgroundColor: theme.error || '#ef4444',
             color: '#ffffff',
@@ -200,7 +237,6 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
           listeners={({ navigation }) => ({
             tabPress: (e) => {
               const state = navigation.getState();
-              // Prevent default action if already at home screen of this tab
               if (state.index === 0) {
                 e.preventDefault();
               }
@@ -245,7 +281,6 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
           component={MessagesStackScreen}
           options={{
             tabBarLabel: 'Messages',
-            // Add badge with unread count
             tabBarBadge: formatBadgeCount(unreadMessagesCount),
           }}
           listeners={({ navigation }) => ({
@@ -275,7 +310,6 @@ function TabNavigator({ initialRoute, theme, onLogout, unreadMessagesCount, unac
             },
           })}
         />
-        {/* <-- ADDED: Hidden Grocery Stack */}
         <Tab.Screen 
           name="Grocery" 
           component={GroceryStackScreen}
@@ -298,21 +332,18 @@ const MainNavigator = ({ onLogout }) => {
 
   console.log("Unread messages in MainNavigator:", unreadMessagesCount);
 
-  // Get the default page from the user doc
-  // in preferences.defaultLoadingPage
   useEffect(() => {
     const fetchInitialRoute = async () => {
       try {
         if (user && user.preferences && user.preferences.defaultLoadingPage) {
           setInitialRoute(user.preferences.defaultLoadingPage);
         } else {
-          // Fallback to AsyncStorage if user data isn't available yet
           const storedRoute = await AsyncStorage.getItem('defaultLoadingPage');
           setInitialRoute(storedRoute || 'Today');
         }
       } catch (error) {
         console.error('Error fetching initial route:', error);
-        setInitialRoute('Today'); // Fallback to Today on error
+        setInitialRoute('Today');
       } finally {
         setIsReady(true);
       }
@@ -325,7 +356,6 @@ const MainNavigator = ({ onLogout }) => {
     return <LoadingScreen />;
   }
 
-  // Add diagnostic log
   console.log("Retry diagnostic:", {
     loading,
     user: !!user,
@@ -334,7 +364,6 @@ const MainNavigator = ({ onLogout }) => {
     showRetry: !loading && !user && authUser && isReady,
   });
 
-  // Check to see if we need to be able to retry auth
   const showRetry = !loading && !user && authUser && isReady;
   console.log("Show retry option:", showRetry);
   console.log("Loading state:", loading, "User:", user, "AuthUser:", authUser, "isReady:", isReady);

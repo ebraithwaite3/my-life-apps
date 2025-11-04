@@ -10,7 +10,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { useData } from '../contexts/DataContext';
 import { useCalendarActions } from '../hooks';
 import { collection, query, where, getDocs } from 'firebase/firestore';

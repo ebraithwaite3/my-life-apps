@@ -1,13 +1,16 @@
 // src/navigation/MainNavigator.js
 import React from 'react';
 import { Text, View, TouchableOpacity } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useData } from '../contexts/DataContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts';
 import { useAuth } from '../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+
+// 👇 CHANGED: Import AppHeader from shared UI
+import { AppHeader } from '@my-apps/ui';
 
 // Main screens
 import CalendarScreen from '../screens/CalendarScreen';
@@ -29,14 +32,11 @@ import EventDetailsScreen from '../screens/EventDetailsScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
 import GroupDetailsScreen from '../screens/GroupDetailsScreen';
 
-import Header from '../components/Header';
-
 const Tab = createBottomTabNavigator();
 const CalendarStack = createStackNavigator();
 const GroupsStack = createStackNavigator();
 const MessagesStack = createStackNavigator();
 const PreferencesStack = createStackNavigator();
-
 
 function CalendarStackScreen() {
   return (
@@ -81,6 +81,34 @@ function PreferencesStackScreen() {
   );
 }
 
+// 👇 NEW: Wrapper component to provide navigation context to AppHeader
+function HeaderWithNavigation({ onLogout }) {
+  const navigation = useNavigation();
+  const { user, calendars, isUserAdmin } = useData();
+
+  // Build app-specific menu items for Calendar app
+  const menuItems = [
+    { 
+      icon: '📅', 
+      label: `My Calendars (${calendars?.length || 0})`, 
+      onPress: () => navigation.navigate('Calendar', { screen: 'CalendarEdit' })
+    },
+    // Logout
+    {
+      icon: '🚪',
+      label: 'Logout',
+      onPress: onLogout,
+      variant: 'danger'
+    }
+  ];
+
+  return (
+    <AppHeader
+      appName="My Workouts"
+      menuItems={menuItems}
+    />
+  );
+}
 
 function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklistsCount }) {
   const getTabBarIcon = (routeName, focused) => {
@@ -96,7 +124,7 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
       case 'Preferences':
         icon = focused ? '⚙️' : '🔧';
         break;
-        case 'Messages':
+      case 'Messages':
         icon = focused ? '💬' : '🗨️';
         break;
       default:
@@ -106,7 +134,6 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
     return <Text style={{ fontSize: 20 }}>{icon}</Text>;
   };
 
-  // Helper function to format badge count
   const formatBadgeCount = (count) => {
     if (count === 0) return null;
     if (count <= 99) return count.toString();
@@ -115,14 +142,13 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
 
   return (
     <>
-      <Header 
-        onProfilePress={() => console.log('Profile pressed')}
-        onLogout={onLogout}
-      />
+      {/* 👇 CHANGED: Use new HeaderWithNavigation wrapper */}
+      <HeaderWithNavigation onLogout={onLogout} />
+      
       <Tab.Navigator
         initialRouteName="Calendar"
         screenOptions={({ route }) => ({
-          headerShown: false, // We'll use our custom header
+          headerShown: false,
           tabBarIcon: ({ focused }) => getTabBarIcon(route.name, focused),
           tabBarActiveTintColor: theme.primary,
           tabBarInactiveTintColor: theme.text?.secondary || '#999',
@@ -139,7 +165,6 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
             fontWeight: '500',
             marginTop: 4,
           },
-          // Badge styling
           tabBarBadgeStyle: {
             backgroundColor: theme.error || '#ef4444',
             color: '#ffffff',
@@ -191,7 +216,6 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
           component={MessagesStackScreen}
           options={{
             tabBarLabel: 'Messages',
-            // Add badge with unread count
             tabBarBadge: formatBadgeCount(unreadMessagesCount),
           }}
           listeners={({ navigation }) => ({
@@ -221,7 +245,6 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
             },
           })}
         />
-        
       </Tab.Navigator>
     </>
   );
@@ -238,7 +261,6 @@ const MainNavigator = ({ onLogout }) => {
     return <LoadingScreen />;
   }
 
-  // Check to see if we need to be able to retry auth
   const showRetry = !loading && !user && authUser;
   console.log("Show retry option:", showRetry);
 

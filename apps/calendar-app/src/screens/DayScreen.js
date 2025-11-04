@@ -8,7 +8,7 @@ import {
   FlatList,
   Platform,
 } from "react-native";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@my-apps/contexts";
 import { useData } from "../contexts/DataContext";
 import { Ionicons } from "@expo/vector-icons";
 import { DateTime } from "luxon";

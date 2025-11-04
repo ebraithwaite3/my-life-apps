@@ -12,7 +12,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../../contexts/ThemeContext';
+import { useTheme } from "@my-apps/contexts";
 import { useGroupActions } from '../../../hooks';
 
 const RoleSelector = ({ selectedRole, onRoleChange, theme, getSpacing, getTypography }) => {

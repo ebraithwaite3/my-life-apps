@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 
 const CheckedShoppingListItem = ({ item, inventory, onUndo }) => {
   const { theme, getSpacing, getTypography } = useTheme();

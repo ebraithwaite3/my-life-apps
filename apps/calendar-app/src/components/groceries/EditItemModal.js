@@ -11,7 +11,8 @@ import {
   Switch,
   ScrollView,
 } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '@my-apps/contexts'
+;
 import AutoAdd from './AutoAdd';
 import IngredientsList from './IngredientsList';
 import AddIngredientModal from './AddIngredientModal';
