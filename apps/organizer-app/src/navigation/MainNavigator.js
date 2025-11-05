@@ -1,11 +1,13 @@
 // src/navigation/MainNavigator.js
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from '@my-apps/contexts';
+import { useAuth } from '../contexts/AuthContext'; // ← Add this
 import { AppHeader } from '@my-apps/ui';
+import { LoadingScreen } from '@my-apps/screens'; // ← Add this
 
 // Main screens
 import DashboardScreen from '../screens/DashboardScreen';
@@ -13,8 +15,10 @@ import CalendarScreen from '../screens/CalendarScreen';
 import GroupsScreen from '../screens/GroupsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import PreferencesScreen from '../screens/PreferencesScreen';
+import LoginScreen from '../screens/LoginScreen'; // ← Add this (we'll create it)
 
 const Tab = createBottomTabNavigator();
+const RootStack = createStackNavigator(); // ← Add this for auth flow
 const DashboardStack = createStackNavigator();
 const CalendarStack = createStackNavigator();
 const GroupsStack = createStackNavigator();
@@ -182,38 +186,69 @@ function TabNavigator({ theme, onLogout }) {
   );
 }
 
-const MainNavigator = ({ onLogout }) => {
+// ← NEW: Root navigator that handles auth state
+function RootNavigator({ onLogout }) {
+  const { user, loading } = useAuth();
   const { theme } = useTheme();
 
+  if (loading) {
+    return <LoadingScreen 
+      icon={require('../../assets/CalendarConnectionv2AppIcon.png')}
+      message="Loading your organizer..."
+      iconSize={128}
+    />;
+  }
+
+  return (
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      {user ? (
+        // User is signed in - show main app
+        <RootStack.Screen name="Main">
+          {() => <TabNavigator theme={theme} onLogout={onLogout} />}
+        </RootStack.Screen>
+      ) : (
+        // User is NOT signed in - show login
+        <RootStack.Screen name="Login" component={LoginScreen} />
+      )}
+    </RootStack.Navigator>
+  );
+}
+
+const MainNavigator = ({ onLogout }) => {
   const linking = {
     prefixes: ['myorganizer://'],
     config: {
       screens: {
-        Dashboard: {
+        Main: {
           screens: {
-            DashboardHome: 'home',
+            Dashboard: {
+              screens: {
+                DashboardHome: 'home',
+              },
+            },
+            Calendar: {
+              screens: {
+                CalendarHome: 'calendar',
+              },
+            },
+            Groups: {
+              screens: {
+                GroupsHome: 'groups',
+              },
+            },
+            Messages: {
+              screens: {
+                MessagesHome: 'messages',
+              },
+            },
+            Preferences: {
+              screens: {
+                PreferencesHome: 'preferences',
+              },
+            },
           },
         },
-        Calendar: {
-          screens: {
-            CalendarHome: 'calendar',
-          },
-        },
-        Groups: {
-          screens: {
-            GroupsHome: 'groups',
-          },
-        },
-        Messages: {
-          screens: {
-            MessagesHome: 'messages',
-          },
-        },
-        Preferences: {
-          screens: {
-            PreferencesHome: 'preferences',
-          },
-        },
+        Login: 'login',
         NotFound: '*',
       },
     },
@@ -221,7 +256,7 @@ const MainNavigator = ({ onLogout }) => {
 
   return (
     <NavigationContainer linking={linking}>
-      <TabNavigator theme={theme} onLogout={onLogout} />
+      <RootNavigator onLogout={onLogout} />
     </NavigationContainer>
   );
 };
