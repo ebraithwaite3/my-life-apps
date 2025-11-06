@@ -240,6 +240,7 @@ export const queryDocumentsAdvanced = async (collectionName, conditions = [], or
  */
 export const subscribeToDocument = (collectionName, documentId, callback, errorCallback = null) => {
   try {
+    console.log("Props to subscribeToDocument:", { collectionName, documentId });
     const db = getDb();
     const docRef = doc(db, collectionName, documentId);
     

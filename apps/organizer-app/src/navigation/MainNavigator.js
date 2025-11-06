@@ -15,7 +15,8 @@ import CalendarScreen from '../screens/CalendarScreen';
 import GroupsScreen from '../screens/GroupsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import PreferencesScreen from '../screens/PreferencesScreen';
-import LoginScreen from '../screens/LoginScreen'; // ← Add this (we'll create it)
+import LoginScreen from '../screens/LoginScreen';
+import TodayScreen from '../screens/TodayScreen';
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator(); // ← Add this for auth flow
@@ -24,8 +25,18 @@ const CalendarStack = createStackNavigator();
 const GroupsStack = createStackNavigator();
 const MessagesStack = createStackNavigator();
 const PreferencesStack = createStackNavigator();
+const TodayStack = createStackNavigator();
 
 // Stack navigators for each tab
+function TodayStackScreen() {
+  return (
+    <TodayStack.Navigator screenOptions={{ headerShown: false }}>
+      <TodayStack.Screen name="TodayHome" component={TodayScreen} />
+    </TodayStack.Navigator>
+  );
+}
+
+
 function DashboardStackScreen() {
   return (
     <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
@@ -108,6 +119,9 @@ function TabNavigator({ theme, onLogout }) {
     let icon;
     
     switch (routeName) {
+      case 'Today':
+        icon = focused ? '📅' : '🗓️';
+        break;
       case 'Dashboard':
         icon = focused ? '🏠' : '🏘️';
         break;
@@ -135,7 +149,7 @@ function TabNavigator({ theme, onLogout }) {
       <HeaderWithNavigation onLogout={onLogout} />
       
       <Tab.Navigator
-        initialRouteName="Dashboard"
+        initialRouteName="Today"
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarIcon: ({ focused }) => getTabBarIcon(route.name, focused),
@@ -156,6 +170,11 @@ function TabNavigator({ theme, onLogout }) {
           },
         })}
       >
+        <Tab.Screen
+          name="Today"
+          component={TodayStackScreen}
+          options={{ tabBarLabel: "Today" }}
+        />
         <Tab.Screen
           name="Dashboard"
           component={DashboardStackScreen}
@@ -221,6 +240,11 @@ const MainNavigator = ({ onLogout }) => {
       screens: {
         Main: {
           screens: {
+            Today: {
+              screens: {
+                TodayHome: 'today',
+              },
+            },
             Dashboard: {
               screens: {
                 DashboardHome: 'home',

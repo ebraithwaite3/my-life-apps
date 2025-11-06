@@ -33,6 +33,7 @@ import React, {
   
     // Core states
     const [user, setUser] = useState(null);
+    console.log("User State:", user);
     const [loading, setLoading] = useState(true);
     const [currentDate, setCurrentDate] = useState(DateTime.local().toISODate());
   
@@ -40,21 +41,29 @@ import React, {
     const [calendars, setCalendars] = useState([]);
     const [groups, setGroups] = useState([]);
     const [messages, setMessages] = useState([]);
+    console.log("Calendar State:", calendars);
   
     // Loading states (only needed for initial loads)
     const [calendarsLoading, setCalendarsLoading] = useState(false);
     const [groupsLoading, setGroupsLoading] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(false);
   
-    // Workout month tracking (YYYYMM format)
-    const [currentWorkoutMonth, setCurrentWorkoutMonth] = useState(() => {
-      return DateTime.now().toFormat('yyyyMM');
-    });
-  
+   
     // Auto-sync states
     const [autoSyncInProgress, setAutoSyncInProgress] = useState(false);
     const [syncingCalendarIds, setSyncingCalendarIds] = useState(new Set());
     const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+
+    // Date States (start with current date)
+    const [selectedDate, setSelectedDate] = useState(DateTime.local().toISODate());
+    const [selectedMonth, setSelectedMonth] = useState(DateTime.local().monthLong);
+    const [selectedYear, setSelectedYear] = useState(DateTime.local().year);
+    console.log("📅 Date States:", {
+        selectedDate: selectedDate,
+        selectedMonth: selectedMonth,
+        selectedYear: selectedYear,
+        });
+    // Debugging logs
   
     console.log("📊 DataContext State:", {
       loading,
@@ -119,93 +128,187 @@ import React, {
     }, [authUser, db]);
   
     // ===== CALENDARS REAL-TIME SUBSCRIPTION =====
-    useEffect(() => {
-      // Filter out any calendars with undefined/null calendarId
-      const validCalendarRefs = (user?.calendars || []).filter(
-        (ref) => ref.calendarId
+// 1. INTERNAL MONTHLY CALENDAR - Updates when month/year changes
+useEffect(() => {
+    if (!user?.userId || !selectedMonth || !selectedYear) {
+      console.log("📅 No user or date selected for internal calendar");
+      // Remove internal calendar from array if no user/date
+      setCalendars((prev) => prev.filter(cal => cal.type !== 'internal'));
+      return;
+    }
+  
+    console.log(`📅 Subscribing to internal calendar: ${selectedMonth} ${selectedYear}`);
+  
+    const internalCalendarDocId = `${user.userId}_${selectedMonth.toLowerCase()}${selectedYear}`;
+    
+    const unsubscribe = subscribeToDocument(
+      "calendars",
+      internalCalendarDocId,
+      (calendarDoc) => {
+        if (calendarDoc) {
+          console.log(`✅ Internal calendar loaded: ${selectedMonth} ${selectedYear}`);
+          setCalendars((prev) => {
+            // Remove old internal calendar and add new one
+            const withoutInternal = prev.filter(cal => cal.type !== 'internal');
+            return [
+              {
+                id: internalCalendarDocId,
+                calendarId: internalCalendarDocId,
+                type: 'internal',
+                isOwner: true,
+                permissions: 'write',
+                ...calendarDoc,
+                eventsCount: Object.keys(calendarDoc.events || {}).length,
+              },
+              ...withoutInternal,
+            ];
+          });
+        } else {
+          console.log(`📅 No internal calendar doc for ${selectedMonth} ${selectedYear}, creating placeholder`);
+          // Add empty internal calendar structure
+          setCalendars((prev) => {
+            const withoutInternal = prev.filter(cal => cal.type !== 'internal');
+            return [
+              {
+                id: internalCalendarDocId,
+                calendarId: internalCalendarDocId,
+                type: 'internal',
+                userId: user.userId,
+                name: `${user.username || 'My'} Calendar`,
+                color: user.preferences?.calendarColor || '#02092b',
+                month: selectedMonth.toLowerCase(),
+                year: selectedYear,
+                events: {},
+                eventsCount: 0,
+                isOwner: true,
+                permissions: 'write',
+              },
+              ...withoutInternal,
+            ];
+          });
+        }
+      },
+      (error) => {
+        console.error(`❌ Internal calendar subscription error:`, error);
+      }
+    );
+  
+    return () => {
+      console.log(`🧹 Cleaning up internal calendar subscription: ${selectedMonth} ${selectedYear}`);
+      unsubscribe();
+    };
+  }, [user?.userId, user?.username, user?.preferences?.calendarColor, selectedMonth, selectedYear]);
+  
+  // 2. EXTERNAL/GROUP CALENDARS - Only updates when user.calendars changes
+useEffect(() => {
+    // Filter for external calendars - check both 'type' and 'calendarType' fields
+    const externalCalendarRefs = (user?.calendars || []).filter(
+      (ref) => {
+        console.log("📅 Checking calendar ref:", ref);
+        if (!ref.calendarId && !ref.calendarAddress) return false;
+        const calType = ref.calendarType || ref.type;
+        console.log("📅 Calendar Ref:", ref.calendarId, "Type:", calType);
+        return calType !== 'internal'; // Include anything that's not internal
+      }
+    );
+    console.log("📅 External calendar references:", externalCalendarRefs, "Calendars", user?.calendars);
+  
+    if (externalCalendarRefs.length === 0) {
+      console.log("📅 No external calendar references found");
+      // Remove any external calendars from array, keep internal
+      setCalendars((prev) => prev.filter(cal => cal.type === 'internal'));
+      setCalendarsLoading(false);
+      return;
+    }
+  
+    console.log("📅 Setting up external calendar subscriptions:", externalCalendarRefs.length);
+    console.log("📅 External calendar IDs:", externalCalendarRefs.map(r => r.calendarId));
+    setCalendarsLoading(true);
+  
+    const unsubscribes = [];
+  
+    // Initialize external calendars with user ref data
+    const initialExternalCalendars = externalCalendarRefs.map((ref) => ({
+      id: ref.calendarId,
+      calendarId: ref.calendarId,
+      name: ref.name,
+      color: ref.color,
+      description: ref.description,
+      calendarAddress: ref.calendarAddress || ref.address,
+      type: ref.calendarType || ref.type || 'external',
+      permissions: ref.permissions,
+      isOwner: ref.isOwner,
+      events: {},
+      eventsCount: 0,
+      syncStatus: "loading",
+      lastSynced: null,
+    }));
+    console.log("📅 Initial external calendars:", initialExternalCalendars);
+    // Add external calendars to state (keeping internal calendar)
+    setCalendars((prev) => {
+      const internal = prev.filter(cal => cal.type === 'internal');
+      console.log("📅 Adding external calendars. Internal count:", internal.length);
+      return [...internal, ...initialExternalCalendars];
+    });
+  
+    // Subscribe to each external calendar
+    externalCalendarRefs.forEach((ref) => {
+      const unsubscribe = subscribeToDocument(
+        "calendars",
+        ref.calendarId,
+        (calendarDoc) => {
+          if (calendarDoc) {
+            console.log(`📅 External calendar ${ref.calendarId} data received`);
+            setCalendars((prev) => {
+              // Find and update, or add if not exists
+              const existingIndex = prev.findIndex(cal => cal.calendarId === ref.calendarId);
+              
+              if (existingIndex >= 0) {
+                // Update existing
+                const updated = [...prev];
+                updated[existingIndex] = {
+                  ...updated[existingIndex],
+                  ...calendarDoc,
+                  eventsCount: Object.keys(calendarDoc.events || {}).length,
+                  syncStatus: calendarDoc.sync?.syncStatus || "unknown",
+                  lastSynced: calendarDoc.sync?.lastSyncedAt,
+                };
+                return updated;
+              } else {
+                // Add new (shouldn't happen, but just in case)
+                console.log(`📅 Adding missing external calendar: ${ref.calendarId}`);
+                return [...prev, {
+                  id: ref.calendarId,
+                  calendarId: ref.calendarId,
+                  ...calendarDoc,
+                  eventsCount: Object.keys(calendarDoc.events || {}).length,
+                  syncStatus: calendarDoc.sync?.syncStatus || "unknown",
+                  lastSynced: calendarDoc.sync?.lastSyncedAt,
+                }];
+              }
+            });
+          } else {
+            console.warn(`❌ External calendar ${ref.calendarId} not found in Firestore`);
+            setCalendars((prev) =>
+              prev.filter((cal) => cal.calendarId !== ref.calendarId || cal.type === 'internal')
+            );
+          }
+        },
+        (error) => {
+          console.error(`❌ External calendar ${ref.calendarId} subscription error:`, error);
+        }
       );
   
-      if (validCalendarRefs.length === 0) {
-        console.log("📅 No valid calendar references found");
-        setCalendars([]);
-        setCalendarsLoading(false);
-        return;
-      }
+      unsubscribes.push(unsubscribe);
+    });
   
-      console.log("📅 Setting up calendar subscriptions...");
-      setCalendarsLoading(true);
+    setCalendarsLoading(false);
   
-      const calendarIds = validCalendarRefs.map((ref) => ref.calendarId);
-      const unsubscribes = [];
-  
-      console.log("📅 Valid calendar IDs:", calendarIds);
-  
-      // Initialize calendars array with user ref data
-      const initialCalendars = validCalendarRefs.map((ref) => ({
-        id: ref.calendarId, // Keep 'id' for consistency with your existing code
-        calendarId: ref.calendarId, // Also provide calendarId
-        name: ref.name,
-        color: ref.color,
-        description: ref.description,
-        calendarAddress: ref.calendarAddress || ref.address,
-        type: ref.calendarType || ref.type,
-        permissions: ref.permissions,
-        isOwner: ref.isOwner,
-        // Placeholder until real-time data arrives
-        events: {},
-        eventsCount: 0,
-        syncStatus: "loading",
-        lastSynced: null,
-      }));
-  
-      setCalendars(initialCalendars);
-  
-      // Subscribe to each calendar document individually
-      calendarIds.forEach((calendarId) => {
-        const unsubscribe = subscribeToDocument(
-          "calendars",
-          calendarId,
-          (calendarDoc) => {
-            if (calendarDoc) {
-              console.log(`📅 Calendar ${calendarId} updated`);
-              setCalendars((prev) =>
-                prev.map((cal) => {
-                  if (cal.calendarId === calendarId) {
-                    return {
-                      ...cal,
-                      ...calendarDoc,
-                      // Computed properties
-                      eventsCount: Object.keys(calendarDoc.events || {}).length,
-                      syncStatus: calendarDoc.sync?.syncStatus || "unknown",
-                      lastSynced: calendarDoc.sync?.lastSyncedAt,
-                    };
-                  }
-                  return cal;
-                })
-              );
-            } else {
-              console.warn(`❌ Calendar document ${calendarId} not found`);
-              // Remove from calendars if document doesn't exist
-              setCalendars((prev) =>
-                prev.filter((cal) => cal.calendarId !== calendarId)
-              );
-            }
-          },
-          (error) => {
-            console.error(`❌ Calendar ${calendarId} subscription error:`, error);
-          }
-        );
-  
-        unsubscribes.push(unsubscribe);
-      });
-  
-      setCalendarsLoading(false);
-  
-      return () => {
-        console.log("🧹 Cleaning up calendar subscriptions");
-        unsubscribes.forEach((unsubscribe) => unsubscribe());
-      };
-    }, [user?.calendars]);
+    return () => {
+      console.log("🧹 Cleaning up external calendar subscriptions");
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [user?.calendars]);
   
     // ===== GROUPS REAL-TIME SUBSCRIPTION =====
     useEffect(() => {
@@ -529,6 +632,14 @@ import React, {
         currentDate,
         setWorkingDate,
         isUserAdmin,
+
+        //Dates States
+        selectedDate,
+        setSelectedDate,
+        selectedMonth,
+        setSelectedMonth,
+        selectedYear,
+        setSelectedYear,
   
         // Values
         unreadMessagesCount,
@@ -601,6 +712,9 @@ import React, {
         triggerManualSync,
         retryUserSubscription,
         isUserAdmin,
+        selectedDate,
+        selectedMonth,
+        selectedYear,
       ]
     );
   
