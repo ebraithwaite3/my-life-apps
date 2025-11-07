@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
-import { ModalDropdown } from '../index';
+import { ModalDropdown } from '../dropdowns/index';
 
 const PageHeader = ({ navigation }) => {
   const { theme } = useTheme();

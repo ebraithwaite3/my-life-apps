@@ -4,7 +4,8 @@
   "workspaces": {
     "packages": [
       "apps/*",
-      "packages/*"
+      "packages/*",
+      "functions"
     ],
     "nohoist": [
       "**/react-native",
@@ -19,6 +20,12 @@
   "scripts": {
     "workout": "cd apps/workout-app && npm start",
     "calendar": "cd apps/calendar-app && npm start",
-    "organizer": "cd apps/organizer-app && npm start"
+    "organizer": "cd apps/organizer-app && npm start",
+    "functions:serve": "cd functions && npm run serve",
+    "functions:deploy": "cd functions && npm run deploy",
+    "firebase:logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase": "^12.5.0"
   }
 }
