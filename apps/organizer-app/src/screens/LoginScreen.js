@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { useAuth } from "../contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 
 const LoginScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -145,6 +146,12 @@ const LoginScreen = () => {
             <Text style={styles.subtitle}>
               {isLogin ? "Welcome back!" : "Create your account"}
             </Text>
+
+            <View style={{ padding: 10, backgroundColor: '#f0f0f0' }}>
+  <Text style={{ fontSize: 10 }}>API Key: {process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.substring(0, 20)}...</Text>
+  <Text style={{ fontSize: 10 }}>Length: {process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.length}</Text>
+  <Text style={{ fontSize: 10 }}>Is defined: {process.env.EXPO_PUBLIC_FIREBASE_API_KEY ? 'YES' : 'NO'}</Text>
+</View>
 
             <View style={styles.form}>
               <TextInput

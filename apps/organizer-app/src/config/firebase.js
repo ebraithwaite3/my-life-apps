@@ -8,8 +8,8 @@ const firebaseConfig = {
   projectId: "calendarconnectionv2",
   storageBucket: "calendarconnectionv2.firebasestorage.app",
   messagingSenderId: "569488542917",
-  appId: "1:569488542917:web:8dc010ea8924e1d8a5b4ac",
-  measurementId: "G-4PHYJ1TPJM"
+  appId: "1:569488542917:web:17c8a03b87a79f9da5b4ac",
+  measurementId: "G-3L0NV91QRY"
 };
 
 // Initialize Firebase
