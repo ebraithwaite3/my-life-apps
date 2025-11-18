@@ -10,9 +10,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import { ToggleRow, SelectModal } from "@my-apps/ui";
-import { useData } from "../contexts/DataContext";
-import { useAuth } from "../contexts/AuthContext";
-import { updateUserDoc, updateDocument } from "../services/firestoreService";
+import { useData } from "@my-apps/contexts";
+import { useAuth } from "@my-apps/contexts";
+import { updateUserDoc, updateDocument } from "@my-apps/services";
 import EditChecklist from "@my-apps/ui/src/components/checklists/EditChecklist";
 
 const defaultPreferences = {

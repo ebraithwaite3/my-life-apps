@@ -1,5 +1,5 @@
 // packages/services/src/firebase/firebaseConfig.js
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
@@ -12,12 +12,18 @@ const firebaseConfig = {
   measurementId: "G-4PHYJ1TPJM"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase (only once)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // Initialize Auth with AsyncStorage persistence
 let auth;
 const initializeAuth = async () => {
+  // Return existing auth if already initialized
+  if (auth) {
+    console.log('✅ Auth already initialized, returning existing instance');
+    return auth;
+  }
+
   try {
     const authModule = await import('firebase/auth');
     
@@ -27,9 +33,15 @@ const initializeAuth = async () => {
       });
       console.log('✅ Auth initialized with AsyncStorage persistence');
     } catch (persistenceError) {
-      console.log('⚠️ Persistence failed, falling back to memory-only auth:', persistenceError.message);
-      auth = authModule.getAuth(app);
-      console.log('✅ Auth initialized with memory persistence');
+      // If auth already exists, just get it
+      if (persistenceError.code === 'auth/already-initialized') {
+        auth = authModule.getAuth(app);
+        console.log('✅ Auth already existed, retrieved instance');
+      } else {
+        console.log('⚠️ Persistence failed, falling back to memory-only auth:', persistenceError.message);
+        auth = authModule.getAuth(app);
+        console.log('✅ Auth initialized with memory persistence');
+      }
     }
     
     return auth;
@@ -42,6 +54,12 @@ const initializeAuth = async () => {
 // Initialize Firestore
 let db;
 const initializeFirestore = async () => {
+  // Return existing db if already initialized
+  if (db) {
+    console.log('✅ Firestore already initialized, returning existing instance');
+    return db;
+  }
+
   try {
     const firestoreModule = await import('firebase/firestore');
     db = firestoreModule.getFirestore(app);

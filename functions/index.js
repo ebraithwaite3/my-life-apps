@@ -1,4 +1,9 @@
 const {setGlobalOptions} = require("firebase-functions");
+const admin = require("firebase-admin");
+
+// Initialize Firebase Admin
+admin.initializeApp();
+
 
 setGlobalOptions({maxInstances: 10});
 
@@ -6,6 +11,9 @@ setGlobalOptions({maxInstances: 10});
 const modules = [
   require("./src/user/userFunctions"),
   require("./src/workouts/workoutFunctions"),
+  require("./src/schedules/scheduleFunctions"),
+  require("./src/calendar/googleCalendarFunctions"),
+  require("./src/calendar/calendarFunctions"),
   // Add more as you create them
 ];
 

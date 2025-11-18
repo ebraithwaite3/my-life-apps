@@ -1,9 +1,13 @@
 // App.js
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { CustomThemeProvider, useTheme } from "@my-apps/contexts";
-import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
-import { DataProvider } from "./src/contexts/DataContext";
+import { 
+  CustomThemeProvider, 
+  useTheme,
+  AuthProvider,    // ← Import from package
+  useAuth,         // ← Import from package
+  DataProvider     // ← Already correct
+} from "@my-apps/contexts";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MainNavigator from "./src/navigation/MainNavigator";
 import Toast from "react-native-toast-message";
@@ -11,7 +15,7 @@ import Toast from "react-native-toast-message";
 // Main app component
 const MainApp = () => {
   const { isDarkMode } = useTheme();
-  const { logout } = useAuth(); // ← Add this
+  const { logout } = useAuth();
 
   const handleLogout = async () => {
     console.log("Logging out...");

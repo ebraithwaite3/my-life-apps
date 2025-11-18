@@ -1,10 +1,15 @@
 // AuthContext.js
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { initializeAuth, initializeFirestore } from '../config/firebase';
+import { initializeAuth, initializeFirestore } from '@my-apps/services';  // ← Fixed
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteDoc } from 'firebase/firestore';
-import { getDocumentsByField, updateDocument, deleteDocument, setGlobalDb } from '../services/firestoreService';
-import { addMessageToUser } from '../services/messageService';
+import { 
+  getDocumentsByField, 
+  updateDocument, 
+  deleteDocument, 
+  setGlobalDb 
+} from '@my-apps/services';  // ← Fixed
+import { addMessageToUser } from '@my-apps/services';  // ← Fixed
 import { DateTime } from 'luxon';
 import * as Crypto from 'expo-crypto';
 
@@ -25,29 +30,28 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const setupAuth = async () => {
       try {
-        console.log('Setting up auth...');
+        console.log('Setting up auth... START', new Date().toISOString());
         
-        // Initialize both auth and firestore
         const [authInstance, dbInstance] = await Promise.all([
           initializeAuth(),
           initializeFirestore()
         ]);
         
+        console.log('Inits complete', new Date().toISOString()); // ← Add this
         setAuth(authInstance);
         setDb(dbInstance);
-
-        // ✨ ADD THIS LINE - Initialize global db for services
-      setGlobalDb(dbInstance);
-        
-        // Import auth functions dynamically
+        setGlobalDb(dbInstance);
+  
         const authModule = await import('firebase/auth');
+        console.log('Auth module imported', new Date().toISOString()); // ← Add this
         
-        // Set up auth state listener
         const unsubscribe = authModule.onAuthStateChanged(authInstance, (user) => {
-          console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user');
+          console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user', new Date().toISOString()); // ← Enhanced log
           setUser(user);
           setLoading(false);
         });
+        
+        // If no callback fires in 10s, force a fallback (see fixes below)
         
         return unsubscribe;
       } catch (error) {
@@ -55,7 +59,7 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
       }
     };
-
+  
     setupAuth();
   }, []);
 
@@ -351,7 +355,7 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
-    loading,
+    authLoading: loading,
     auth,
     db,
     createUserDocument

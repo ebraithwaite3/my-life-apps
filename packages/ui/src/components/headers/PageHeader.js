@@ -4,30 +4,43 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 import { ModalDropdown } from '../dropdowns/index';
 
-const PageHeader = ({ navigation }) => {
+const PageHeader = ({ 
+  navigation, 
+  showBackButton,
+  backButtonText,      // ← New prop
+  onBackPress,         // ← New prop
+  showNavArrows, 
+  onPreviousPress, 
+  onNextPress, 
+  title, 
+  subtext,
+  icons = []
+}) => {
   const { theme } = useTheme();
   const [openDropdown, setOpenDropdown] = useState(null);
   const [anchorPosition, setAnchorPosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const ellipsisRef = useRef(null);
+  console.log("Back Button Text:", backButtonText);
 
-  const showBackButton = true;
-  const showNavArrows = false;
-  const title = 'Tuesday, Nov 4';
-  const subtext = '5 events • 2 hidden';
+  // const icons = [
+  //   { icon: 'add', action: () => console.log('Add pressed') },
+  //   {
+  //     icon: 'ellipsis-vertical',
+  //     options: [
+  //       { label: 'Add Event With Really Long Name', action: () => console.log('Add Event') },
+  //       { label: 'Add Task', action: () => console.log('Add Task') },
+  //       { label: 'Add Note', action: () => console.log('Add Note') },
+  //     ],
+  //   },
+  // ];
 
-  const icons = [
-    { icon: 'add', action: () => console.log('Add pressed') },
-    {
-      icon: 'ellipsis-vertical',
-      options: [
-        { label: 'Add Event With Really Long Name', action: () => console.log('Add Event') },
-        { label: 'Add Task', action: () => console.log('Add Task') },
-        { label: 'Add Note', action: () => console.log('Add Note') },
-      ],
-    },
-  ];
-
-  const handleBackPress = () => navigation?.goBack?.();
+  const handleBackPress = () => {
+    if (onBackPress) {
+      onBackPress();
+    } else {
+      navigation?.goBack?.();
+    }
+  };
 
   const handleIconPress = (index, iconItem) => {
     if (iconItem.options) {
@@ -56,16 +69,29 @@ const PageHeader = ({ navigation }) => {
       {/* TOP ROW */}
       <View style={styles.topRow}>
         {/* LEFT */}
-        {showBackButton && (
-          <TouchableOpacity onPress={handleBackPress} style={styles.iconButton}>
+        {showBackButton ? (
+          <TouchableOpacity 
+            onPress={handleBackPress} 
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={22} color={theme.text.primary} />
+            {backButtonText && (
+              <Text style={[styles.backButtonText, { color: theme.text.primary }]}>
+                {backButtonText}
+              </Text>
+            )}
           </TouchableOpacity>
-        )}
+        ) : isCentered ? (
+          <View style={styles.iconButton} /> 
+        ) : null}
 
         {/* TITLE */}
         <View style={[styles.titleWrapper, isCentered && styles.centeredTitleWrapper]}>
           {showNavArrows && (
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={onPreviousPress}
+            >
               <Ionicons name="chevron-back" size={22} color={theme.text.primary} />
             </TouchableOpacity>
           )}
@@ -73,7 +99,10 @@ const PageHeader = ({ navigation }) => {
             {title}
           </Text>
           {showNavArrows && (
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={onNextPress}
+            >
               <Ionicons name="chevron-forward" size={22} color={theme.text.primary} />
             </TouchableOpacity>
           )}
@@ -96,28 +125,23 @@ const PageHeader = ({ navigation }) => {
 
       {/* SUBTITLE */}
       {subtext && (
-  <View 
-  style={[
-    styles.subRow, 
-    isCentered && { 
-      justifyContent: 'center', // Centers the Text horizontally in the full-width row
-      alignItems: 'center' // Optional: vertical centering (redundant here but harmless)
-    }
-  ]}
->
-  <Text
-    style={[
-      styles.subtext,
-      { color: theme.text.secondary },
-      // textAlign: 'center' can stay but isn't needed with justifyContent above
-    ]}
-    numberOfLines={1}
-  >
-    {subtext}
-  </Text>
-</View>
-)}
-
+        <View 
+          style={[
+            styles.subRow, 
+            isCentered && { 
+              justifyContent: 'center',
+              alignItems: 'center'
+            }
+          ]}
+        >
+          <Text
+            style={[styles.subtext, { color: theme.text.secondary }]}
+            numberOfLines={1}
+          >
+            {subtext}
+          </Text>
+        </View>
+      )}
 
       {/* DROPDOWN */}
       <ModalDropdown
@@ -142,7 +166,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    position: 'relative', // for absolute centering
+    position: 'relative',
   },
   titleWrapper: {
     flexDirection: 'row',
@@ -168,6 +192,16 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 4,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 4,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
   subRow: {
     marginTop: 4,

@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "@my-apps/contexts";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 

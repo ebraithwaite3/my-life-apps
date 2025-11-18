@@ -1,13 +1,15 @@
 // src/navigation/MainNavigator.js
 import React from 'react';
-import { Text, View, ActivityIndicator } from 'react-native';
+import { Text, View, ActivityIndicator, Linking } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from '@my-apps/contexts';
-import { useAuth } from '../contexts/AuthContext'; // ← Add this
+import { useAuth } from '@my-apps/contexts';
+import { useData } from '@my-apps/contexts';
 import { AppHeader } from '@my-apps/ui';
-import { LoadingScreen } from '@my-apps/screens'; // ← Add this
+import { LoadingScreen } from '@my-apps/screens';
+import { DateTime } from 'luxon';
 
 // Main screens
 import DashboardScreen from '../screens/DashboardScreen';
@@ -19,7 +21,7 @@ import LoginScreen from '../screens/LoginScreen';
 import TodayScreen from '../screens/TodayScreen';
 
 const Tab = createBottomTabNavigator();
-const RootStack = createStackNavigator(); // ← Add this for auth flow
+const RootStack = createStackNavigator();
 const DashboardStack = createStackNavigator();
 const CalendarStack = createStackNavigator();
 const GroupsStack = createStackNavigator();
@@ -35,7 +37,6 @@ function TodayStackScreen() {
     </TodayStack.Navigator>
   );
 }
-
 
 function DashboardStackScreen() {
   return (
@@ -205,12 +206,13 @@ function TabNavigator({ theme, onLogout }) {
   );
 }
 
-// ← NEW: Root navigator that handles auth state
+// Root navigator that handles auth state
 function RootNavigator({ onLogout }) {
-  const { user, loading } = useAuth();
+  const { user, authLoading } = useAuth();
+  const { userLoading } = useData();
   const { theme } = useTheme();
 
-  if (loading) {
+  if (authLoading || userLoading) {
     return <LoadingScreen 
       icon={require('../../assets/CalendarConnectionv2AppIcon.png')}
       message="Loading your organizer..."
@@ -234,6 +236,8 @@ function RootNavigator({ onLogout }) {
 }
 
 const MainNavigator = ({ onLogout }) => {
+  const { setSelectedDate, setSelectedMonth, setSelectedYear } = useData();
+
   const linking = {
     prefixes: ['myorganizer://'],
     config: {
@@ -275,6 +279,37 @@ const MainNavigator = ({ onLogout }) => {
         Login: 'login',
         NotFound: '*',
       },
+    },
+    // Subscribe to deep links and intercept params
+    subscribe(listener) {
+      // Listen for deep link URLs
+      const onReceiveURL = ({ url }) => {
+        console.log('🔗 Deep link received:', url);
+        
+        // Parse the URL to extract query params
+        const { queryParams } = Linking.parse(url);
+        
+        // If date param exists, update DataContext BEFORE navigation
+        if (queryParams?.date) {
+          console.log('📅 Setting date from deep link:', queryParams.date);
+          const dt = DateTime.fromISO(queryParams.date);
+          
+          setSelectedDate(queryParams.date);
+          setSelectedMonth(dt.monthLong);
+          setSelectedYear(dt.year);
+        }
+        
+        // Let React Navigation handle the actual navigation
+        listener(url);
+      };
+
+      // Subscribe to URL events
+      const subscription = Linking.addEventListener('url', onReceiveURL);
+
+      // Return cleanup function
+      return () => {
+        subscription?.remove();
+      };
     },
   };
 

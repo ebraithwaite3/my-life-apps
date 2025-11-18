@@ -1,5 +1,5 @@
-// Create a new file: services/messageService.js
-import { updateDocument } from "./firestoreService";
+// packages/services/src/messageService.js
+import { updateDocument, getDocument } from "./firestoreService";  // ← Add getDocument
 import { DateTime } from "luxon";
 import * as Crypto from 'expo-crypto';
 import { arrayUnion } from "firebase/firestore";
@@ -33,22 +33,22 @@ export const addMessageToUser = async (receivingUserId, sendingUserInfo, message
 };
 
 export const deleteMessageForUser = async (userId, messageId) => {
-    if (!userId || !messageId) return;
-  
-    try {
-      const userMessagesDoc = await getDocument("messages", userId);
+  if (!userId || !messageId) return;
+
+  try {
+    const userMessagesDoc = await getDocument("messages", userId);
+    
+    if (userMessagesDoc?.messages) {
+      const updatedMessages = userMessagesDoc.messages.filter(msg => msg.messageId !== messageId);
       
-      if (userMessagesDoc?.messages) {
-        const updatedMessages = userMessagesDoc.messages.filter(msg => msg.messageId !== messageId);
-        
-        await updateDocument("messages", userId, {
-          messages: updatedMessages,  // ✅ Your original approach was actually fine
-          updatedAt: DateTime.now().toISO(),
-        });
-  
-        console.log(`✅ Message ${messageId} deleted for user ${userId}`);
-      }
-    } catch (error) {
-      console.error("Error deleting message:", error);
+      await updateDocument("messages", userId, {
+        messages: updatedMessages,
+        updatedAt: DateTime.now().toISO(),
+      });
+
+      console.log(`✅ Message ${messageId} deleted for user ${userId}`);
     }
-  };
+  } catch (error) {
+    console.error("Error deleting message:", error);
+  }
+};

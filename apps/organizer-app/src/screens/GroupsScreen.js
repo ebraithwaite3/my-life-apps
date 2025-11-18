@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@my-apps/contexts';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '@my-apps/contexts';
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
-import { app } from '../config/firebase';
+import { app } from '@my-apps/config';
 
 const GroupsScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
