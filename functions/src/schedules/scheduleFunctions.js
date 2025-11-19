@@ -9,28 +9,34 @@ const {
   scrapeAndTransformSchedule,
 } = require("./scrapers/sportsReferenceScraper");
 
-const { google } = require("googleapis");
+const {google} = require("googleapis");
 require("dotenv").config();
 
 /**
  * Get authenticated Google Calendar client
+ * @return {Object} Google Calendar client
  */
 function getGoogleCalendarClient() {
   const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    "urn:ietf:wg:oauth:2.0:oob"
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_SECRET,
+      "urn:ietf:wg:oauth:2.0:oob",
   );
 
   oauth2Client.setCredentials({
     refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
   });
 
-  return google.calendar({ version: "v3", auth: oauth2Client });
+  return google.calendar({version: "v3", auth: oauth2Client});
 }
 
 /**
  * Generate unique scraper key for an event
+ * @param {string} sport - Sport name
+ * @param {string} team - Team name
+ * @param {string} season - Season identifier
+ * @param {string} week - Week number
+ * @return {string} Unique scraper key
  */
 function generateScraperKey(sport, team, season, week) {
   return `${sport.toUpperCase()}-${team.toUpperCase()}-${season}-W${week}`;
@@ -38,21 +44,31 @@ function generateScraperKey(sport, team, season, week) {
 
 /**
  * Create event description with scraper tag
+ * @param {string} sport - Sport name
+ * @param {string} season - Season identifier
+ * @param {string} week - Week number
+ * @param {string} opponent - Opponent team name
+ * @param {boolean} isAway - Whether game is away
+ * @param {string} scraperKey - Unique scraper key
+ * @return {string} Formatted event description
  */
 function createEventDescription(
-  sport,
-  season,
-  week,
-  opponent,
-  isAway,
-  scraperKey
+    sport,
+    season,
+    week,
+    opponent,
+    isAway,
+    scraperKey,
 ) {
   const vsText = isAway ? `@ ${opponent}` : `vs ${opponent}`;
-  return `${sport.toUpperCase()} ${season} - Week ${week}\n${vsText}\n\n[SPORTS-SCRAPER:${scraperKey}]`;
+  const description = `${sport.toUpperCase()} ${season} - Week ${week}\n` +
+    `${vsText}\n\n[SPORTS-SCRAPER:${scraperKey}]`;
+  return description;
 }
 
 /**
  * Core logic for updating sports schedules via Google Calendar
+ * @return {Promise<Object>} Results of schedule update
  */
 async function updateSchedulesCore() {
   const db = admin.firestore();
@@ -76,7 +92,7 @@ async function updateSchedulesCore() {
     // Skip if disabled
     if (!sportConfig.enabled) {
       console.log(`${sport}: Disabled - skipping`);
-      results[sport] = { status: "disabled", skipped: true };
+      results[sport] = {status: "disabled", skipped: true};
       continue;
     }
 
@@ -86,22 +102,23 @@ async function updateSchedulesCore() {
 
     if (today < seasonStart || today > seasonEnd) {
       console.log(`${sport}: Out of season - skipping`);
-      results[sport] = { status: "out-of-season", skipped: true };
+      results[sport] = {status: "out-of-season", skipped: true};
       continue;
     }
 
     // 3. Run the scraper
     try {
       console.log(
-        `Scraping ${sport}: Team ${sportConfig.team}, Season ${sportConfig.season}`
+          `Scraping ${sport}: Team ${sportConfig.team},`,
+          `Season ${sportConfig.season}`,
       );
 
       const gameDuration =
-        sport.toLowerCase() === "ncaab" || sport.toLowerCase() === "nba"
-          ? 2.5
-          : sport.toLowerCase() === "epl"
-          ? 2
-          : 3;
+        sport.toLowerCase() === "ncaab" || sport.toLowerCase() === "nba" ?
+          2.5 :
+          sport.toLowerCase() === "epl" ?
+          2 :
+          3;
       const scheduleData = await scrapeAndTransformSchedule(sport, {
         ...sportConfig,
         gameDuration,
@@ -109,15 +126,16 @@ async function updateSchedulesCore() {
       console.log(`✅ Scraped ${scheduleData.length} events`);
 
       // 4. Load or create mapping document
-      const mappingDocId = `${sport}-${sportConfig.team}-${sportConfig.season}`;
+      const mappingDocId =
+        `${sport}-${sportConfig.team}-${sportConfig.season}`;
       const mappingRef = db.collection("schedules").doc(mappingDocId);
       const mappingDoc = await mappingRef.get();
 
-      const mapping = mappingDoc.exists ? mappingDoc.data() : { games: {} };
+      const mapping = mappingDoc.exists ? mappingDoc.data() : {games: {}};
       console.log(
-        `📋 Loaded mapping with ${
-          Object.keys(mapping.games).length
-        } existing games`
+          `📋 Loaded mapping with ${
+            Object.keys(mapping.games).length
+          } existing games`,
       );
 
       // Track which games we've seen in this scrape
@@ -134,10 +152,10 @@ async function updateSchedulesCore() {
 
         const week = eventData.week;
         const scraperKey = generateScraperKey(
-          sport,
-          sportConfig.team,
-          sportConfig.season,
-          week
+            sport,
+            sportConfig.team,
+            sportConfig.season,
+            week,
         );
         scrapedWeeks.add(week);
 
@@ -148,12 +166,12 @@ async function updateSchedulesCore() {
           console.log(`  ➕ Creating Week ${week}...`);
 
           const description = createEventDescription(
-            sport,
-            sportConfig.season,
-            week,
-            eventData.opponent,
-            eventData.isAway,
-            scraperKey
+              sport,
+              sportConfig.season,
+              week,
+              eventData.opponent,
+              eventData.isAway,
+              scraperKey,
           );
 
           const googleEvent = await calendar.events.insert({
@@ -171,7 +189,7 @@ async function updateSchedulesCore() {
                 timeZone: "America/New_York",
               },
               reminders: {
-                useDefault: false, // ← ADD THIS to disable reminders
+                useDefault: false,
                 overrides: [],
               },
             },
@@ -227,7 +245,9 @@ async function updateSchedulesCore() {
       let deleted = 0;
       for (const week of Object.keys(mapping.games)) {
         if (!scrapedWeeks.has(week)) {
-          console.log(`  🗑️ Deleting Week ${week} (no longer in schedule)...`);
+          console.log(
+              `  🗑️ Deleting Week ${week} (no longer in schedule)...`,
+          );
 
           try {
             await calendar.events.delete({
@@ -238,7 +258,10 @@ async function updateSchedulesCore() {
             delete mapping.games[week];
             deleted++;
           } catch (error) {
-            console.error(`  ❌ Failed to delete Week ${week}:`, error.message);
+            console.error(
+                `  ❌ Failed to delete Week ${week}:`,
+                error.message,
+            );
           }
         }
       }
@@ -246,7 +269,8 @@ async function updateSchedulesCore() {
       // 7. Save updated mapping
       await mappingRef.set(mapping);
       console.log(
-        `✅ Mapping saved: ${created} created, ${updated} updated, ${deleted} deleted, ${skipped} skipped`
+          `✅ Mapping saved: ${created} created, ${updated} updated,`,
+          `${deleted} deleted, ${skipped} skipped`,
       );
 
       results[sport] = {
@@ -274,6 +298,11 @@ async function updateSchedulesCore() {
   return results;
 }
 
+/**
+ * Sleep for specified milliseconds
+ * @param {number} ms - Milliseconds to sleep
+ * @return {Promise} Promise that resolves after delay
+ */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -282,27 +311,27 @@ function sleep(ms) {
  * Manual trigger
  */
 exports.manualUpdateSchedules = functions.https.onCall(
-  async (data, context) => {
-    console.log("Manual schedule update triggered");
+    async (data, context) => {
+      console.log("Manual schedule update triggered");
 
-    try {
-      const results = await updateSchedulesCore();
+      try {
+        const results = await updateSchedulesCore();
 
-      return {
-        success: true,
-        message: "Schedule update completed",
-        results: results,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error("Manual update failed:", error);
-      throw new functions.https.HttpsError(
-        "internal",
-        "Failed to update schedules",
-        error.message
-      );
-    }
-  }
+        return {
+          success: true,
+          message: "Schedule update completed",
+          results: results,
+          timestamp: new Date().toISOString(),
+        };
+      } catch (error) {
+        console.error("Manual update failed:", error);
+        throw new functions.https.HttpsError(
+            "internal",
+            "Failed to update schedules",
+            error.message,
+        );
+      }
+    },
 );
 
 exports.testScheduleSetup = functions.https.onCall(async (data, context) => {
@@ -320,8 +349,8 @@ exports.testScheduleSetup = functions.https.onCall(async (data, context) => {
 
     const config = configDoc.data();
     const enabledSports = Object.entries(config)
-      .filter(([_, cfg]) => cfg.enabled)
-      .map(([sport, _]) => sport);
+        .filter(([_, cfg]) => cfg.enabled)
+        .map(([sport, _]) => sport);
 
     return {
       success: true,

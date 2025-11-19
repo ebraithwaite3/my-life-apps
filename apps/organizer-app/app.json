@@ -4,10 +4,10 @@
     "slug": "my-organizer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/CalendarConnectionv2AppIcon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/CalendarConnectionv2AppIcon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -15,6 +15,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.ebraithwaite3.myorganizer",
       "buildNumber": "1.0.0",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -27,6 +28,15 @@
       "package": "com.yourname.myorganizer"
     },
     "scheme": "myorganizer",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/CalendarConnectionv2AppIcon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "8d24b3bd-9e5c-4de7-93b7-6268ea9a0d84"

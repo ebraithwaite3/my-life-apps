@@ -1,6 +1,6 @@
 // AuthContext.js
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { initializeAuth, initializeFirestore } from '@my-apps/services';  // ← Fixed
+import { initializeAuth, initializeFirestore } from '@my-apps/services';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteDoc } from 'firebase/firestore';
 import { 
@@ -8,10 +8,11 @@ import {
   updateDocument, 
   deleteDocument, 
   setGlobalDb 
-} from '@my-apps/services';  // ← Fixed
-import { addMessageToUser } from '@my-apps/services';  // ← Fixed
+} from '@my-apps/services';
+import { addMessageToUser } from '@my-apps/services';
 import { DateTime } from 'luxon';
 import * as Crypto from 'expo-crypto';
+import { setupPushNotifications } from '../services/notificationService'; // ← ADD THIS
 
 
 const AuthContext = createContext();
@@ -37,21 +38,33 @@ export const AuthProvider = ({ children }) => {
           initializeFirestore()
         ]);
         
-        console.log('Inits complete', new Date().toISOString()); // ← Add this
+        console.log('Inits complete', new Date().toISOString());
         setAuth(authInstance);
         setDb(dbInstance);
         setGlobalDb(dbInstance);
   
         const authModule = await import('firebase/auth');
-        console.log('Auth module imported', new Date().toISOString()); // ← Add this
+        console.log('Auth module imported', new Date().toISOString());
         
-        const unsubscribe = authModule.onAuthStateChanged(authInstance, (user) => {
-          console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user', new Date().toISOString()); // ← Enhanced log
+        // ← MAKE THIS ASYNC
+        const unsubscribe = authModule.onAuthStateChanged(authInstance, async (user) => {
+          console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user', new Date().toISOString());
           setUser(user);
           setLoading(false);
+
+          // ← ADD THIS BLOCK
+          // ✅ Setup push notifications when user logs in
+          if (user) {
+            console.log('User logged in, setting up push notifications...');
+            try {
+              await setupPushNotifications(user.uid);
+              console.log('✅ Push notifications setup complete!');
+            } catch (error) {
+              console.error('❌ Push notification setup failed:', error);
+              // Don't block login if notifications fail
+            }
+          }
         });
-        
-        // If no callback fires in 10s, force a fallback (see fixes below)
         
         return unsubscribe;
       } catch (error) {

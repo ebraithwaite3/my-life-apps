@@ -11,6 +11,10 @@ import { AppHeader } from '@my-apps/ui';
 import { LoadingScreen } from '@my-apps/screens';
 import { DateTime } from 'luxon';
 
+// ← ADD THESE IMPORTS
+import { NotificationProvider, useNotifications } from '../contexts/NotificationContext';
+import NotificationBanner from '../components/shared/NotificationBanner';
+
 // Main screens
 import DashboardScreen from '../screens/DashboardScreen';
 import CalendarScreen from '../screens/CalendarScreen';
@@ -235,6 +239,27 @@ function RootNavigator({ onLogout }) {
   );
 }
 
+// ← ADD THIS NEW COMPONENT
+// Wrapper that adds the notification banner on top
+function AppWithNotifications({ onLogout }) {
+  const { currentNotification, dismissNotification, handleBannerPress } = useNotifications();
+
+  return (
+    <>
+      <RootNavigator onLogout={onLogout} />
+      
+      {/* Show notification banner when notification arrives while app is open */}
+      {currentNotification && (
+        <NotificationBanner
+          notification={currentNotification}
+          onPress={handleBannerPress}
+          onDismiss={dismissNotification}
+        />
+      )}
+    </>
+  );
+}
+
 const MainNavigator = ({ onLogout }) => {
   const { setSelectedDate, setSelectedMonth, setSelectedYear } = useData();
 
@@ -315,7 +340,10 @@ const MainNavigator = ({ onLogout }) => {
 
   return (
     <NavigationContainer linking={linking}>
-      <RootNavigator onLogout={onLogout} />
+      {/* ← WRAP WITH NotificationProvider */}
+      <NotificationProvider>
+        <AppWithNotifications onLogout={onLogout} />
+      </NotificationProvider>
     </NavigationContainer>
   );
 };

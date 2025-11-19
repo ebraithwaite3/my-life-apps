@@ -14,6 +14,9 @@ const modules = [
   require("./src/schedules/scheduleFunctions"),
   require("./src/calendar/googleCalendarFunctions"),
   require("./src/calendar/calendarFunctions"),
+  require("./src/schedules/eplScheduleUpload"),
+  require("./src/schedules/updateCFBSchedule"),
+  require("./src/schedules/updateNCAABSchedule"),
   // Add more as you create them
 ];
 

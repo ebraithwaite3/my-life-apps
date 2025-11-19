@@ -1,18 +1,14 @@
-const { onCall } = require("firebase-functions/v2/https");
+const {onCall} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 // ✅ Initialize admin only if it hasn't been initialized yet
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Now safe to use Firestore / Auth / etc
-const db = admin.firestore();
-
 const axios = require("axios");
 const ical = require("ical");
-const { DateTime } = require("luxon");
-const { rrulestr } = require("rrule");
-const { calendar } = require("googleapis/build/src/apis/calendar");
+const {DateTime} = require("luxon");
+const {rrulestr} = require("rrule");
 
 exports.syncCalendar = onCall(async (request) => {
   try {
@@ -23,15 +19,15 @@ exports.syncCalendar = onCall(async (request) => {
 
     if (isBatch) {
       console.log(
-        "🔄 Starting BATCH sync for",
-        requestData.calendars.length,
-        "calendars"
+          "🔄 Starting BATCH sync for",
+          requestData.calendars.length,
+          "calendars",
       );
 
       const results = await syncMultipleCalendars(
-        requestData.calendars,
-        requestData.monthsBack || 1,
-        requestData.monthsForward || 3
+          requestData.calendars,
+          requestData.monthsBack || 1,
+          requestData.monthsForward || 3,
       );
 
       return {
@@ -42,16 +38,16 @@ exports.syncCalendar = onCall(async (request) => {
     }
 
     console.log(
-      "🔄 Starting SINGLE sync for calendar:",
-      requestData.calendarId
+        "🔄 Starting SINGLE sync for calendar:",
+        requestData.calendarId,
     );
 
     const result = await syncSingleCalendar(
-      requestData.calendarId,
-      requestData.calendarAddress,
-      requestData.calendarType,
-      requestData.monthsBack || 1,
-      requestData.monthsForward || 3
+        requestData.calendarId,
+        requestData.calendarAddress,
+        requestData.calendarType,
+        requestData.monthsBack || 1,
+        requestData.monthsForward || 3,
     );
 
     return {
@@ -70,6 +66,10 @@ exports.syncCalendar = onCall(async (request) => {
 
 /**
  * Sync multiple calendars
+ * @param {Array} calendars - Array of calendar objects to sync
+ * @param {number} monthsBack - Number of months back to sync
+ * @param {number} monthsForward - Number of months forward to sync
+ * @return {Promise<Object>} Sync results
  */
 async function syncMultipleCalendars(calendars, monthsBack, monthsForward) {
   const results = [];
@@ -77,11 +77,11 @@ async function syncMultipleCalendars(calendars, monthsBack, monthsForward) {
   for (const calendar of calendars) {
     try {
       const result = await syncSingleCalendar(
-        calendar.calendarId,
-        calendar.calendarAddress,
-        calendar.calendarType || calendar.type,
-        monthsBack,
-        monthsForward
+          calendar.calendarId,
+          calendar.calendarAddress,
+          calendar.calendarType || calendar.type,
+          monthsBack,
+          monthsForward,
       );
 
       results.push({
@@ -103,14 +103,14 @@ async function syncMultipleCalendars(calendars, monthsBack, monthsForward) {
       // Update error status in Firestore
       try {
         await admin
-          .firestore()
-          .collection("calendars")
-          .doc(calendar.calendarId)
-          .update({
-            "sync.syncStatus": "error",
-            "sync.lastError": error.message,
-            "sync.lastErrorAt": new Date().toISOString(),
-          });
+            .firestore()
+            .collection("calendars")
+            .doc(calendar.calendarId)
+            .update({
+              "sync.syncStatus": "error",
+              "sync.lastError": error.message,
+              "sync.lastErrorAt": new Date().toISOString(),
+            });
       } catch (updateError) {
         console.error("Failed to update error status:", updateError);
       }
@@ -121,7 +121,7 @@ async function syncMultipleCalendars(calendars, monthsBack, monthsForward) {
   const errorCount = results.filter((r) => !r.success).length;
 
   console.log(
-    `✅ Batch sync complete: ${successCount} success, ${errorCount} failed`
+      `✅ Batch sync complete: ${successCount} success, ${errorCount} failed`,
   );
 
   return {
@@ -134,25 +134,31 @@ async function syncMultipleCalendars(calendars, monthsBack, monthsForward) {
 
 /**
  * Sync a single calendar
+ * @param {string} calendarId - Calendar ID
+ * @param {string} calendarAddress - Calendar iCal feed URL
+ * @param {string} calendarType - Calendar type (ical, google, etc)
+ * @param {number} monthsBack - Number of months back to sync
+ * @param {number} monthsForward - Number of months forward to sync
+ * @return {Promise<Object>} Sync result
  */
 async function syncSingleCalendar(
-  calendarId,
-  calendarAddress,
-  calendarType,
-  monthsBack,
-  monthsForward
+    calendarId,
+    calendarAddress,
+    calendarType,
+    monthsBack,
+    monthsForward,
 ) {
   console.log(
-    "📅 Sync range:",
-    monthsBack,
-    "months back,",
-    monthsForward,
-    "months forward"
+      "📅 Sync range:",
+      monthsBack,
+      "months back,",
+      monthsForward,
+      "months forward",
   );
 
   if (!calendarId || !calendarAddress) {
     throw new Error(
-      "Missing required parameters: calendarId and calendarAddress"
+        "Missing required parameters: calendarId and calendarAddress",
     );
   }
 
@@ -170,19 +176,20 @@ async function syncSingleCalendar(
 
   // Step 3: Convert to our event format and group by month
   const eventsByMonth = groupEventsByMonth(
-    parsedCalendar,
-    monthsBack,
-    monthsForward,
-    calendarId,
-    calendarType
+      parsedCalendar,
+      monthsBack,
+      monthsForward,
+      calendarId,
+      calendarType,
   );
   console.log(
-    "📊 Events grouped into",
-    Object.keys(eventsByMonth).length,
-    "months"
+      "📊 Events grouped into",
+      Object.keys(eventsByMonth).length,
+      "months",
   );
 
-  // Step 4: Write to month-sharded Firestore documents WITH ACTIVITY PRESERVATION
+  // Step 4: Write to month-sharded Firestore documents
+  // WITH ACTIVITY PRESERVATION
   const db = admin.firestore();
   const batch = db.batch();
   let eventCount = 0;
@@ -194,40 +201,47 @@ async function syncSingleCalendar(
 
   for (const [monthKey, newMonthEvents] of Object.entries(eventsByMonth)) {
     const monthDocRef = db
-      .collection("calendars")
-      .doc(calendarId)
-      .collection("months")
-      .doc(monthKey);
+        .collection("calendars")
+        .doc(calendarId)
+        .collection("months")
+        .doc(monthKey);
 
     // Get existing month document to preserve app-specific fields
     const monthDoc = await monthDocRef.get();
-    const existingEvents = monthDoc.exists ? monthDoc.data().events || {} : {};
+    const existingEvents = monthDoc.exists ?
+      monthDoc.data().events || {} :
+      {};
 
     // Build a map of base IDs to full event IDs for existing events
-    // Base ID is everything before the timestamp (e.g., "abc123@google.com" from "abc123@google.com-1234567890")
+    // Base ID is everything before the timestamp
+    // (e.g., "abc123@google.com" from "abc123@google.com-1234567890")
     const existingEventsByBaseId = {};
     for (const [eventId, event] of Object.entries(existingEvents)) {
       const lastDashIndex = eventId.lastIndexOf("-");
       const baseId =
-        lastDashIndex !== -1 ? eventId.substring(0, lastDashIndex) : eventId;
-      existingEventsByBaseId[baseId] = { fullId: eventId, event };
+        lastDashIndex !== -1 ?
+          eventId.substring(0, lastDashIndex) :
+          eventId;
+      existingEventsByBaseId[baseId] = {fullId: eventId, event};
     }
 
-    // Track which old event IDs have been replaced (so we can delete them)
+    // Track which old event IDs have been replaced
     const replacedEventIds = new Set();
 
     // Merge new events with existing, preserving app-specific fields
     const mergedEvents = {};
 
-    for (const [newEventId, newEventData] of Object.entries(newMonthEvents)) {
+    for (const [newEventId, newEventData] of
+      Object.entries(newMonthEvents)) {
       // Get base ID of new event (remove timestamp)
       const lastDashIndex = newEventId.lastIndexOf("-");
       const newBaseId =
-        lastDashIndex !== -1
-          ? newEventId.substring(0, lastDashIndex)
-          : newEventId;
+        lastDashIndex !== -1 ?
+          newEventId.substring(0, lastDashIndex) :
+          newEventId;
 
-      // Check if an event with this base ID already exists (might have different timestamp)
+      // Check if an event with this base ID already exists
+      // (might have different timestamp)
       const existingMatch = existingEventsByBaseId[newBaseId];
 
       let eventToPreserve = null;
@@ -239,15 +253,18 @@ async function syncSingleCalendar(
 
         if (oldEventId !== newEventId) {
           console.log(
-            `   ↳ Updating event ID from ${oldEventId} to ${newEventId}`
+              "   ↳ Updating event ID from",
+              oldEventId,
+              "to",
+              newEventId,
           );
-          replacedEventIds.add(oldEventId); // Mark old ID for deletion
+          replacedEventIds.add(oldEventId);
           updatedEventIdsCount++;
         }
       }
 
       // Start with calendar fields from sync
-      mergedEvents[newEventId] = { ...newEventData };
+      mergedEvents[newEventId] = {...newEventData};
 
       // ===== PRESERVE APP-SPECIFIC FIELDS =====
       if (eventToPreserve) {
@@ -259,20 +276,18 @@ async function syncSingleCalendar(
           mergedEvents[newEventId].activities = eventToPreserve.activities;
           preservedActivitiesCount++;
           console.log(
-            `   ↳ Preserved ${eventToPreserve.activities.length} activities for event: ${newEventData.title}`
+              "   ↳ Preserved",
+              eventToPreserve.activities.length,
+              "activities for event:",
+              newEventData.title,
           );
         }
 
-        // Preserve user-set reminder (if different from calendar default)
+        // Preserve user-set reminder
         if (eventToPreserve.reminderMinutes !== undefined) {
           mergedEvents[newEventId].reminderMinutes =
             eventToPreserve.reminderMinutes;
         }
-
-        // Add any other app-specific fields to preserve here
-        // if (eventToPreserve.customField) {
-        //   mergedEvents[newEventId].customField = eventToPreserve.customField;
-        // }
       }
     }
 
@@ -282,48 +297,54 @@ async function syncSingleCalendar(
     for (const newEventId of Object.keys(newMonthEvents)) {
       const lastDashIndex = newEventId.lastIndexOf("-");
       const baseId =
-        lastDashIndex !== -1
-          ? newEventId.substring(0, lastDashIndex)
-          : newEventId;
+        lastDashIndex !== -1 ?
+          newEventId.substring(0, lastDashIndex) :
+          newEventId;
       baseIdsInNewSync.add(baseId);
     }
 
     // Find events that should be deleted:
     // 1. Events that are no longer in calendar source (by base ID)
     // 2. Events that have been replaced with new timestamp
-    const eventsToDelete = Object.keys(existingEvents).filter((eventId) => {
-      const event = existingEvents[eventId];
-      const lastDashIndex = eventId.lastIndexOf("-");
-      const baseId =
-        lastDashIndex !== -1 ? eventId.substring(0, lastDashIndex) : eventId;
+    const eventsToDelete = Object.keys(existingEvents)
+        .filter((eventId) => {
+          const event = existingEvents[eventId];
+          const lastDashIndex = eventId.lastIndexOf("-");
+          const baseId =
+          lastDashIndex !== -1 ?
+            eventId.substring(0, lastDashIndex) :
+            eventId;
 
-      // Delete if replaced with new timestamp
-      if (replacedEventIds.has(eventId)) {
-        return true;
-      }
+          // Delete if replaced with new timestamp
+          if (replacedEventIds.has(eventId)) {
+            return true;
+          }
 
-      // Delete if no longer in calendar source
-      return event.source === "ical_feed" && !baseIdsInNewSync.has(baseId);
-    });
+          // Delete if no longer in calendar source
+          return event.source === "ical_feed" &&
+          !baseIdsInNewSync.has(baseId);
+        });
 
     if (eventsToDelete.length > 0) {
       console.log(
-        `🗑️ Removing ${eventsToDelete.length} events from ${monthKey}`
+          `🗑️ Removing ${eventsToDelete.length} events from ${monthKey}`,
       );
       deletedEventsCount += eventsToDelete.length;
 
-      // Log which events are being deleted (helpful for debugging)
+      // Log which events are being deleted
       eventsToDelete.forEach((eventId) => {
         const deletedEvent = existingEvents[eventId];
         if (replacedEventIds.has(eventId)) {
           console.log(
-            `   ↳ Removing old timestamp: ${deletedEvent.title} (${eventId})`
+              "   ↳ Removing old timestamp:",
+              deletedEvent.title,
+              `(${eventId})`,
           );
         } else {
           console.log(`   ↳ Deleting: ${deletedEvent.title}`);
           if (deletedEvent.activities) {
             console.log(
-              `      (had ${deletedEvent.activities.length} activities attached)`
+                `      (had ${deletedEvent.activities.length} activities)`,
             );
           }
         }
@@ -332,16 +353,18 @@ async function syncSingleCalendar(
 
     // Write merged events (excludes deleted ones)
     batch.set(
-      monthDocRef,
-      {
-        events: mergedEvents,
-        updatedAt: now,
-      }
+        monthDocRef,
+        {
+          events: mergedEvents,
+          updatedAt: now,
+        },
     );
 
     eventCount += Object.keys(mergedEvents).length;
     console.log(
-      `📝 Prepared ${Object.keys(mergedEvents).length} events for ${monthKey}`
+        `📝 Prepared`,
+        Object.keys(mergedEvents).length,
+        `events for ${monthKey}`,
     );
   }
 
@@ -355,7 +378,7 @@ async function syncSingleCalendar(
     "sync.preservedActivitiesCount": preservedActivitiesCount,
     "sync.deletedEventsCount": deletedEventsCount,
     "sync.updatedEventIdsCount": updatedEventIdsCount,
-    updatedAt: now,
+    "updatedAt": now,
   });
 
   // Commit all writes
@@ -363,16 +386,18 @@ async function syncSingleCalendar(
 
   console.log("✅ Sync completed:", calendarId, "at", now);
   console.log(
-    `📈 Synced ${eventCount} events across ${
-      Object.keys(eventsByMonth).length
-    } months`
-  );
-  console.log(`🔗 Preserved activities on ${preservedActivitiesCount} events`);
-  console.log(
-    `🔄 Updated ${updatedEventIdsCount} event IDs to match sync timestamps`
+      `📈 Synced ${eventCount} events across`,
+      Object.keys(eventsByMonth).length,
+      "months",
   );
   console.log(
-    `🗑️ Deleted ${deletedEventsCount} events (including old timestamps)`
+      `🔗 Preserved activities on ${preservedActivitiesCount} events`,
+  );
+  console.log(
+      `🔄 Updated ${updatedEventIdsCount} event IDs to match sync timestamps`,
+  );
+  console.log(
+      `🗑️ Deleted ${deletedEventsCount} events (including old timestamps)`,
   );
 
   return {
@@ -387,24 +412,30 @@ async function syncSingleCalendar(
 }
 
 /**
- * Group events by month within the specified range, expanding recurring events
+ * Group events by month within the specified range
+ * @param {Object} parsedCalendar - Parsed iCal calendar object
+ * @param {number} monthsBack - Number of months back to include
+ * @param {number} monthsForward - Number of months forward to include
+ * @param {string} calendarId - Calendar ID
+ * @param {string} calendarType - Calendar type
+ * @return {Object} Events grouped by month key
  */
 function groupEventsByMonth(
-  parsedCalendar,
-  monthsBack,
-  monthsForward,
-  calendarId,
-  calendarType
+    parsedCalendar,
+    monthsBack,
+    monthsForward,
+    calendarId,
+    calendarType,
 ) {
   const now = DateTime.now();
-  const startDate = now.minus({ months: monthsBack }).startOf("month");
-  const endDate = now.plus({ months: monthsForward }).endOf("month");
+  const startDate = now.minus({months: monthsBack}).startOf("month");
+  const endDate = now.plus({months: monthsForward}).endOf("month");
 
   console.log(
-    "📅 Date range:",
-    startDate.toISODate(),
-    "to",
-    endDate.toISODate()
+      "📅 Date range:",
+      startDate.toISODate(),
+      "to",
+      endDate.toISODate(),
   );
 
   const eventsByMonth = {};
@@ -413,7 +444,9 @@ function groupEventsByMonth(
     if (event.type !== "VEVENT") continue;
 
     try {
-      const eventStart = event.start ? DateTime.fromJSDate(event.start) : null;
+      const eventStart = event.start ?
+        DateTime.fromJSDate(event.start) :
+        null;
 
       if (!eventStart) continue;
 
@@ -428,11 +461,11 @@ function groupEventsByMonth(
 
         for (const occurrence of occurrences) {
           addEventToMonth(
-            eventsByMonth,
-            occurrence,
-            event,
-            calendarId,
-            calendarType
+              eventsByMonth,
+              occurrence,
+              event,
+              calendarId,
+              calendarType,
           );
         }
       } else {
@@ -440,11 +473,11 @@ function groupEventsByMonth(
         if (eventStart < startDate || eventStart > endDate) continue;
 
         addEventToMonth(
-          eventsByMonth,
-          eventStart,
-          event,
-          calendarId,
-          calendarType
+            eventsByMonth,
+            eventStart,
+            event,
+            calendarId,
+            calendarType,
         );
       }
     } catch (error) {
@@ -458,6 +491,10 @@ function groupEventsByMonth(
 
 /**
  * Expand a recurring event into individual occurrences
+ * @param {Object} event - Event object
+ * @param {DateTime} startDate - Start date for expansion
+ * @param {DateTime} endDate - End date for expansion
+ * @return {Array<DateTime>} Array of occurrence dates
  */
 function expandRecurringEvent(event, startDate, endDate) {
   try {
@@ -469,9 +506,9 @@ function expandRecurringEvent(event, startDate, endDate) {
 
     // Get all occurrences between our date range
     const occurrences = rrule.between(
-      startDate.toJSDate(),
-      endDate.toJSDate(),
-      true // inclusive
+        startDate.toJSDate(),
+        endDate.toJSDate(),
+        true, // inclusive
     );
 
     return occurrences.map((date) => DateTime.fromJSDate(date));
@@ -483,21 +520,26 @@ function expandRecurringEvent(event, startDate, endDate) {
 
 /**
  * Add an event to the appropriate month in eventsByMonth
+ * @param {Object} eventsByMonth - Events grouped by month
+ * @param {DateTime} eventStartDateTime - Event start time
+ * @param {Object} event - Event object
+ * @param {string} calendarId - Calendar ID
+ * @param {string} calendarType - Calendar type
  */
 function addEventToMonth(
-  eventsByMonth,
-  eventStartDateTime,
-  event,
-  calendarId,
-  calendarType
+    eventsByMonth,
+    eventStartDateTime,
+    event,
+    calendarId,
+    calendarType,
 ) {
   let startUTC = eventStartDateTime;
 
   if (calendarType === "ical") {
     // Convert from America/New_York to UTC
     startUTC = eventStartDateTime
-      .setZone("America/New_York", { keepLocalTime: true })
-      .toUTC();
+        .setZone("America/New_York", {keepLocalTime: true})
+        .toUTC();
   }
 
   const monthKey = startUTC.toFormat("yyyy-MM");
@@ -513,13 +555,13 @@ function addEventToMonth(
     eventEnd = DateTime.fromJSDate(event.end);
     if (calendarType === "ical") {
       eventEnd = eventEnd
-        .setZone("America/New_York", { keepLocalTime: true })
-        .toUTC();
+          .setZone("America/New_York", {keepLocalTime: true})
+          .toUTC();
     }
   } else if (event.duration) {
-    eventEnd = startUTC.plus({ seconds: event.duration });
+    eventEnd = startUTC.plus({seconds: event.duration});
   } else {
-    eventEnd = startUTC.plus({ hours: 1 });
+    eventEnd = startUTC.plus({hours: 1});
   }
 
   // Create unique event ID for this occurrence

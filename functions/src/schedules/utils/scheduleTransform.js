@@ -1,5 +1,5 @@
 const {getTeamCode} = require("./teamCodes");
-const { DateTime } = require('luxon');
+const {DateTime} = require("luxon");
 
 /**
  * Parse game date and time into ISO format with proper ET timezone
@@ -11,22 +11,22 @@ const { DateTime } = require('luxon');
  * @return {object|null} {startTime, endTime, isTBD} or null if invalid
  */
 function parseGameDateTime(date, time, year, defaultDuration = 3) {
-  // Normalize time format - handle "7:00p" → "7:00 PM" and "7:00a" → "7:00 AM"
+  // Normalize time format - handle "7:00p" → "7:00 PM"
   if (time && time.match(/\d{1,2}:\d{2}[ap]$/i)) {
-    time = time.replace(/([ap])$/i, (match) => match.toUpperCase() + 'M');
+    time = time.replace(/([ap])$/i, (match) => match.toUpperCase() + "M");
   }
-  
+
   // Check if time is TBD
-  const isTBD = !time || time.toUpperCase() === 'TBD' || time.trim() === '';
+  const isTBD = !time || time.toUpperCase() === "TBD" || time.trim() === "";
 
   // Handle different date formats
   let dateStr;
-  
+
   // Check if date already includes a 4-digit year
   const hasYear = /\b(20\d{2})\b/.test(date);
-  
+
   if (hasYear) {
-    // Date already has year (e.g., "Mon, Nov 3, 2025" or "Aug 30, 2025")
+    // Date already has year (e.g., "Mon, Nov 3, 2025")
     dateStr = date;
   } else {
     // Date needs year added (e.g., "September 7")
@@ -35,37 +35,61 @@ function parseGameDateTime(date, time, year, defaultDuration = 3) {
 
   try {
     let dt;
-    
+
     // Try multiple date formats
-    
+
     // Format: "Mon, Nov 3, 2025" (CBB with day of week)
-    dt = DateTime.fromFormat(dateStr, 'EEE, MMM d, yyyy', { zone: 'America/New_York' });
-    
+    dt = DateTime.fromFormat(
+        dateStr,
+        "EEE, MMM d, yyyy",
+        {zone: "America/New_York"},
+    );
+
     if (!dt.isValid) {
       // Format: "Nov 3, 2025" (CBB without day of week)
-      dt = DateTime.fromFormat(dateStr, 'MMM d, yyyy', { zone: 'America/New_York' });
+      dt = DateTime.fromFormat(
+          dateStr,
+          "MMM d, yyyy",
+          {zone: "America/New_York"},
+      );
     }
-    
+
     if (!dt.isValid) {
       // Format: "September 7 2025" (NFL)
-      dt = DateTime.fromFormat(dateStr, 'MMMM d yyyy', { zone: 'America/New_York' });
+      dt = DateTime.fromFormat(
+          dateStr,
+          "MMMM d yyyy",
+          {zone: "America/New_York"},
+      );
     }
-    
+
     if (!dt.isValid) {
       // Format: "Aug 30, 2025" (CFB)
-      dt = DateTime.fromFormat(dateStr, 'MMM d, yyyy', { zone: 'America/New_York' });
+      dt = DateTime.fromFormat(
+          dateStr,
+          "MMM d, yyyy",
+          {zone: "America/New_York"},
+      );
     }
-    
+
     if (!dt.isValid) {
       // Format: "Aug 30 2025" (alternate CFB)
-      dt = DateTime.fromFormat(dateStr, 'MMM d yyyy', { zone: 'America/New_York' });
+      dt = DateTime.fromFormat(
+          dateStr,
+          "MMM d yyyy",
+          {zone: "America/New_York"},
+      );
     }
 
     if (!dt.isValid) {
       // Format: "2025-08-17" (EPL - ISO date format)
-      dt = DateTime.fromFormat(dateStr, 'yyyy-MM-dd', { zone: 'America/New_York' });
+      dt = DateTime.fromFormat(
+          dateStr,
+          "yyyy-MM-dd",
+          {zone: "America/New_York"},
+      );
     }
-    
+
     if (!dt.isValid) {
       console.warn(`Invalid date: ${dateStr} (${dt.invalidReason})`);
       return null;
@@ -73,13 +97,13 @@ function parseGameDateTime(date, time, year, defaultDuration = 3) {
 
     // If TBD, create all-day event (12:01 AM to 11:59 PM)
     if (isTBD) {
-      const startTime = dt.set({ hour: 0, minute: 1, second: 0 }).toISO();
-      const endTime = dt.set({ hour: 23, minute: 59, second: 0 }).toISO();
-      
+      const startTime = dt.set({hour: 0, minute: 1, second: 0}).toISO();
+      const endTime = dt.set({hour: 23, minute: 59, second: 0}).toISO();
+
       return {
         startTime,
         endTime,
-        isTBD: true
+        isTBD: true,
       };
     }
 
@@ -88,31 +112,31 @@ function parseGameDateTime(date, time, year, defaultDuration = 3) {
     if (time24Match) {
       const hours = parseInt(time24Match[1]);
       const minutes = parseInt(time24Match[2]);
-      
+
       // Validate hours (0-23)
       if (hours < 0 || hours > 23) {
         console.warn(`Invalid 24-hour time: ${time}`);
         return null;
       }
-      
-      dt = dt.set({ hour: hours, minute: minutes, second: 0 });
-      
+
+      dt = dt.set({hour: hours, minute: minutes, second: 0});
+
       if (!dt.isValid) {
         console.warn(`Invalid date/time combination`);
         return null;
       }
-      
+
       const startTime = dt.toISO();
-      const endTime = dt.plus({ hours: defaultDuration }).toISO();
-      
+      const endTime = dt.plus({hours: defaultDuration}).toISO();
+
       return {
         startTime,
         endTime,
-        isTBD: false
+        isTBD: false,
       };
     }
 
-    // Parse 12-hour format with AM/PM (handles both "7:00 PM" and "7:00PM")
+    // Parse 12-hour format with AM/PM
     const timeMatch = time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     if (!timeMatch) {
       console.warn(`Could not parse time: "${time}"`);
@@ -131,24 +155,23 @@ function parseGameDateTime(date, time, year, defaultDuration = 3) {
     }
 
     // Set the time
-    dt = dt.set({ hour: hours, minute: minutes, second: 0 });
-    
+    dt = dt.set({hour: hours, minute: minutes, second: 0});
+
     if (!dt.isValid) {
       console.warn(`Invalid date/time combination`);
       return null;
     }
-    
+
     const startTime = dt.toISO();
-    const endTime = dt.plus({ hours: defaultDuration }).toISO();
-    
+    const endTime = dt.plus({hours: defaultDuration}).toISO();
+
     return {
       startTime,
       endTime,
-      isTBD: false
+      isTBD: false,
     };
-    
   } catch (error) {
-    console.error('Error parsing date/time:', error);
+    console.error("Error parsing date/time:", error);
     return null;
   }
 }
@@ -189,7 +212,12 @@ function transformScheduleToCalendarEvents(
   } = options;
 
   const events = scheduleData.games.map((game) => {
-    const parsedTime = parseGameDateTime(game.date, game.time, season, gameDuration);
+    const parsedTime = parseGameDateTime(
+        game.date,
+        game.time,
+        season,
+        gameDuration,
+    );
 
     // Skip games without valid times
     if (!parsedTime) {
@@ -199,7 +227,7 @@ function transformScheduleToCalendarEvents(
       return null;
     }
 
-    const { startTime, endTime, isTBD } = parsedTime;
+    const {startTime, endTime, isTBD} = parsedTime;
 
     // Create title: PIT vs OPPONENT or PIT @ OPPONENT
     const vsOrAt = game.isAway ? "@" : "vs";
@@ -217,7 +245,7 @@ function transformScheduleToCalendarEvents(
       [eventId]: {
         calendarId: calendarId,
         title: title,
-        description: isTBD ? "Game time TBD" : "",  // Mark TBD games
+        description: isTBD ? "Game time TBD" : "",
         startTime: startTime,
         endTime: endTime,
         isAllDay: false,
@@ -228,7 +256,7 @@ function transformScheduleToCalendarEvents(
         week: game.week || "",
         opponent: game.opponent,
         isAway: game.isAway,
-        timeTBD: isTBD,  // Track this
+        timeTBD: isTBD,
         createdAt: new Date().toISOString(),
       },
     };
