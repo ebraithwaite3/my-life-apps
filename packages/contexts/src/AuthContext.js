@@ -12,7 +12,6 @@ import {
 import { addMessageToUser } from '@my-apps/services';
 import { DateTime } from 'luxon';
 import * as Crypto from 'expo-crypto';
-import { setupPushNotifications } from '../services/notificationService'; // ← ADD THIS
 
 
 const AuthContext = createContext();
@@ -51,19 +50,6 @@ export const AuthProvider = ({ children }) => {
           console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user', new Date().toISOString());
           setUser(user);
           setLoading(false);
-
-          // ← ADD THIS BLOCK
-          // ✅ Setup push notifications when user logs in
-          if (user) {
-            console.log('User logged in, setting up push notifications...');
-            try {
-              await setupPushNotifications(user.uid);
-              console.log('✅ Push notifications setup complete!');
-            } catch (error) {
-              console.error('❌ Push notification setup failed:', error);
-              // Don't block login if notifications fail
-            }
-          }
         });
         
         return unsubscribe;
