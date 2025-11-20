@@ -17,6 +17,7 @@ const modules = [
   require("./src/schedules/eplScheduleUpload"),
   require("./src/schedules/updateCFBSchedule"),
   require("./src/schedules/updateNCAABSchedule"),
+  require("./src/notifications/sendPushNotifications"),
   // Add more as you create them
 ];
 

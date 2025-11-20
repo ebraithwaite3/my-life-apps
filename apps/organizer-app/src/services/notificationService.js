@@ -6,28 +6,21 @@ import { getFirestore, doc, setDoc } from 'firebase/firestore';
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,   // Show the notification
-    shouldPlaySound: true,   // Play sound
-    shouldSetBadge: false,   // Don't update badge count
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
   }),
 });
 
-/**
- * Request notification permissions from the user
- * Returns true if granted, false otherwise
- */
 export async function requestNotificationPermissions() {
-  // Only works on physical devices, not simulators
   if (!Device.isDevice) {
     console.log('Push notifications only work on physical devices');
     return false;
   }
 
-  // Check current permission status
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
-  // If not granted, ask the user
   if (existingStatus !== 'granted') {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
@@ -43,16 +36,18 @@ export async function requestNotificationPermissions() {
 }
 
 /**
- * Get the FCM push token for this device
- * Returns the token string or null if failed
+ * Get Expo Push Token (works with EAS builds)
  */
 export async function getPushToken() {
   try {
-    // This gets the FCM token (not Expo push token)
-    const tokenData = await Notifications.getDevicePushTokenAsync();
+    // Get Expo Push Token (this works with both Expo Go and EAS builds)
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: '8d24b3bd-9e5c-4de7-93b7-6268ea9a0d84', // Your EAS project ID from app.json
+    });
+    
     const token = tokenData.data;
     
-    console.log('Got push token:', token);
+    console.log('Got Expo push token:', token);
     return token;
   } catch (error) {
     console.error('Error getting push token:', error);
@@ -60,9 +55,6 @@ export async function getPushToken() {
   }
 }
 
-/**
- * Save the push token to Firestore for this user
- */
 export async function savePushTokenToFirestore(userId, token) {
   try {
     const db = getFirestore();
@@ -72,7 +64,7 @@ export async function savePushTokenToFirestore(userId, token) {
       pushToken: token,
       platform: Platform.OS,
       lastTokenUpdate: new Date().toISOString(),
-    }, { merge: true }); // merge: true means don't overwrite other user data
+    }, { merge: true });
 
     console.log('Push token saved to Firestore');
     return true;
@@ -82,26 +74,19 @@ export async function savePushTokenToFirestore(userId, token) {
   }
 }
 
-/**
- * Complete setup: request permissions, get token, save to Firestore
- * Call this when user logs in
- */
 export async function setupPushNotifications(userId) {
-  // Step 1: Request permissions
   const hasPermission = await requestNotificationPermissions();
   if (!hasPermission) {
     console.log('Cannot setup push notifications without permissions');
     return false;
   }
 
-  // Step 2: Get push token
   const token = await getPushToken();
   if (!token) {
     console.log('Failed to get push token');
     return false;
   }
 
-  // Step 3: Save to Firestore
   const saved = await savePushTokenToFirestore(userId, token);
   if (!saved) {
     console.log('Failed to save push token');
