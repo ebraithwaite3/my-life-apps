@@ -31,8 +31,9 @@ const CalendarScreen = () => {
     getActivitiesForDay,
     currentDate,
     user,
+    preferences,
   } = useData();
-
+console.log("PREFERENCES:", preferences);
   const [selectedView, setSelectedView] = useState("day"); // 'day', 'month'
   const [eventModalVisible, setEventModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
