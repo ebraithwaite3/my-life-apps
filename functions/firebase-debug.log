@@ -1,0 +1,106 @@
+[debug] [2025-12-01T16:05:11.882Z] ----------------------------------------------------------------------
+[debug] [2025-12-01T16:05:11.884Z] Command:       /opt/homebrew/Cellar/node/24.5.0/bin/node /opt/homebrew/bin/firebase emulators:start --only functions
+[debug] [2025-12-01T16:05:11.884Z] CLI Version:   14.24.0
+[debug] [2025-12-01T16:05:11.884Z] Platform:      darwin
+[debug] [2025-12-01T16:05:11.884Z] Node Version:  v24.5.0
+[debug] [2025-12-01T16:05:11.884Z] Time:          Mon Dec 01 2025 11:05:11 GMT-0500 (Eastern Standard Time)
+[debug] [2025-12-01T16:05:11.884Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-01T16:05:12.003Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-12-01T16:05:12.003Z] > authorizing via signed-in user (ebraithwaite3@gmail.com)
+[info] i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[debug] [2025-12-01T16:05:12.262Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-12-01T16:05:12.263Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2025-12-01T16:05:12.265Z] Emulator locator file path: /var/folders/1k/p_sdwby94c3f2p6j8y83hynr0000gn/T/hub-calendarconnectionv2.json
+[debug] [2025-12-01T16:05:12.266Z] [hub] writing locator at /var/folders/1k/p_sdwby94c3f2p6j8y83hynr0000gn/T/hub-calendarconnectionv2.json
+[debug] [2025-12-01T16:05:12.492Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-12-01T16:05:12.492Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-12-01T16:05:12.492Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"functions":[{"address":"0.0.0.0","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] ⚠  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[debug] [2025-12-01T16:05:12.715Z] defaultcredentials: writing to file /Users/ericbraithwaite/.config/firebase/ebraithwaite3_gmail_com_application_default_credentials.json
+[debug] [2025-12-01T16:05:12.716Z] Setting GAC to /Users/ericbraithwaite/.config/firebase/ebraithwaite3_gmail_com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to /Users/ericbraithwaite/.config/firebase/ebraithwaite3_gmail_com_application_default_credentials.json"}}
+[debug] [2025-12-01T16:05:12.717Z] Checked if tokens are valid: true, expires at: 1764607858594
+[debug] [2025-12-01T16:05:12.717Z] Checked if tokens are valid: true, expires at: 1764607858594
+[debug] [2025-12-01T16:05:12.718Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/calendarconnectionv2/adminSdkConfig [none]
+[debug] [2025-12-01T16:05:13.102Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/calendarconnectionv2/adminSdkConfig 200
+[debug] [2025-12-01T16:05:13.102Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/calendarconnectionv2/adminSdkConfig {"projectId":"calendarconnectionv2","storageBucket":"calendarconnectionv2.firebasestorage.app"}
+[info] i  functions: Watching "/Users/ericbraithwaite/my-life-apps/functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"/Users/ericbraithwaite/my-life-apps/functions\" for Cloud Functions..."}}
+[debug] [2025-12-01T16:05:13.489Z] Validating nodejs source
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2025-12-01T16:05:14.040Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "cheerio": "^1.1.2",
+    "dotenv": "^16.4.7",
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1",
+    "googleapis": "^165.0.0",
+    "ical": "^0.8.0",
+    "luxon": "^3.7.2",
+    "puppeteer": "^24.30.0",
+    "rrule": "^2.4.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.15.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2025-12-01T16:05:14.040Z] Building nodejs source
+[debug] [2025-12-01T16:05:14.041Z] Failed to find version of module node: reached end of search path /Users/ericbraithwaite/my-life-apps/functions/node_modules
+[warn] ⚠  functions: Your requested "node" version "20" doesn't match your global version "24". Using node@24 from host. 
+[info] i  functions: Loaded environment variables from .env. 
+[debug] [2025-12-01T16:05:14.043Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-12-01T16:05:14.046Z] Found firebase-functions binary at '/Users/ericbraithwaite/my-life-apps/node_modules/.bin/firebase-functions'
+[info] Serving at port 8637
+
+[debug] [2025-12-01T16:05:15.326Z] Got response from /__/functions.yaml {"endpoints":{"getUserData":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"getUserData"},"saveUserNote":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"saveUserNote"},"echoMessage":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"httpsTrigger":{},"entryPoint":"echoMessage"},"manualUpdateSchedules":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"manualUpdateSchedules"},"testScheduleSetup":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"testScheduleSetup"},"writeToCalendar":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GOOGLE_CLIENT_ID"},{"key":"GOOGLE_CLIENT_SECRET"},{"key":"GOOGLE_REFRESH_TOKEN"}],"labels":{},"httpsTrigger":{},"entryPoint":"writeToCalendar"},"updateCalendarEvent":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GOOGLE_CLIENT_ID"},{"key":"GOOGLE_CLIENT_SECRET"},{"key":"GOOGLE_REFRESH_TOKEN"}],"labels":{},"httpsTrigger":{},"entryPoint":"updateCalendarEvent"},"deleteCalendarEvent":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GOOGLE_CLIENT_ID"},{"key":"GOOGLE_CLIENT_SECRET"},{"key":"GOOGLE_REFRESH_TOKEN"}],"labels":{},"httpsTrigger":{},"entryPoint":"deleteCalendarEvent"},"syncCalendar":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"syncCalendar"},"updateEPLSchedule":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GOOGLE_CLIENT_ID"},{"key":"GOOGLE_CLIENT_SECRET"},{"key":"GOOGLE_REFRESH_TOKEN"}],"labels":{},"callableTrigger":{},"entryPoint":"updateEPLSchedule"},"updateCFBSchedule":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GOOGLE_CLIENT_ID"},{"key":"GOOGLE_CLIENT_SECRET"},{"key":"GOOGLE_REFRESH_TOKEN"}],"labels":{},"callableTrigger":{},"entryPoint":"updateCFBSchedule"},"updateNCAABSchedule":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GOOGLE_CLIENT_ID"},{"key":"GOOGLE_CLIENT_SECRET"},{"key":"GOOGLE_REFRESH_TOKEN"}],"labels":{},"callableTrigger":{},"entryPoint":"updateNCAABSchedule"},"sendPushNotification":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"sendPushNotification"},"sendBatchPushNotification":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"sendBatchPushNotification"},"sendScheduledNotifications":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"scheduleTrigger":{"schedule":"*/10 * * * *","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetrySeconds":null,"minBackoffSeconds":null,"maxBackoffSeconds":null},"timeZone":null},"entryPoint":"sendScheduledNotifications"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}],"extensions":{},"params":[{"type":"secret","name":"GOOGLE_CLIENT_ID"},{"type":"secret","name":"GOOGLE_CLIENT_SECRET"},{"type":"secret","name":"GOOGLE_REFRESH_TOKEN"}]}
+[info] ✔  functions: Loaded functions definitions from source: getUserData, saveUserNote, echoMessage, manualUpdateSchedules, testScheduleSetup, writeToCalendar, updateCalendarEvent, deleteCalendarEvent, syncCalendar, updateEPLSchedule, updateCFBSchedule, updateNCAABSchedule, sendPushNotification, sendBatchPushNotification, sendScheduledNotifications. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: getUserData, saveUserNote, echoMessage, manualUpdateSchedules, testScheduleSetup, writeToCalendar, updateCalendarEvent, deleteCalendarEvent, syncCalendar, updateEPLSchedule, updateCFBSchedule, updateNCAABSchedule, sendPushNotification, sendBatchPushNotification, sendScheduledNotifications."}}
+[info] ✔  functions[us-central1-getUserData]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/getUserData). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/getUserData)."}}
+[info] ✔  functions[us-central1-saveUserNote]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/saveUserNote). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/saveUserNote)."}}
+[info] ✔  functions[us-central1-echoMessage]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/echoMessage). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/echoMessage)."}}
+[info] ✔  functions[us-central1-manualUpdateSchedules]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/manualUpdateSchedules). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/manualUpdateSchedules)."}}
+[info] ✔  functions[us-central1-testScheduleSetup]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/testScheduleSetup). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/testScheduleSetup)."}}
+[info] ✔  functions[us-central1-writeToCalendar]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/writeToCalendar). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/writeToCalendar)."}}
+[info] ✔  functions[us-central1-updateCalendarEvent]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateCalendarEvent). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateCalendarEvent)."}}
+[info] ✔  functions[us-central1-deleteCalendarEvent]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/deleteCalendarEvent). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/deleteCalendarEvent)."}}
+[info] ✔  functions[us-central1-syncCalendar]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/syncCalendar). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/syncCalendar)."}}
+[info] ✔  functions[us-central1-updateEPLSchedule]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateEPLSchedule). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateEPLSchedule)."}}
+[info] ✔  functions[us-central1-updateCFBSchedule]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateCFBSchedule). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateCFBSchedule)."}}
+[info] ✔  functions[us-central1-updateNCAABSchedule]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateNCAABSchedule). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/updateNCAABSchedule)."}}
+[info] ✔  functions[us-central1-sendPushNotification]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/sendPushNotification). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/sendPushNotification)."}}
+[info] ✔  functions[us-central1-sendBatchPushNotification]: http function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/sendBatchPushNotification). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/calendarconnectionv2/us-central1/sendBatchPushNotification)."}}
+[info] i  functions[us-central1-sendScheduledNotifications]: function ignored because the pubsub emulator does not exist or is not running. {"metadata":{"emulator":{"name":"functions"},"message":"function ignored because the pubsub emulator does not exist or is not running."}}
+[debug] [2025-12-01T16:05:19.375Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬──────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port    │ View in Emulator UI             │
+├───────────┼──────────────┼─────────────────────────────────┤
+│ Functions │ 0.0.0.0:5001 │ http://127.0.0.1:4000/functions │
+└───────────┴──────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 

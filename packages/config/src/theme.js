@@ -18,7 +18,8 @@ const Theme = {
       primary: '#3B82F6',
       primaryLight: '#EFF6FF',
       primaryDark: '#1D4ED8',
-      
+      primarySoft: '#D9E9FF',
+
       // Calendar Specific
       calendar: {
         gridBorder: '#E5E7EB',
@@ -91,7 +92,8 @@ const Theme = {
       primary: '#60A5FA',
       primaryLight: '#1E3A8A',
       primaryDark: '#93C5FD',
-      
+      primarySoft: '#1E3A8A',
+
       // Calendar Specific
       calendar: {
         gridBorder: '#374151',

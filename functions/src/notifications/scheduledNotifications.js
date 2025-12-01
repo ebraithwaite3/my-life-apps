@@ -1,10 +1,6 @@
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
-/**
- * Runs every 10 minutes to send scheduled notifications
- * Runs at :00, :10, :20, :30, :40, :50 every hour
- */
 exports.sendScheduledNotifications = onSchedule(
     "*/10 * * * *",
     async () => {
@@ -14,7 +10,6 @@ exports.sendScheduledNotifications = onSchedule(
       const now = admin.firestore.Timestamp.now();
 
       try {
-        // Query notifications that are due
         const snapshot = await db
             .collection("pendingNotifications")
             .where("scheduledFor", "<=", now)
@@ -31,29 +26,38 @@ exports.sendScheduledNotifications = onSchedule(
         let sent = 0;
         let failed = 0;
 
-        // Process each notification
         for (const doc of snapshot.docs) {
           try {
             const notification = doc.data();
 
-            // Get user's push token
+            // NEW: Get app from notification data
+            const targetApp = notification.data?.app || "organizer-app";
+
             const userDoc = await db
                 .collection("users")
                 .doc(notification.userId)
                 .get();
 
-            if (!userDoc.exists || !userDoc.data().pushToken) {
+            if (!userDoc.exists) {
+              console.log(`⚠️  User ${notification.userId} not found`);
+              await doc.ref.delete();
+              failed++;
+              continue;
+            }
+
+            // NEW: Get app-specific token
+            const userData = userDoc.data();
+            const pushToken = userData.pushTokens?.[targetApp];
+
+            if (!pushToken) {
               console.log(
-                  `⚠️  User ${notification.userId} has no push token`,
+                  `⚠️  User ${notification.userId} doesn't have ${targetApp}`,
               );
               await doc.ref.delete();
               failed++;
               continue;
             }
 
-            const pushToken = userDoc.data().pushToken;
-
-            // Build and send notification
             const message = {
               to: pushToken,
               sound: "default",
@@ -76,22 +80,17 @@ exports.sendScheduledNotifications = onSchedule(
 
             const responseData = await response.json();
 
-            // LOG THE ACTUAL RESPONSE
             console.log(
                 "Expo API response:",
                 JSON.stringify(responseData, null, 2),
             );
 
-            // Check response - handle different formats
             let sendSuccess = false;
 
-            // Check HTTP status first
             if (response.ok) {
-              // HTTP 200 = success
               sendSuccess = true;
             }
 
-            // Also check response body for explicit errors
             if (responseData.data) {
               const result = responseData.data[0];
               if (result && result.status === "error") {
@@ -108,8 +107,7 @@ exports.sendScheduledNotifications = onSchedule(
 
             if (sendSuccess) {
               console.log(
-                  `✅ Sent to ${notification.userId}:`,
-                  notification.title,
+                  `✅ Sent ${targetApp} notification to ${notification.userId}`,
               );
               sent++;
             } else {
@@ -119,7 +117,6 @@ exports.sendScheduledNotifications = onSchedule(
               failed++;
             }
 
-            // ALWAYS delete after attempting to send
             await doc.ref.delete();
           } catch (error) {
             console.error(
@@ -128,7 +125,6 @@ exports.sendScheduledNotifications = onSchedule(
             );
             failed++;
 
-            // Delete even on error to prevent re-processing
             try {
               await doc.ref.delete();
             } catch (deleteError) {

@@ -21,6 +21,10 @@ exports.writeToCalendar = onRequest(
       secrets: [googleClientId, googleClientSecret, googleRefreshToken],
     },
     async (req, res) => {
+      console.log("📥 writeToCalendar function called");
+      console.log("Request method:", req.method);
+      console.log("Request body:", JSON.stringify(req.body, null, 2));
+
       try {
         const {
           title,
@@ -31,6 +35,25 @@ exports.writeToCalendar = onRequest(
           reminderMinutes,
         } = req.body.data || req.body;
 
+        console.log("📋 Extracted data:", {
+          title,
+          startTime,
+          endTime,
+          description,
+          location,
+          reminderMinutes,
+        });
+
+        // Validate required fields
+        if (!title || !startTime || !endTime) {
+          const missing = [];
+          if (!title) missing.push("title");
+          if (!startTime) missing.push("startTime");
+          if (!endTime) missing.push("endTime");
+          throw new Error(`Missing required fields: ${missing.join(", ")}`);
+        }
+
+        console.log("🔐 Setting up OAuth client...");
         const oauth2Client = new google.auth.OAuth2(
             googleClientId.value(),
             googleClientSecret.value(),
@@ -40,6 +63,7 @@ exports.writeToCalendar = onRequest(
         oauth2Client.setCredentials({
           refresh_token: googleRefreshToken.value(),
         });
+        console.log("✅ OAuth client configured");
 
         const calendar = google.calendar({version: "v3", auth: oauth2Client});
 
@@ -71,10 +95,19 @@ exports.writeToCalendar = onRequest(
           reminders: reminders,
         };
 
+        console.log("📅 Event object to send:", JSON.stringify(event, null, 2));
+        console.log("🚀 Calling Google Calendar API...");
+
         const response = await calendar.events.insert({
           calendarId: "primary",
           requestBody: event,
         });
+
+        console.log(
+            "✅ Google Calendar API response:",
+            JSON.stringify(response.data, null, 2),
+        );
+        console.log("Event created with ID:", response.data.id);
 
         res.json({
           data: {
@@ -84,11 +117,15 @@ exports.writeToCalendar = onRequest(
           },
         });
       } catch (error) {
-        console.error("Error creating calendar event:", error);
+        console.error("❌ Error creating calendar event:", error.message);
+        console.error("Error stack:", error.stack);
+        console.error("Full error object:", JSON.stringify(error, null, 2));
+
         res.status(500).json({
           data: {
             success: false,
             error: error.message,
+            details: error.response?.data || error.toString(),
           },
         });
       }

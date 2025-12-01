@@ -45,7 +45,6 @@ export const AuthProvider = ({ children }) => {
         const authModule = await import('firebase/auth');
         console.log('Auth module imported', new Date().toISOString());
         
-        // ← MAKE THIS ASYNC
         const unsubscribe = authModule.onAuthStateChanged(authInstance, async (user) => {
           console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user', new Date().toISOString());
           setUser(user);
@@ -86,115 +85,148 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Helper function to create user document in Firestore
-  const createUserDocument = async (user, username, notifications, groupInvites = [], additionalData = {}) => {
-    if (!user || !db) return;
-    
-    try {
-      const firestoreModule = await import('firebase/firestore');
-      const { DateTime } = await import('luxon');
-      
-      const userRef = firestoreModule.doc(db, 'users', user.uid);
-      
-      // Check if user document already exists
-      const userSnapshot = await firestoreModule.getDoc(userRef);
-      
-      if (!userSnapshot.exists()) {
-        const now = DateTime.now().toISO();
-        const userData = {
-          userId: user.uid,
-          email: user.email,
-          username: username,
-          groupInvites: groupInvites,
-          groups: [],
-          calendars: [],
-          joinedApps: [
-            "organizer"
-          ],
-          createdAt: now,
-          updatedAt: now,
-          isActive: true,
-          // Additional fields for app functionality
-          profilePicture: user.photoURL || null,
-          preferences: {
-            theme: 'system',
-            defaultCalendarView: 'day',
-            defaultTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            weekStartsOn: 'sunday',
-            notifications: notifications,
-            notifyFor: {
-              calendarEvents: notifications,
-              tasks: notifications,
-              grocery: notifications,
-              workout: notifications,
-              reminders: notifications
-            }
+  // Helper function to create default preferences based on notifications setting
+  const createDefaultPreferences = (notificationsEnabled) => {
+    return {
+      workoutPreferences: {
+        syncWorkoutsToCalendar: false,
+        addChecklistToWorkout: false,
+        checklistId: "",
+      },
+      defaultCalendarView: 'day',
+      theme: 'system',
+      defaultTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      weekStartsOn: 'sunday',
+      notifications: notificationsEnabled,
+      communicationPreferences: {
+        notifications: {
+          active: notificationsEnabled,
+          notifyFor: {
+            creation: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            edits: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            deletions: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            reminders: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            messages: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
           },
-          ...additionalData
-        };
-        
-        await firestoreModule.setDoc(userRef, userData);
-        console.log('User document created:', userData);
-        return userData;
-      } else {
-        // Update last login time
-        const now = DateTime.now().toISO();
-        await firestoreModule.updateDoc(userRef, {
-          updatedAt: now
-        });
-        console.log('User document exists, updated timestamp');
-        return userSnapshot.data();
-      }
-    } catch (error) {
-      console.error('Error creating user document:', error);
-    }
+        },
+        messages: {
+          active: notificationsEnabled,
+          notifyFor: {
+            creation: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            edits: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            deletions: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            reminders: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+            messages: {
+              events: notificationsEnabled,
+              activities: notificationsEnabled,
+            },
+          },
+        },
+      },
+    };
   };
+
+  // Helper function to create user document in Firestore
+const createUserDocument = async (user, username, notifications, groupInvites = [], additionalData = {}) => {
+  if (!user || !db) {
+    throw new Error('Missing user or db in createUserDocument');
+  }
   
-  // Function to create internal calendar for user
-  const createUserInternalCalendar = async (userId, username, calendarId) => {
-    if (!userId || typeof userId !== 'string') {
-      throw new Error("Invalid user ID");
-    }
-    if (!username || typeof username !== 'string') {
-      throw new Error("Invalid username");
-    }
-  
-    try {
-      const firestoreModule = await import('firebase/firestore');
-      console.log("Creating internal calendar for user:", userId, username);
-  
-      const internalCalendarData = {
-        admins: [userId],
-        calendarId: calendarId,
-        color: '#02092b',
-        createdAt: DateTime.now().toISO(),
-        createdBy: userId,
-        description: `${username}'s Personal Calendar`,
-        events: {},
+  try {
+    const firestoreModule = await import('firebase/firestore');
+    const { DateTime } = await import('luxon');
+    
+    const userRef = firestoreModule.doc(db, 'users', user.uid);
+    
+    // Check if user document already exists
+    const userSnapshot = await firestoreModule.getDoc(userRef);
+    
+    if (!userSnapshot.exists()) {
+      const now = DateTime.now().toISO();
+      const userData = {
+        userId: user.uid,
+        email: user.email,
+        username: username,
+        groupInvites: groupInvites,
+        groups: [],
+        calendars: [],
+        joinedApps: ["organizer"],
+        createdAt: now,
+        updatedAt: now,
         isActive: true,
-        name: `${username}'s Calendar`,
-        subscribingUsers: [userId],
-        type: 'internal',
-        updatedAt: DateTime.now().toISO(),
+        profilePicture: user.photoURL || null,
+        preferences: createDefaultPreferences(notifications),
+        ...additionalData
       };
       
-      const calendarRef = firestoreModule.doc(db, 'calendars', calendarId);
-      await firestoreModule.setDoc(calendarRef, internalCalendarData);
-      console.log("Internal calendar created with ID:", calendarId);
-      return internalCalendarData;
-    } catch (error) {
-      console.error("Error creating internal calendar:", error);
-      throw error;
+      console.log('Creating user document with data:', JSON.stringify(userData, null, 2));
+      
+      await firestoreModule.setDoc(userRef, userData);
+      
+      // Verify it was created
+      const verifySnapshot = await firestoreModule.getDoc(userRef);
+      if (!verifySnapshot.exists()) {
+        throw new Error('User document creation verification failed');
+      }
+      
+      const createdData = verifySnapshot.data();
+      console.log('User document created and verified:', Object.keys(createdData));
+      
+      // Check if all expected fields are present
+      const expectedFields = ['userId', 'email', 'username', 'preferences', 'calendars', 'groups'];
+      const missingFields = expectedFields.filter(field => !createdData[field]);
+      if (missingFields.length > 0) {
+        console.error('Missing fields in created document:', missingFields);
+        throw new Error(`User document missing fields: ${missingFields.join(', ')}`);
+      }
+      
+      return createdData;
+    } else {
+      // Update last login time
+      const now = DateTime.now().toISO();
+      await firestoreModule.updateDoc(userRef, {
+        updatedAt: now
+      });
+      console.log('User document exists, updated timestamp');
+      return userSnapshot.data();
     }
-  };
+  } catch (error) {
+    console.error('Error in createUserDocument:', error);
+    throw error; // Re-throw to trigger rollback
+  }
+};
 
   const login = async (email, password) => {
     if (!auth) throw new Error('Auth not initialized');
     const authModule = await import('firebase/auth');
     const result = await authModule.signInWithEmailAndPassword(auth, email, password);
-    
-    // Update user document on login
-    //await createUserDocument(result.user);
     
     return result;
   };
@@ -205,9 +237,6 @@ export const AuthProvider = ({ children }) => {
     
     // Step 1: Create Firebase auth user first (outside the atomic block)
     const result = await authModule.createUserWithEmailAndPassword(auth, email, password);
-    
-    // Declare variables for rollback
-    let userCalendarId = null;
     
     // ATOMIC OPERATIONS: Create user document and related documents
     try {
@@ -254,7 +283,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
   
-      // Step 3: Create user document (now with pending invites)
+      // Step 3: Create user document (now with pending invites and new preferences structure)
       await createUserDocument(result.user, username, notifications, pendingInvites);
       console.log('User document created');
   
@@ -262,29 +291,12 @@ export const AuthProvider = ({ children }) => {
       await createMessageDoc(result.user.uid);
       console.log('Message document created');
   
-      // Step 5: Create internal calendar doc for user
-      userCalendarId = uuidv4();
-      await createUserInternalCalendar(result.user.uid, username, userCalendarId);
-      console.log('Internal calendar created');
-  
-      // Step 6: Add calendar reference to user document
-      const userCalendarRef = {
-        calendarId: userCalendarId,
-        name: `${username}'s Calendar`,
-        calendarType: "internal",
-        isOwner: true,
-        permissions: "write",
-        color: "#02092b",
-        description: `${username}'s Personal Calendar`,
-        importedBy: result.user.uid,
-      };
-  
-      await updateDocument("users", result.user.uid, {
-        calendars: [userCalendarRef]
-      });
-      console.log('Calendar reference added to user document');
+      // Step 5: NOTE - No longer creating internal calendar document since we're using sharded collections
+      // Calendar events will be stored in month-sharded collections like calendar-events-2025-01
+      // The user can add calendar references to their calendars array as needed
+      console.log('Skipping internal calendar creation - using sharded collections');
 
-      // Step 7: Send welcome messages for any pending invites
+      // Step 6: Send welcome messages for any pending invites
       if (pendingInvites.length > 0) {
         for (const invite of pendingInvites) {
           const messageText = `Welcome! You have a pending invitation to join ${invite.groupName} from ${invite.inviterName}. Check your Groups section to accept or decline.`;
@@ -307,7 +319,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Atomic operation failed:', error);
       
-      // Rollback: Delete all created documents
+      // Rollback: Delete created documents
       const rollbackPromises = [
         deleteDocument("users", result.user.uid).catch(err => 
           console.error("User rollback failed:", err)
@@ -316,15 +328,6 @@ export const AuthProvider = ({ children }) => {
           console.error("Messages rollback failed:", err)
         )
       ];
-  
-      // Only try to delete calendar if it was created
-      if (userCalendarId) {
-        rollbackPromises.push(
-          deleteDocument("calendars", userCalendarId).catch(err => 
-            console.error("Calendar rollback failed:", err)
-          )
-        );
-      }
   
       await Promise.allSettled(rollbackPromises);
       console.log('Rollback operations completed');

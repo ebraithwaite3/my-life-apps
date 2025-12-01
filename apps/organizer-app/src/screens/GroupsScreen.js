@@ -1,100 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@my-apps/contexts';
-import { useAuth } from '@my-apps/contexts';
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
-import { app } from '@my-apps/config';
+import { useData } from '@my-apps/contexts';
+import { Ionicons } from '@expo/vector-icons';
+import { PageHeader } from '@my-apps/ui';
 
-const GroupsScreen = () => {
-  const { theme, getSpacing, getTypography } = useTheme();
-  const { user } = useAuth(); // <--- Keep real user
-  const [response, setResponse] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [functions, setFunctions] = useState(null);
-  const [note, setNote] = useState('');
+const GroupScreen = ({ navigation, route }) => {
+  const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+  const { groups, user } = useData();
 
-  // NOTE: This will be used as the userId for the function call
-  const currentUserId = user?.uid || 'anonymous-user'; 
+  const pendingGroupInvites = useMemo(() => {
+    return user?.groupInvites || [];
+  }, [user?.groupInvites]);
+  console.log("Pending group invites:", pendingGroupInvites);
 
+  // Log params whenever they change
   useEffect(() => {
-    const initFunctions = () => {
-      try {
-        const functionsInstance = getFunctions(app);
-        
-        // --- ⚙️ DEV/PROD Logic Integration ---
-        if (__DEV__) {
-          // Determine emulator host based on platform for React Native
-          let emulatorHost;
-          if (Platform.OS === 'android') {
-            // Android emulator loopback address
-            emulatorHost = '10.0.2.2'; 
-          } else {
-            // iOS simulator/device or physical Android/development computer IP
-            emulatorHost = '10.0.0.178'; 
-          }
-          
-          console.log(`🔧 [DEV] Connecting to Functions emulator at ${emulatorHost}:5001`);
-          connectFunctionsEmulator(functionsInstance, emulatorHost, 5001);
-        } else {
-          console.log('🚀 [PRODUCTION] Using live Firebase Functions');
-        }
-        // --- End DEV/PROD Logic ---
-        
-        setFunctions(functionsInstance);
-        console.log('✅ Functions initialized');
-      } catch (err) {
-        console.error('❌ Functions setup error:', err);
-        setError('Functions setup failed: ' + err.message);
-      }
-    };
-
-    initFunctions();
-  }, []);
-
-  const saveNote = async () => {
-    if (!functions) {
-      console.error('Functions not initialized');
-      setError('Functions not initialized');
-      return;
+    if (route.params) {
+      console.log("GroupScreen received params:", route.params);
     }
-    
-    // Check for user presence only if not in DEV mode,
-    // or if you want to enforce a real user for a production-like test
-    if (!user && !__DEV__) { 
-        console.error('User not logged in in PRODUCTION');
-        setError('User not logged in');
-        return;
-    }
+  }, [route.params]);
 
-    if (!note.trim()) {
-      setError('Please enter a note');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log(`📝 Saving note for user ID: ${currentUserId}`);
-      const saveUserNote = httpsCallable(functions, 'saveUserNote');
-      const result = await saveUserNote({ 
-        // Use the authenticated user's ID or the fallback ID
-        userId: currentUserId, 
-        note: note.trim()
-      });
-      
-      console.log('✅ Note saved:', result.data);
-      setResponse(result.data);
-      setNote(''); // Clear input after success
-    } catch (err) {
-      console.error('❌ Error saving note:', err);
-      setError(`${err.code}: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+  const handleCreateGroup = () => {
+    navigation.navigate("CreateGroup");
   };
+
+  const handleJoinGroup = () => {
+    navigation.navigate("JoinGroup");
+  };
+
+  const icons = [
+    { icon: 'add', action: () => {
+        console.log('Add pressed');
+      }
+    },
+  ]
 
   const styles = StyleSheet.create({
     container: {
@@ -102,134 +43,161 @@ const GroupsScreen = () => {
       backgroundColor: theme.background,
     },
     content: {
-      padding: getSpacing.lg,
+      flex: 1,
+      paddingHorizontal: getSpacing.lg,
+      paddingTop: getSpacing.md, // Reduced spacing
     },
-    title: {
-      ...getTypography.h1,
-      color: theme.text.primary,
-      marginBottom: getSpacing.md,
+    emptyState: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingBottom: getSpacing.xxl,
     },
-    subtitle: {
-      ...getTypography.body,
-      color: theme.text.secondary,
-      marginBottom: getSpacing.md,
-    },
-    // Added Environment Badge Style
-    environmentBadge: {
-      ...getTypography.caption,
-      color: __DEV__ ? '#FFA500' : '#00FF00',
-      backgroundColor: __DEV__ ? 'rgba(255, 165, 0, 0.1)' : 'rgba(0, 255, 0, 0.1)',
-      padding: getSpacing.sm,
-      borderRadius: 4,
+    emptyIcon: {
       marginBottom: getSpacing.lg,
-      textAlign: 'center',
     },
-    input: {
-      ...getTypography.body,
-      backgroundColor: theme.surface,
+    emptyTitle: {
+      fontSize: getTypography.h3.fontSize,
+      fontWeight: getTypography.h3.fontWeight,
       color: theme.text.primary,
-      padding: getSpacing.md,
-      borderRadius: 8,
       marginBottom: getSpacing.md,
-      minHeight: 100,
-      textAlignVertical: 'top',
+      textAlign: "center",
     },
-    button: {
+    emptySubtitle: {
+      fontSize: getTypography.body.fontSize,
+      color: theme.text.secondary,
+      textAlign: "center",
+      marginBottom: getSpacing.xl,
+      lineHeight: 22,
+      paddingHorizontal: getSpacing.md,
+    },
+    buttonContainer: {
+      alignItems: "center",
+      gap: getSpacing.md,
+    },
+    createButton: {
       backgroundColor: theme.primary,
-      padding: getSpacing.md,
-      borderRadius: 8,
-      alignItems: 'center',
-      marginBottom: getSpacing.md,
+      paddingVertical: getSpacing.md,
+      paddingHorizontal: getSpacing.xl,
+      borderRadius: getBorderRadius.md,
+      flexDirection: "row",
+      alignItems: "center",
+      elevation: 2,
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
     },
-    buttonText: {
-      ...getTypography.button,
-      color: '#FFFFFF',
+    createButtonText: {
+      color: theme.text.inverse,
+      fontSize: getTypography.button.fontSize,
+      fontWeight: getTypography.button.fontWeight,
+      marginLeft: getSpacing.sm,
     },
-    responseBox: {
+    joinButton: {
       backgroundColor: theme.surface,
-      padding: getSpacing.md,
-      borderRadius: 8,
-      marginTop: getSpacing.md,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: getSpacing.md,
+      paddingHorizontal: getSpacing.xl,
+      borderRadius: getBorderRadius.md,
+      flexDirection: "row",
+      alignItems: "center",
     },
-    responseText: {
-      ...getTypography.body,
+    joinButtonText: {
       color: theme.text.primary,
-      marginBottom: getSpacing.sm,
+      fontSize: getTypography.button.fontSize,
+      fontWeight: getTypography.button.fontWeight,
+      marginLeft: getSpacing.sm,
     },
-    errorText: {
-      ...getTypography.body,
-      color: theme.error || '#FF0000',
+    groupsList: {
+      paddingTop: getSpacing.md,
     },
-    userInfo: {
-      ...getTypography.caption,
-      color: theme.text.secondary,
-      marginBottom: getSpacing.lg,
+    fab: {
+      backgroundColor: theme.primary,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: "center",
+      alignItems: "center",
+      elevation: 4,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      marginLeft: getSpacing.sm,
+      marginRight: getSpacing.lg, // Space from hamburger button
+    },
+    joinFab: {
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.primary,
+      marginRight: getSpacing.sm, // Space between FABs
     },
   });
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>👥 Groups</Text>
-        <Text style={styles.subtitle}>
-          Testing Full Stack: Functions → Firestore
-        </Text>
-        
-        {/* Environment Badge Display */}
-        <Text style={styles.environmentBadge}>
-          {__DEV__ ? '🔧 DEV MODE - Using Emulator' : '🚀 PRODUCTION - Using Live Functions'}
-        </Text>
+      <PageHeader
+        showBackButton={false}
+        showNavArrows={false}
+        title={"Groups"}
+        subtext={"Manage your group calendars"}
+        icons={icons}
+      />
+      
+      {/* Pending Invites */}
+      {pendingGroupInvites.length > 0 &&
+        pendingGroupInvites.map((invite, index) => (
+          <GroupInviteCard key={invite.groupId || index} invite={invite} />
+        ))}
 
-        {/* User Info Display */}
-        <Text style={styles.userInfo}>
-          User ID: **{currentUserId}** ({user ? 'Authenticated' : 'Fallback'})
-        </Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Enter a test note..."
-          placeholderTextColor={theme.text.secondary}
-          value={note}
-          onChangeText={setNote}
-          multiline
-          editable={!loading}
-        />
-
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={saveNote}
-          disabled={loading || !functions || (!user && !__DEV__)} // Disable if not ready/authenticated
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>
-              {functions ? 'Save Note to Firestore' : 'Not Ready...'}
+      {/* Content */}
+      <View style={styles.content}>
+        {groups.length === 0 ? (
+          // Empty state
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons
+                name="people-outline"
+                size={64}
+                color={theme.text.tertiary}
+              />
+            </View>
+            <Text style={styles.emptyTitle}>No Groups Yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Create a group to share calendars with family, teams, or
+              friends. Or join an existing group with an invite code.
             </Text>
-          )}
-        </TouchableOpacity>
-
-        {response && (
-          <View style={styles.responseBox}>
-            <Text style={styles.responseText}>
-              ✅ {response.message}
-            </Text>
-            <Text style={styles.responseText}>
-              Saved at: {new Date(response.timestamp).toLocaleString()}
-            </Text>
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={handleCreateGroup}
+              >
+                <Ionicons name="add" size={20} color={theme.text.inverse} />
+                <Text style={styles.createButtonText}>Create Group</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        ) : (
+          // Groups list
+          // <ScrollView
+          //   style={styles.groupsList}
+          //   showsVerticalScrollIndicator={false}
+          // >
+          //   {groups?.map((group) => (
+          //     <GroupCard
+          //       key={group.id || group.groupId}
+          //       group={group}
+          //       currentUserId={user?.userId || user?.uid}
+          //     />
+          //   ))}
+          // </ScrollView>
+          <Text style={{ color: theme.text.primary }}>Groups list goes here...</Text>
         )}
-
-        {error && (
-          <View style={styles.responseBox}>
-            <Text style={styles.errorText}>
-              ❌ Error: {error}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
 
-export default GroupsScreen;
+export default GroupScreen;

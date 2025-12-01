@@ -1,3 +1,4 @@
+// LoginScreen.js
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -14,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { useAuth } from "@my-apps/contexts";
 import { Ionicons } from "@expo/vector-icons";
-import Constants from "expo-constants";
+import { setupPushNotifications } from '../services/notificationService';
 
 const LoginScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -53,9 +54,33 @@ const LoginScreen = () => {
       if (isLogin) {
         await login(email, password);
         console.log("User signed in successfully");
+        
+        // Set up push notifications after login
+        const notifSuccess = await setupPushNotifications(
+          auth.currentUser.uid, 
+          'organizer-app'
+        );
+        if (notifSuccess) {
+          console.log("✅ Push notifications setup complete!");
+        } else {
+          console.warn("⚠️ Push notifications setup failed");
+        }
+        console.log("✅ Push notifications setup complete!");
       } else {
         await signup(email, password, username, notifications);
         console.log("User created successfully");
+        
+        // Set up push notifications after signup
+        const notifSuccess = await setupPushNotifications(
+          auth.currentUser.uid, 
+          'organizer-app'
+        );
+        if (notifSuccess) {
+          console.log("✅ Push notifications setup complete!");
+        } else {
+          console.warn("⚠️ Push notifications setup failed");
+        }
+        console.log("✅ Push notifications setup complete!");
       }
     } catch (error) {
       console.error("Auth error:", error);
@@ -146,13 +171,6 @@ const LoginScreen = () => {
             <Text style={styles.subtitle}>
               {isLogin ? "Welcome back!" : "Create your account"}
             </Text>
-
-            <View style={{ padding: 10, backgroundColor: '#f0f0f0' }}>
-  <Text style={{ fontSize: 10 }}>API Key: {process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.substring(0, 20)}...</Text>
-  <Text style={{ fontSize: 10 }}>Length: {process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.length}</Text>
-  <Text style={{ fontSize: 10 }}>Is defined: {process.env.EXPO_PUBLIC_FIREBASE_API_KEY ? 'YES' : 'NO'}</Text>
-</View>
-
             <View style={styles.form}>
               <TextInput
                 ref={emailRef}

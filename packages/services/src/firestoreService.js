@@ -307,11 +307,3 @@ export const updateDocuments = async (updates) => {
     throw error;
   }
 };
-
-/**
- * Legacy function for backward compatibility
- */
-export const updateUserDoc = async (db, userId, updateData) => {
-  console.warn('updateUserDoc is deprecated. Use updateDocument instead.');
-  return updateDocument('users', userId, updateData);
-};

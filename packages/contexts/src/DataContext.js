@@ -67,7 +67,10 @@ export const DataProvider = ({ children }) => {
   }, [user?.calendars]);
 
   // Extract group IDs from user groups
-  const groupIds = useMemo(() => user?.groups || [], [user?.groups]);
+  const groupIds = useMemo(() => {
+    if (!user?.groups) return [];
+    return [...user.groups]; // Create new array only when content changes
+  }, [user?.groups?.length, user?.groups?.join(',')]);
 
   // Calendar shards hook
   const {

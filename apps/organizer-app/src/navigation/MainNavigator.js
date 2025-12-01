@@ -1,27 +1,27 @@
 // src/navigation/MainNavigator.js
-import React from 'react';
-import { Text, View, ActivityIndicator, Linking } from 'react-native';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
-import { useTheme } from '@my-apps/contexts';
-import { useAuth } from '@my-apps/contexts';
-import { useData } from '@my-apps/contexts';
-import { AppHeader } from '@my-apps/ui';
-import { LoadingScreen } from '@my-apps/screens';
-import { DateTime } from 'luxon';
+import React from "react";
+import { Text, View, ActivityIndicator, Linking } from "react-native";
+import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createStackNavigator } from "@react-navigation/stack";
+import { useTheme } from "@my-apps/contexts";
+import { useAuth } from "@my-apps/contexts";
+import { useData } from "@my-apps/contexts";
+import { AppHeader } from "@my-apps/ui";
+import { LoadingScreen } from "@my-apps/screens";
+import { DateTime } from "luxon";
 
 // Keep NotificationProvider for deep linking
-import { NotificationProvider } from '../contexts/NotificationContext';
+import { NotificationProvider } from "@my-apps/contexts";
 
 // Main screens
-import DashboardScreen from '../screens/DashboardScreen';
-import CalendarScreen from '../screens/CalendarScreen';
-import GroupsScreen from '../screens/GroupsScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import PreferencesScreen from '../screens/PreferencesScreen';
-import LoginScreen from '../screens/LoginScreen';
-import TodayScreen from '../screens/TodayScreen';
+import DashboardScreen from "../screens/DashboardScreen";
+import CalendarScreen from "../screens/CalendarScreen";
+import GroupsScreen from "../screens/GroupsScreen";
+import MessagesScreen from "../screens/MessagesScreen";
+import PreferencesScreen from "../screens/PreferencesScreen";
+import LoginScreen from "../screens/LoginScreen";
+import TodayScreen from "../screens/TodayScreen";
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
@@ -52,7 +52,9 @@ function DashboardStackScreen() {
 function CalendarStackScreen() {
   return (
     <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
-      <CalendarStack.Screen name="CalendarHome" component={CalendarScreen} />
+      <CalendarStack.Screen name="CalendarHome">
+        {(props) => <CalendarScreen {...props} />}
+      </CalendarStack.Screen>
     </CalendarStack.Navigator>
   );
 }
@@ -76,7 +78,10 @@ function MessagesStackScreen() {
 function PreferencesStackScreen() {
   return (
     <PreferencesStack.Navigator screenOptions={{ headerShown: false }}>
-      <PreferencesStack.Screen name="PreferencesHome" component={PreferencesScreen} />
+      <PreferencesStack.Screen
+        name="PreferencesHome"
+        component={PreferencesScreen}
+      />
     </PreferencesStack.Navigator>
   );
 }
@@ -88,80 +93,91 @@ function HeaderWithNavigation({ onLogout }) {
   // Build menu items for MyOrganizer
   const menuItems = [
     {
-      icon: '💪',
-      label: 'Open Workouts',
-      onPress: () => console.log('TODO: Deep link to workout app')
+      icon: "💪",
+      label: "Open Workouts",
+      onPress: () => console.log("TODO: Deep link to workout app"),
     },
     {
-      icon: '✅',
-      label: 'Open Tasks',
-      onPress: () => console.log('TODO: Deep link to tasks app')
+      icon: "✅",
+      label: "Open Tasks",
+      onPress: () => console.log("TODO: Deep link to tasks app"),
     },
     {
-      icon: '🛒',
-      label: 'Open Groceries',
-      onPress: () => console.log('TODO: Deep link to grocery app')
+      icon: "🛒",
+      label: "Open Groceries",
+      onPress: () => console.log("TODO: Deep link to grocery app"),
     },
     {
-      icon: '🚪',
-      label: 'Logout',
+      icon: "🚪",
+      label: "Logout",
       onPress: onLogout,
-      variant: 'danger'
-    }
+      variant: "danger",
+    },
   ];
 
-  return (
-    <AppHeader
-      appName="MyOrganizer"
-      menuItems={menuItems}
-    />
-  );
+  return <AppHeader appName="MyOrganizer" menuItems={menuItems} />;
 }
 
-function TabNavigator({ theme, onLogout }) {
-  const getTabBarIcon = (routeName, focused) => {
-    let icon;
-    
-    switch (routeName) {
-      case 'Today':
-        icon = focused ? '📅' : '🗓️';
-        break;
-      case 'Dashboard':
-        icon = focused ? '🏠' : '🏘️';
-        break;
-      case 'Calendar':
-        icon = focused ? '🗓️' : '📆';
-        break;
-      case 'Groups':
-        icon = focused ? '👥' : '👤';
-        break;
-      case 'Messages':
-        icon = focused ? '💬' : '🗨️';
-        break;
-      case 'Preferences':
-        icon = focused ? '⚙️' : '🔧';
-        break;
-      default:
-        icon = '❓';
-    }
-    
-    return <Text style={{ fontSize: 20 }}>{icon}</Text>;
-  };
+// ⬇️ UPDATED: icons no longer depend on “focused”
+const getTabBarIcon = (routeName) => {
+  let icon;
 
+  switch (routeName) {
+    case "Today":
+      icon = "📅";
+      break;
+    case "Dashboard":
+      icon = "🏠";
+      break;
+    case "Calendar":
+      icon = "📆";
+      break;
+    case "Groups":
+      icon = "👥";
+      break;
+    case "Messages":
+      icon = "💬";
+      break;
+    case "Preferences":
+      icon = "⚙️";
+      break;
+    default:
+      icon = "❓";
+  }
+
+  return <Text style={{ fontSize: 20 }}>{icon}</Text>;
+};
+
+function TabNavigator({ theme, onLogout }) {
   return (
     <>
       <HeaderWithNavigation onLogout={onLogout} />
-      
+
       <Tab.Navigator
         initialRouteName="Today"
         screenOptions={({ route }) => ({
           headerShown: false,
-          tabBarIcon: ({ focused }) => getTabBarIcon(route.name, focused),
-          tabBarActiveTintColor: theme.primary,
-          tabBarInactiveTintColor: theme.text?.secondary || '#999',
+
+          // ⬇️ Updated: icon no longer changes on focus
+          tabBarIcon: () => getTabBarIcon(route.name),
+
+          // ⬇️ Active/inactive text colors
+          tabBarActiveTintColor: theme.text?.secondary || "#333",
+          tabBarInactiveTintColor: theme.text?.secondary || "#999",
+
+          // 👇 THIS WORKS (per-tab active background)
+          tabBarActiveBackgroundColor: theme.primarySoft || "#e3f2ff",
+
+          // 👇 Styling for all tab items (static only)
+          tabBarItemStyle: {
+            borderRadius: 12,
+            marginHorizontal: 2,
+            marginTop: -8
+          },
+
           tabBarStyle: {
-            backgroundColor: theme.card || theme.surface || '#fff',
-            borderTopColor: theme.border || '#e0e0e0',
+            backgroundColor: theme.card || theme.surface || "#fff",
+            borderTopColor: theme.border || "#e0e0e0",
             borderTopWidth: 1,
             paddingBottom: 8,
             paddingTop: 8,
@@ -169,7 +185,7 @@ function TabNavigator({ theme, onLogout }) {
           },
           tabBarLabelStyle: {
             fontSize: 12,
-            fontWeight: '500',
+            fontWeight: "500",
             marginTop: 4,
           },
         })}
@@ -182,27 +198,27 @@ function TabNavigator({ theme, onLogout }) {
         <Tab.Screen
           name="Dashboard"
           component={DashboardStackScreen}
-          options={{ tabBarLabel: 'Home' }}
+          options={{ tabBarLabel: "Home" }}
         />
-        <Tab.Screen 
-          name="Calendar" 
+        <Tab.Screen
+          name="Calendar"
           component={CalendarStackScreen}
-          options={{ tabBarLabel: 'Calendar' }}
+          options={{ tabBarLabel: "Calendar" }}
         />
-        <Tab.Screen 
-          name="Groups" 
+        <Tab.Screen
+          name="Groups"
           component={GroupsStackScreen}
-          options={{ tabBarLabel: 'Groups' }}
+          options={{ tabBarLabel: "Groups" }}
         />
-        <Tab.Screen 
-          name="Messages" 
+        <Tab.Screen
+          name="Messages"
           component={MessagesStackScreen}
-          options={{ tabBarLabel: 'Messages' }}
+          options={{ tabBarLabel: "Messages" }}
         />
         <Tab.Screen
           name="Preferences"
           component={PreferencesStackScreen}
-          options={{ tabBarLabel: 'Settings' }}
+          options={{ tabBarLabel: "Settings" }}
         />
       </Tab.Navigator>
     </>
@@ -216,22 +232,22 @@ function RootNavigator({ onLogout }) {
   const { theme } = useTheme();
 
   if (authLoading || userLoading) {
-    return <LoadingScreen 
-      icon={require('../../assets/CalendarConnectionv2AppIcon.png')}
-      message="Loading your organizer..."
-      iconSize={128}
-    />;
+    return (
+      <LoadingScreen
+        icon={require("../../assets/CalendarConnectionv2AppIcon.png")}
+        message="Loading your organizer..."
+        iconSize={128}
+      />
+    );
   }
 
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
-        // User is signed in - show main app
         <RootStack.Screen name="Main">
           {() => <TabNavigator theme={theme} onLogout={onLogout} />}
         </RootStack.Screen>
       ) : (
-        // User is NOT signed in - show login
         <RootStack.Screen name="Login" component={LoginScreen} />
       )}
     </RootStack.Navigator>
@@ -242,83 +258,74 @@ const MainNavigator = ({ onLogout }) => {
   const { setSelectedDate, setSelectedMonth, setSelectedYear } = useData();
 
   const linking = {
-    prefixes: ['myorganizer://'],
+    prefixes: ["myorganizer://"],
     config: {
       screens: {
         Main: {
           screens: {
             Today: {
               screens: {
-                TodayHome: 'today',
+                TodayHome: "today",
               },
             },
             Dashboard: {
               screens: {
-                DashboardHome: 'home',
+                DashboardHome: "home",
               },
             },
             Calendar: {
               screens: {
-                CalendarHome: 'calendar',
+                CalendarHome: "calendar",
               },
             },
             Groups: {
               screens: {
-                GroupsHome: 'groups',
+                GroupsHome: "groups",
               },
             },
             Messages: {
               screens: {
-                MessagesHome: 'messages',
+                MessagesHome: "messages",
               },
             },
             Preferences: {
               screens: {
-                PreferencesHome: 'preferences',
+                PreferencesHome: "preferences",
               },
             },
           },
         },
-        Login: 'login',
-        NotFound: '*',
+        Login: "login",
+        NotFound: "*",
       },
     },
-    // Subscribe to deep links and intercept params
+
     subscribe(listener) {
-      // Listen for deep link URLs
       const onReceiveURL = ({ url }) => {
-        console.log('🔗 Deep link received:', url);
-        
-        // Parse the URL to extract query params
+        console.log("🔗 Deep link received:", url);
+
         const { queryParams } = Linking.parse(url);
-        
-        // If date param exists, update DataContext BEFORE navigation
+
         if (queryParams?.date) {
-          console.log('📅 Setting date from deep link:', queryParams.date);
+          console.log("📅 Setting date from deep link:", queryParams.date);
           const dt = DateTime.fromISO(queryParams.date);
-          
+
           setSelectedDate(queryParams.date);
           setSelectedMonth(dt.monthLong);
           setSelectedYear(dt.year);
         }
-        
-        // Let React Navigation handle the actual navigation
+
         listener(url);
       };
 
-      // Subscribe to URL events
-      const subscription = Linking.addEventListener('url', onReceiveURL);
+      const subscription = Linking.addEventListener("url", onReceiveURL);
 
-      // Return cleanup function
-      return () => {
-        subscription?.remove();
-      };
+      return () => subscription?.remove();
     },
   };
 
   return (
     <NavigationContainer linking={linking}>
-      {/* NotificationProvider handles deep linking from notification taps */}
       <NotificationProvider>
         <RootNavigator onLogout={onLogout} />
       </NotificationProvider>

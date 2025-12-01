@@ -6,11 +6,11 @@ const admin = require("firebase-admin");
  */
 exports.sendPushNotification = onCall(async (request) => {
   const {userId, title, body, data} = request.data;
+  const targetApp = data?.app || "organizer-app"; // ← Default to organizer
 
   try {
-    console.log(`📲 Sending notification to user: ${userId}`);
+    console.log(`📲 Sending ${targetApp} notification to user: ${userId}`);
 
-    // Get user's push token from Firestore
     const db = admin.firestore();
     const userDoc = await db.collection("users").doc(userId).get();
 
@@ -19,13 +19,19 @@ exports.sendPushNotification = onCall(async (request) => {
     }
 
     const userData = userDoc.data();
-    const pushToken = userData.pushToken;
+
+    // NEW: Get app-specific token
+    const pushToken = userData.pushTokens?.[targetApp];
 
     if (!pushToken) {
-      throw new Error("User does not have a push token");
+      console.log(`User ${userId} doesn't have ${targetApp} installed`);
+      return {
+        success: false,
+        message: `User doesn't have ${targetApp} installed`,
+      };
     }
 
-    console.log(`Found push token for user ${userId}`);
+    console.log(`Found ${targetApp} push token for user ${userId}`);
 
     // Build message for Expo Push Service
     const message = {
@@ -48,13 +54,11 @@ exports.sendPushNotification = onCall(async (request) => {
 
     const responseData = await response.json();
 
-    // Log the actual response to see what we get
     console.log(
         "Expo API Response:",
         JSON.stringify(responseData, null, 2),
     );
 
-    // Check for errors in the response
     if (responseData.data) {
       const result = responseData.data[0];
       if (result && result.status === "error") {
@@ -70,11 +74,9 @@ exports.sendPushNotification = onCall(async (request) => {
         sentAt: new Date().toISOString(),
       };
     } else if (responseData.errors) {
-      // Handle validation errors
       const errorMsg = JSON.stringify(responseData.errors);
       throw new Error(`Expo API error: ${errorMsg}`);
     } else {
-      // Fallback - assume success if no error
       console.log(`✅ Notification sent (unknown response format)`);
 
       return {
@@ -91,6 +93,7 @@ exports.sendPushNotification = onCall(async (request) => {
 
 exports.sendBatchPushNotification = onCall(async (request) => {
   const {userIds, title, body, data} = request.data;
+  const targetApp = data?.app; // Optional: specific app
 
   if (!Array.isArray(userIds) || userIds.length === 0) {
     throw new Error("userIds must be a non-empty array");
@@ -103,7 +106,6 @@ exports.sendBatchPushNotification = onCall(async (request) => {
     const messages = [];
     const results = [];
 
-    // Get all user tokens and build messages
     for (const userId of userIds) {
       try {
         const userDoc = await db.collection("users").doc(userId).get();
@@ -114,20 +116,41 @@ exports.sendBatchPushNotification = onCall(async (request) => {
         }
 
         const userData = userDoc.data();
-        const pushToken = userData.pushToken;
 
-        if (!pushToken) {
-          results.push({userId, success: false, error: "No push token"});
-          continue;
+        if (targetApp) {
+          // Send to specific app only
+          const pushToken = userData.pushTokens?.[targetApp];
+
+          if (!pushToken) {
+            results.push({
+              userId,
+              success: false,
+              error: `No ${targetApp} token`,
+            });
+            continue;
+          }
+
+          messages.push({
+            to: pushToken,
+            sound: "default",
+            title: title || "MyOrganizer",
+            body: body || "",
+            data: Object.assign({}, data || {}, {userId}),
+          });
+        } else {
+          // Send to ALL apps user has
+          const tokens = userData.pushTokens || {};
+
+          for (const [app, token] of Object.entries(tokens)) {
+            messages.push({
+              to: token,
+              sound: "default",
+              title: title || "MyOrganizer",
+              body: body || "",
+              data: Object.assign({}, data || {}, {userId, app}),
+            });
+          }
         }
-
-        messages.push({
-          to: pushToken,
-          sound: "default",
-          title: title || "MyOrganizer",
-          body: body || "",
-          data: Object.assign({}, data || {}, {userId}),
-        });
       } catch (error) {
         results.push({
           userId,
@@ -157,7 +180,6 @@ exports.sendBatchPushNotification = onCall(async (request) => {
           JSON.stringify(responseData, null, 2),
       );
 
-      // Process results
       if (responseData.data) {
         responseData.data.forEach((result, index) => {
           results.push({

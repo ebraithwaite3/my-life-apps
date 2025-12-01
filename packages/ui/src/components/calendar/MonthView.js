@@ -4,7 +4,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { useTheme } from '@my-apps/contexts';
 import { DateTime } from 'luxon';
 
-export const MonthView = ({ month, year, events = [], onDayPress }) => {
+const MonthView = ({ month, year, events = [], onDayPress }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
   // Generate calendar days for the month
@@ -218,3 +218,5 @@ export const MonthView = ({ month, year, events = [], onDayPress }) => {
     </ScrollView>
   );
 };
+
+export default MonthView;
