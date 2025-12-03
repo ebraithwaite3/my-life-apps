@@ -6,3 +6,4 @@ export { useDeleteIcalEvent } from './src/useDeleteIcalEvent';
 export { useUpdateInternalActivities } from './src/useUpdateInternalActivities';
 export { useUpdateExternalActivities } from './src/useUpdateExternalActivities';
 export { useSetIphoneTimer } from './src/useSetIphoneTimer';
+export { useMessageActions } from './src/useMessageActions';

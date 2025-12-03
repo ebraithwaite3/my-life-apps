@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -14,15 +14,15 @@ import {
 import { DayView, MonthView } from "@my-apps/ui";
 import EventModal from "../components/modals/EventModal";
 import { DateTime } from "luxon";
-import { 
-  useDeleteFromGoogleCalendar, 
-  useDeleteInternalEvent, 
-  useDeleteIcalEvent, 
-  useUpdateExternalActivities, 
-  useUpdateInternalActivities 
-} from '@my-apps/hooks';
+import {
+  useDeleteFromGoogleCalendar,
+  useDeleteInternalEvent,
+  useDeleteIcalEvent,
+  useUpdateExternalActivities,
+  useUpdateInternalActivities,
+} from "@my-apps/hooks";
 
-const CalendarScreen = ({ filterActivitiesFor }) => {
+const CalendarScreen = ({ filterActivitiesFor, navigation, route }) => {
   console.log(
     "Rendering CalendarScreen with filterActivitiesFor:",
     filterActivitiesFor
@@ -43,7 +43,30 @@ const CalendarScreen = ({ filterActivitiesFor }) => {
     currentDate,
     user,
     preferences,
+    groups,
   } = useData();
+  console.log("User Calendars in CalendarScreen:", user?.calendars);
+  console.log("Route params in CalendarScreen:", route.params);
+
+  // Handle nav params for date + view switch
+useEffect(() => {
+  const { date, view } = route.params || {};
+  
+  if (date) {
+    console.log('📅 Nav param date detected:', date, 'View:', view);
+    navigateToDate(date);  // Sets selectedDate globally via useData
+    
+    if (view === 'day') {
+      console.log('🔄 Switching to day view');
+      setSelectedView('day');  // Local state toggle to DayView component
+    } else if (view === 'month') {
+      setSelectedView('month');  // Optional: Explicit month switch
+    }
+    
+    // Clear to avoid re-triggers on tab re-focus
+    navigation.setParams({ date: undefined, view: undefined });
+  }
+}, [route.params, navigateToDate, setSelectedView, navigation]);  // Add deps for safety
 
   const [selectedView, setSelectedView] = useState(
     preferences?.defaultCalendarView || "day"
@@ -154,7 +177,7 @@ const CalendarScreen = ({ filterActivitiesFor }) => {
   // ========================================
   // EVENT HANDLERS (App-specific logic)
   // ========================================
-  
+
   const handleDeleteEvent = async (event) => {
     console.log("handleDeleteEvent called for event:", event);
     
@@ -173,9 +196,15 @@ const CalendarScreen = ({ filterActivitiesFor }) => {
           style: "destructive",
           onPress: async () => {
             try {
-              // Handle internal calendar events
+              // Handle internal calendar events (personal AND group)
               if (event.calendarId === 'internal') {
-                const result = await deleteInternalEvent(event.eventId, event.startTime);
+                const groupId = event.groupId || null; // ← Add this
+                const result = await deleteInternalEvent(
+                  event.eventId, 
+                  event.startTime,
+                  groupId // ← Pass groupId
+                );
+                
                 if (result.success) {
                   Alert.alert("Success", `Event "${event.title}" deleted successfully.`);
                 } else {
@@ -214,31 +243,40 @@ const CalendarScreen = ({ filterActivitiesFor }) => {
 
   const handleAddActivity = async (event) => {
     console.log("Add Activity clicked for event:", event);
-    
+
     // Sample activities for testing
     const sampleActivities = [
       {
-        activityId: 'activity1',
-        title: 'Sample Activity 1',
-        description: 'This is a sample activity.',
+        activityId: "activity1",
+        title: "Sample Activity 1",
+        description: "This is a sample activity.",
         timestamp: new Date().toISOString(),
       },
       {
-        activityId: 'activity2',
-        title: 'Sample Activity 2',
-        description: 'This is another sample activity.',
+        activityId: "activity2",
+        title: "Sample Activity 2",
+        description: "This is another sample activity.",
         timestamp: new Date().toISOString(),
       },
     ];
-    
+
     try {
       let result;
-      if (event.calendarId === 'internal') {
-        result = await updateInternalActivities(event.eventId, event.startTime, sampleActivities);
+      if (event.calendarId === "internal") {
+        result = await updateInternalActivities(
+          event.eventId,
+          event.startTime,
+          sampleActivities
+        );
       } else {
-        result = await updateExternalActivities(event.eventId, event.calendarId, event.startTime, sampleActivities);
+        result = await updateExternalActivities(
+          event.eventId,
+          event.calendarId,
+          event.startTime,
+          sampleActivities
+        );
       }
-      
+
       if (result.success) {
         Alert.alert("Success", `Activities added to "${event.title}"`);
       } else {
@@ -370,7 +408,8 @@ const CalendarScreen = ({ filterActivitiesFor }) => {
         icons={icons}
       />
 
-      {((filterActivitiesFor && joinedAppsCount > 1) || deletedEventsCount > 0) && (
+      {((filterActivitiesFor && joinedAppsCount > 1) ||
+        deletedEventsCount > 0) && (
         <View style={styles.filtersRow}>
           {filterActivitiesFor && (
             <TouchableOpacity
@@ -448,9 +487,8 @@ const CalendarScreen = ({ filterActivitiesFor }) => {
         isVisible={eventModalVisible}
         onClose={() => setEventModalVisible(false)}
         event={selectedEvent}
-        availableCalendars={user?.calendars?.filter(
-          (cal) => cal.calendarType === "google"
-        )}
+        userCalendars={user?.calendars || []}
+        groups={groups || []}
         initialDate={selectedDate}
       />
     </SafeAreaView>

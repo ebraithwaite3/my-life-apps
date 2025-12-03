@@ -13,8 +13,6 @@ import { SelectModal, CommunicationPreferences, PageHeader } from "@my-apps/ui";
 import { useData } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { updateDocument } from "@my-apps/services";
-import EditChecklist from "@my-apps/ui/src/components/checklists/EditChecklist";
-import { useSetIphoneTimer } from "@my-apps/hooks";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 
 const defaultPreferences = {
@@ -82,8 +80,6 @@ const PreferencesScreen = ({ navigation, route }) => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
   const { preferences, user, groups } = useData();
-  const setIphoneTimer = useSetIphoneTimer();
-  console.log("User Groups in Prefs:", groups);
 
   // Use Memo to see if the user is just a 'member' role in any groups
   const isMemberInAnyGroup = useMemo(() => {
@@ -94,7 +90,6 @@ const PreferencesScreen = ({ navigation, route }) => {
       return member && member.role === "member";
     });
   }, [user, groups]);
-  console.log("Is user a member in any group?:", isMemberInAnyGroup);
 
   // Merge saved preferences with defaults
   const initialPrefs =
@@ -111,7 +106,6 @@ const PreferencesScreen = ({ navigation, route }) => {
 
   const [updatedPreferences, setUpdatedPreferences] = useState(initialPrefs);
   const [hasChanges, setHasChanges] = useState(false);
-  const [showEditChecklist, setShowEditChecklist] = useState(false);
 
   // Detect changes
   useEffect(() => {
@@ -381,23 +375,6 @@ const PreferencesScreen = ({ navigation, route }) => {
         {hasChanges && <View style={{ height: 100 }} />}
       </ScrollView>
 
-      {/* Touchable Opacity that says TIMER that calls the setIphoneTimer hook */}
-      <TouchableOpacity
-        style={{
-          position: "absolute",
-          top: 40,
-          right: 20,
-          backgroundColor: theme.primary,
-          padding: 10,
-          borderRadius: 5,
-        }}
-        onPress={() => {
-          setIphoneTimer(10);
-        }}
-      >
-        <Text style={{ color: "#fff", ...getTypography.button }}>TIMER</Text>
-      </TouchableOpacity>
-
       {/* Sticky Save/Cancel Footer */}
       {hasChanges && (
         <View style={styles.stickyFooter}>
@@ -418,15 +395,6 @@ const PreferencesScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* Checklist Creation Modal */}
-      <EditChecklist
-        isVisible={showEditChecklist}
-        onClose={() => setShowEditChecklist(false)}
-        checklist={null}
-        user={user}
-        onSave={() => console.log("Checklist saved")}
-      />
     </SafeAreaView>
   );
 };

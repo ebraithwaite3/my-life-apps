@@ -7,3 +7,4 @@ export * from './dropdowns';
 export * from './preferences';
 export * from './timers';
 export * from './calendar';
+export * from './messages';

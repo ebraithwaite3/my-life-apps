@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "main": "src/index.js",
   "dependencies": {
-    "@my-apps/contexts": "*"
-  },
-  "peerDependencies": {
+    "@my-apps/contexts": "*",
+    "@my-apps/hooks": "*",
+    "@my-apps/ui": "*",
+    "@my-apps/services": "*",
+    "@my-apps/utils": "*",
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "react-native-gesture-handler": "*",
+    "@expo/vector-icons": "*",
+    "luxon": "*"
   }
 }

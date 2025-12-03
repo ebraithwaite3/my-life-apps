@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
+  Text,
   StyleSheet,
   Modal,
   ScrollView,
@@ -23,20 +24,51 @@ import {
 import { useSaveInternalEvent, useSaveToGoogleCalendar } from "@my-apps/hooks";
 import { useAuth } from "@my-apps/contexts";
 import { LoadingScreen } from "@my-apps/screens";
+import { scheduleNotification } from '@my-apps/services';
+import { showWarningToast } from '@my-apps/utils';
 
 const EventModal = ({
   isVisible,
   onClose,
   event = null,
-  availableCalendars = [],
+  userCalendars = [],
+  groups = [],
   initialDate = null,
 }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
   const isEditing = event !== null;
-  const { db } = useAuth();
+  const { db, user: currentUser } = useAuth();
 
   const saveInternalEvent = useSaveInternalEvent();
   const saveToGoogleCalendar = useSaveToGoogleCalendar();
+
+  // Build available calendars from userCalendars and groups
+  const availableCalendars = useMemo(() => {
+    return [
+      // Personal Calendar
+      {
+        calendarId: "internal",
+        name: "Personal Calendar",
+        color: "#4CAF50",
+        calendarType: "internal",
+        groupId: null,
+      },
+      
+      // Group Calendars
+      ...groups.map(group => ({
+        calendarId: `group-${group.groupId}`,
+        name: `${group.name} Calendar`,
+        color: group.color || "#2196F3",
+        calendarType: "group",
+        groupId: group.groupId,
+      })),
+      
+      // User's External Calendars (Google only)
+      ...userCalendars.filter(
+        cal => cal.calendarType === "google"
+      ),
+    ];
+  }, [userCalendars, groups]);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -66,21 +98,6 @@ const EventModal = ({
   // Reminder picker state
   const [showReminderPicker, setShowReminderPicker] = useState(false);
 
-  // Add to available calendars [] with a "Internal Calendar" option
-  availableCalendars = availableCalendars || [];
-  if (
-    !availableCalendars.find((cal) =>
-      cal.name?.toLowerCase().includes("internal")
-    )
-  ) {
-    availableCalendars.unshift({
-      calendarId: "internal",
-      name: "Internal Calendar",
-      color: "#4CAF50", // Green
-      calendarType: "internal",
-    });
-  }
-
   // Initialize form when modal opens
   useEffect(() => {
     if (isVisible) {
@@ -93,7 +110,7 @@ const EventModal = ({
         if (event.startTime) setStartDate(new Date(event.startTime));
         if (event.endTime) setEndDate(new Date(event.endTime));
       } else {
-        // New event - default to "Internal Calendar"
+        // New event - default to "Personal Calendar"
         const baseDate =
           initialDate && DateTime.fromISO(initialDate).isValid
             ? DateTime.fromISO(initialDate)
@@ -114,22 +131,15 @@ const EventModal = ({
         setIsAllDay(false);
         setStartDate(defaultStartDate);
         setEndDate(defaultEndDate);
-        setReminderMinutes(null); // Default to "No Alert"
+        setReminderMinutes(null);
 
-        // Default to Internal Calendar
-        const internalCalendar = availableCalendars.find((cal) =>
-          cal.name?.toLowerCase().includes("internal")
-        );
-        setSelectedCalendarId(
-          internalCalendar?.calendarId ||
-            availableCalendars[0]?.calendarId ||
-            ""
-        );
+        // Default to Personal Calendar (internal)
+        setSelectedCalendarId("internal");
         setDescription("");
       }
       setErrors([]);
     }
-  }, [isVisible, event, initialDate, availableCalendars?.length]);
+  }, [isVisible, event, initialDate]);
 
   const openPicker = (target, mode) => {
     setPickerTarget(target);
@@ -173,7 +183,12 @@ const EventModal = ({
 
     setIsLoading(true);
 
-    // Format for Google Calendar API
+    // Find the selected calendar
+    const selectedCalendar = availableCalendars.find(
+      cal => cal.calendarId === selectedCalendarId
+    );
+
+    // Format event data
     const eventData = {
       summary: title.trim(),
       description: description.trim(),
@@ -203,34 +218,11 @@ const EventModal = ({
     const fakeActivityData = [{ id: "activity-1", type: "workout" }];
 
     // ========================================
-    // EDITING MODE - Update existing event
+    // EDITING MODE
     // ========================================
     if (isEditing && event) {
       console.log("✏️ Updating existing event:", event.eventId);
-
-      if (selectedCalendarId === "internal") {
-        try {
-          // TODO: Create useUpdateInternalEvent hook
-          console.log("💾 Updating internal event:", eventData);
-          Alert.alert("Info", "Internal event editing not yet implemented");
-        } catch (error) {
-          console.error("❌ Error updating internal event:", error);
-          Alert.alert("Error", "Failed to update internal event");
-        }
-      } else {
-        try {
-          // TODO: Create useUpdateGoogleCalendarEvent hook
-          console.log("💾 Updating Google Calendar event:", eventData);
-          Alert.alert(
-            "Info",
-            "Google Calendar event editing not yet implemented"
-          );
-        } catch (error) {
-          console.error("❌ Error updating Google Calendar event:", error);
-          Alert.alert("Error", "Failed to update event");
-        }
-      }
-
+      Alert.alert("Info", "Event editing not yet implemented");
       setIsLoading(false);
       handleClose();
       return;
@@ -239,20 +231,75 @@ const EventModal = ({
     // ========================================
     // CREATE MODE - Save new event
     // ========================================
-    if (selectedCalendarId === "internal") {
-      eventData.activities = fakeActivityData;
-      console.log("💾 Saving event to Internal Calendar:", eventData);
+    
+    try {
+      // INTERNAL CALENDARS (Personal or Group)
+      if (selectedCalendarId === "internal" || selectedCalendar?.calendarType === "group") {
+        const calendarName = selectedCalendar?.name || "Personal Calendar";
+        const groupId = selectedCalendar?.groupId || null;
+        
+        console.log(`💾 Saving event to ${calendarName}:`, eventData);
 
-      try {
+        eventData.activities = fakeActivityData;
+        eventData.groupId = groupId;
+
         const result = await saveInternalEvent({
           ...eventData,
           reminderMinutes,
         });
-      } catch (error) {
-        console.error("❌ Error saving event to Internal Calendar:", error);
+        
+        if (result.success) {
+          console.log(`✅ Event saved to ${calendarName}`);
+          
+          // SCHEDULE REMINDER (Fire and Forget)
+          if (reminderMinutes !== null && reminderMinutes !== undefined) {
+            const reminderTime = new Date(startDate);
+            reminderTime.setMinutes(reminderTime.getMinutes() - reminderMinutes);
+            
+            // Only schedule if reminder time is in the future
+            if (reminderTime > new Date()) {
+              console.log(`⏰ Scheduling reminder for ${reminderMinutes} minutes before event`);
+              
+              // Fire and forget - don't await
+              scheduleNotification(
+                currentUser.uid,
+                `Reminder: ${title.trim()}`,
+                `Starting in ${reminderMinutes} minutes`,
+                reminderTime,
+                {
+                  screen: 'Calendar',
+                  // eventId: eventData.eventId,
+                  app: 'organizer-app'
+                }
+              ).then(reminderResult => {
+                if (reminderResult.success) {
+                  console.log('✅ Reminder scheduled successfully');
+                } else {
+                  console.warn('⚠️ Failed to schedule reminder:', reminderResult.error);
+                  showWarningToast('Reminder Failed', 'Event saved but reminder could not be scheduled');
+                }
+              }).catch(error => {
+                console.error('❌ Error scheduling reminder:', error);
+                showWarningToast('Reminder Failed', 'Event saved but reminder could not be scheduled');
+              });
+            } else {
+              console.log('⚠️ Reminder time is in the past, skipping');
+            }
+          }
+          
+          Alert.alert("Success", `Event added to ${calendarName}`);
+          
+          // TODO: If it's a group event, notify members
+          // if (groupId) {
+          //   await notifyGroupMembers(groupId, title);
+          // }
+        } else {
+          Alert.alert("Error", `Failed to save event: ${result.error}`);
+        }
       }
-    } else {
-      try {
+      
+      // GOOGLE CALENDAR
+      else {
         console.log("💾 Saving event to Google Calendar:", eventData);
         const result = await saveToGoogleCalendar(
           eventData,
@@ -263,27 +310,45 @@ const EventModal = ({
         );
 
         if (result.success) {
-          console.log(
-            "✅ Event saved to Google Calendar with ID:",
-            result.eventId
-          );
+          console.log("✅ Event saved to Google Calendar with ID:", result.eventId);
+          
+          // SCHEDULE REMINDER FOR GOOGLE CALENDAR EVENTS TOO
+          if (reminderMinutes !== null && reminderMinutes !== undefined) {
+            const reminderTime = new Date(startDate);
+            reminderTime.setMinutes(reminderTime.getMinutes() - reminderMinutes);
+            
+            if (reminderTime > new Date()) {
+              console.log(`⏰ Scheduling reminder for Google Calendar event`);
+              
+              scheduleNotification(
+                currentUser.uid,
+                `Reminder: ${title.trim()}`,
+                `Starting in ${reminderMinutes} minutes`,
+                reminderTime,
+                {
+                  screen: 'Calendar',
+                  eventId: result.eventId,
+                  app: 'organizer-app'
+                }
+              ).then(reminderResult => {
+                if (!reminderResult.success) {
+                  console.warn('⚠️ Failed to schedule reminder:', reminderResult.error);
+                  showWarningToast('Reminder Failed', 'Event saved but reminder could not be scheduled');
+                }
+              }).catch(error => {
+                console.error('❌ Error scheduling reminder:', error);
+                showWarningToast('Reminder Failed', 'Event saved but reminder could not be scheduled');
+              });
+            }
+          }
         } else {
-          console.error(
-            "❌ Error saving event to Google Calendar:",
-            result.error
-          );
-          Alert.alert(
-            "Error",
-            "There was an error saving the event to Google Calendar."
-          );
+          console.error("❌ Error saving event to Google Calendar:", result.error);
+          Alert.alert("Error", "There was an error saving the event to Google Calendar.");
         }
-      } catch (error) {
-        console.error("❌ Error saving event to Google Calendar:", error);
-        Alert.alert(
-          "Error",
-          "There was an error saving the event to Google Calendar."
-        );
       }
+    } catch (error) {
+      console.error("❌ Error saving event:", error);
+      Alert.alert("Error", "An unexpected error occurred while saving the event.");
     }
 
     setIsLoading(false);

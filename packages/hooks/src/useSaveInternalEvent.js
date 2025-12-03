@@ -9,7 +9,17 @@ export const useSaveInternalEvent = () => {
   
     const saveInternalEvent = async (eventData) => {
       try {
-        const { id, summary, description, location, start, end, reminderMinutes, activities } = eventData;
+        const { 
+          id, 
+          summary, 
+          description, 
+          location, 
+          start, 
+          end, 
+          reminderMinutes, 
+          activities,
+          groupId // ← Add this
+        } = eventData;
   
         const startDateStr = start.dateTime || start.date;
         const startDT = DateTime.fromISO(startDateStr);
@@ -21,15 +31,13 @@ export const useSaveInternalEvent = () => {
           ? startDT.endOf("day")
           : null;
   
-        const entityId = authUser.uid;
+        // ← CHANGE: Use groupId if provided, otherwise use user ID
+        const entityId = groupId || authUser.uid;
         const yearMonth = startDT.toFormat("yyyy-LL");
   
         const shardRef = doc(db, "activities", entityId, "months", yearMonth);
         const shardSnap = await getDoc(shardRef);
   
-        // ------------------------------------
-        //  MATCH CALENDAR EVENT OBJECT
-        // ------------------------------------
         const eventId = id || uuidv4();
         const eventKey = `${eventId}-${startDT.toMillis()}`;
   
@@ -46,12 +54,9 @@ export const useSaveInternalEvent = () => {
           source: "internal",
           reminderMinutes: reminderMinutes !== undefined ? reminderMinutes : null,
           activities: activities || [],
+          groupId: groupId || null, // ← Add this
         };
   
-        // ------------------------------------
-        //  MATCH CALENDAR STORAGE FORMAT
-        //  items: { <key>: eventObj }
-        // ------------------------------------
         if (!shardSnap.exists()) {
           await setDoc(shardRef, {
             items: {
@@ -65,6 +70,9 @@ export const useSaveInternalEvent = () => {
             updatedAt: DateTime.local().toISO(),
           });
         }
+  
+        console.log(`✅ Event saved to ${groupId ? 'group' : 'personal'} calendar`);
+        console.log(`📍 Location: activities/${entityId}/months/${yearMonth}`);
   
         return { success: true };
       } catch (err) {

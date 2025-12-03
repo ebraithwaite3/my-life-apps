@@ -5,14 +5,18 @@ import { DateTime } from "luxon";
 export const useDeleteInternalEvent = () => {
   const { user: authUser, db } = useAuth();
 
-  const deleteInternalEvent = async (eventKey, startTime) => {
+  const deleteInternalEvent = async (eventKey, startTime, groupId = null) => {
     try {
       // Get the year-month from the event's start time
       const startDT = DateTime.fromISO(startTime);
       const yearMonth = startDT.toFormat("yyyy-LL");
-      const entityId = authUser.uid;
+      
+      // Use groupId if provided, otherwise use user ID
+      const entityId = groupId || authUser.uid;
+      const eventType = groupId ? "group" : "personal";
 
-      console.log("🗑️ Deleting internal event:", eventKey, "from month:", yearMonth);
+      console.log(`🗑️ Deleting ${eventType} event:`, eventKey, "from month:", yearMonth);
+      console.log(`📍 Location: activities/${entityId}/months/${yearMonth}`);
 
       // Reference to the month shard
       const shardRef = doc(db, "activities", entityId, "months", yearMonth);
@@ -29,7 +33,7 @@ export const useDeleteInternalEvent = () => {
         updatedAt: DateTime.local().toISO(),
       });
 
-      console.log("✅ Deleted internal event from Firestore:", eventKey);
+      console.log(`✅ Deleted ${eventType} event from Firestore:`, eventKey);
 
       return { success: true };
     } catch (err) {

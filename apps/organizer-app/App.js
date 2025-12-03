@@ -10,14 +10,52 @@ import {
 } from "@my-apps/contexts";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MainNavigator from "./src/navigation/MainNavigator";
-import Toast from "react-native-toast-message";
+import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
+
+// Toast configuration
+const toastConfig = {
+  success: (props) => (
+    <BaseToast
+      {...props}
+      style={{ borderLeftColor: '#4CAF50' }}
+      contentContainerStyle={{ paddingHorizontal: 15 }}
+      text1Style={{ fontSize: 16, fontWeight: '600' }}
+      text2Style={{ fontSize: 14 }}
+    />
+  ),
+  error: (props) => (
+    <ErrorToast
+      {...props}
+      style={{ borderLeftColor: '#F44336' }}
+      contentContainerStyle={{ paddingHorizontal: 15 }}
+      text1Style={{ fontSize: 16, fontWeight: '600' }}
+      text2Style={{ fontSize: 14 }}
+    />
+  ),
+  warning: (props) => (
+    <BaseToast
+      {...props}
+      style={{ borderLeftColor: '#FF9800', backgroundColor: '#FFF3E0' }}
+      contentContainerStyle={{ paddingHorizontal: 15 }}
+      text1Style={{ fontSize: 16, fontWeight: '600', color: '#E65100' }}
+      text2Style={{ fontSize: 14, color: '#EF6C00' }}
+    />
+  ),
+  info: (props) => (
+    <BaseToast
+      {...props}
+      style={{ borderLeftColor: '#2196F3' }}
+      contentContainerStyle={{ paddingHorizontal: 15 }}
+      text1Style={{ fontSize: 16, fontWeight: '600' }}
+      text2Style={{ fontSize: 14 }}
+    />
+  ),
+};
 
 // Main app component
 const MainApp = () => {
   const { isDarkMode } = useTheme();
   const { logout, user } = useAuth();
-
-  // Removed push notification setup from here - it's now in LoginScreen after auth completes
 
   const handleLogout = async () => {
     console.log("Logging out...");
@@ -40,7 +78,7 @@ export default function App() {
         <DataProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <MainApp />
-            <Toast />
+            <Toast config={toastConfig} />
           </GestureHandlerRootView>
         </DataProvider>
       </AuthProvider>
