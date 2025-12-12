@@ -34,9 +34,24 @@ const formatDuration = (totalMinutes) => {
   return parts.join(' ') + ' before';
 };
 
-const ReminderPicker = ({ visible, selectedMinutes, onSelect, onClose, eventStartTime }) => {
+const ReminderPicker = ({ 
+  visible, 
+  selectedMinutes, 
+  onSelect, 
+  onClose, 
+  eventStartTime,
+  isAllDay = false // ← NEW: Add this prop
+}) => {
   const { theme, getSpacing, getBorderRadius, getTypography } = useTheme();
   const [showCustomPicker, setShowCustomPicker] = useState(false);
+  console.log("Event Start Time:", eventStartTime);
+
+  // For all-day events, skip straight to custom picker
+  useEffect(() => {
+    if (visible && isAllDay) {
+      setShowCustomPicker(true);
+    }
+  }, [visible, isAllDay]);
 
   const handleStandardSelect = (option) => {
     onSelect(option.value);
@@ -51,6 +66,14 @@ const ReminderPicker = ({ visible, selectedMinutes, onSelect, onClose, eventStar
     onSelect(minutes);
     setShowCustomPicker(false);
     onClose();
+  };
+
+  const handleCustomClose = () => {
+    setShowCustomPicker(false);
+    // If all-day event and they cancel custom picker, close everything
+    if (isAllDay) {
+      onClose();
+    }
   };
 
   const getSelectedLabel = () => {
@@ -151,86 +174,91 @@ const ReminderPicker = ({ visible, selectedMinutes, onSelect, onClose, eventStar
 
   return (
     <>
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={visible && !showCustomPicker}
-        onRequestClose={onClose}
-      >
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={styles.overlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.container}>
-                <View style={styles.header}>
-                  <View style={{ width: 60 }} />
-                  <Text style={styles.headerTitle}>Reminder</Text>
-                  <TouchableOpacity style={styles.doneButton} onPress={onClose}>
-                    <Text style={styles.doneButtonText}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                <ScrollView>
-                  {STANDARD_OPTIONS.map((option, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.option,
-                        selectedMinutes === option.value && styles.selectedOption,
-                      ]}
-                      onPress={() => handleStandardSelect(option)}
-                    >
-                      <Text
-                        style={[
-                          styles.optionText,
-                          selectedMinutes === option.value && styles.selectedOptionText,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
+      {/* Only show standard options modal if NOT all-day */}
+      {!isAllDay && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={visible && !showCustomPicker}
+          onRequestClose={onClose}
+        >
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={styles.overlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.container}>
+                  <View style={styles.header}>
+                    <View style={{ width: 60 }} />
+                    <Text style={styles.headerTitle}>Reminder</Text>
+                    <TouchableOpacity style={styles.doneButton} onPress={onClose}>
+                      <Text style={styles.doneButtonText}>Done</Text>
                     </TouchableOpacity>
-                  ))}
+                  </View>
                   
-                  {/* Custom Option */}
-                  <TouchableOpacity
-                    style={[
-                      styles.option,
-                      isCustomSelected && styles.selectedOption,
-                      { borderBottomWidth: 0 }
-                    ]}
-                    onPress={handleCustomSelect}
-                  >
-                    <View style={styles.customOption}>
-                      <View style={{ flex: 1 }}>
+                  <ScrollView>
+                    {STANDARD_OPTIONS.map((option, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.option,
+                          selectedMinutes === option.value && styles.selectedOption,
+                        ]}
+                        onPress={() => handleStandardSelect(option)}
+                      >
                         <Text
                           style={[
-                            styles.customLabel,
-                            isCustomSelected && styles.selectedOptionText,
+                            styles.optionText,
+                            selectedMinutes === option.value && styles.selectedOptionText,
                           ]}
                         >
-                          Custom
+                          {option.label}
                         </Text>
-                        {isCustomSelected && (
-                          <Text style={styles.customValue}>
-                            {formatDuration(selectedMinutes)}
+                      </TouchableOpacity>
+                    ))}
+                    
+                    {/* Custom Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.option,
+                        isCustomSelected && styles.selectedOption,
+                        { borderBottomWidth: 0 }
+                      ]}
+                      onPress={handleCustomSelect}
+                    >
+                      <View style={styles.customOption}>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.customLabel,
+                              isCustomSelected && styles.selectedOptionText,
+                            ]}
+                          >
+                            Custom
                           </Text>
-                        )}
+                          {isCustomSelected && (
+                            <Text style={styles.customValue}>
+                              {formatDuration(selectedMinutes)}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={{ color: theme.text.secondary }}>›</Text>
                       </View>
-                      <Text style={{ color: theme.text.secondary }}>›</Text>
-                    </View>
-                  </TouchableOpacity>
-                </ScrollView>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
 
       {/* Custom Time Picker Modal */}
       <CustomTimePicker
         visible={showCustomPicker}
         eventStartTime={eventStartTime}
         onConfirm={handleCustomConfirm}
-        onClose={() => setShowCustomPicker(false)}
+        onClose={handleCustomClose}
+        initialMinutes={selectedMinutes}
+        isAllDay={isAllDay}
       />
     </>
   );

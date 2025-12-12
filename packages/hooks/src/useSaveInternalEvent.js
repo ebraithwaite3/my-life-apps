@@ -18,7 +18,7 @@ export const useSaveInternalEvent = () => {
           end, 
           reminderMinutes, 
           activities,
-          groupId // ← Add this
+          groupId
         } = eventData;
   
         const startDateStr = start.dateTime || start.date;
@@ -31,7 +31,6 @@ export const useSaveInternalEvent = () => {
           ? startDT.endOf("day")
           : null;
   
-        // ← CHANGE: Use groupId if provided, otherwise use user ID
         const entityId = groupId || authUser.uid;
         const yearMonth = startDT.toFormat("yyyy-LL");
   
@@ -39,7 +38,8 @@ export const useSaveInternalEvent = () => {
         const shardSnap = await getDoc(shardRef);
   
         const eventId = id || uuidv4();
-        const eventKey = `${eventId}-${startDT.toMillis()}`;
+        const timestamp = startDT.toMillis();
+        const eventKey = `${eventId}-${timestamp}`;
   
         const newEventObj = {
           calendarId: "internal",
@@ -54,7 +54,7 @@ export const useSaveInternalEvent = () => {
           source: "internal",
           reminderMinutes: reminderMinutes !== undefined ? reminderMinutes : null,
           activities: activities || [],
-          groupId: groupId || null, // ← Add this
+          groupId: groupId || null,
         };
   
         if (!shardSnap.exists()) {
@@ -73,8 +73,14 @@ export const useSaveInternalEvent = () => {
   
         console.log(`✅ Event saved to ${groupId ? 'group' : 'personal'} calendar`);
         console.log(`📍 Location: activities/${entityId}/months/${yearMonth}`);
+        console.log(`🆔 Event ID: ${eventKey}`);
   
-        return { success: true };
+        return { 
+          success: true, 
+          eventId: eventKey, // ← Return the full event key
+          eventIdBase: eventId, // ← Also return base ID if needed
+          timestamp // ← Return timestamp if needed
+        };
       } catch (err) {
         console.error("❌ Error saving internal event", err);
         return { success: false, error: err };

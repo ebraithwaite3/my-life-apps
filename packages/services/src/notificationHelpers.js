@@ -30,7 +30,7 @@ export const sendNotification = async (userId, title, body, data = {}) => {
 /**
  * Schedule push notification for future delivery
  */
-export const scheduleNotification = async (userId, title, body, scheduledFor, data = {}) => {
+export const scheduleNotification = async (userId, title, body, eventId, scheduledFor, data = {}) => {
   try {
     const db = getFirestore();
 
@@ -38,6 +38,7 @@ export const scheduleNotification = async (userId, title, body, scheduledFor, da
       userId,
       title,
       body,
+      eventId,
       data: {
         ...data,
         app: data.app || 'organizer-app',

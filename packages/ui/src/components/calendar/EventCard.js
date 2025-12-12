@@ -13,15 +13,19 @@ const EventCard = ({
   onEdit,
   onDelete,
   onAddActivity,
+  onActivityPress,
+  onActivityDelete,
 }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
 
   // Format the event time
   const startTime = event?.startTime ? DateTime.fromISO(event.startTime) : null;
-  const timeText = startTime
+  // timeText first needs to check if isAllDay: true, and that should return "All Day"
+  const timeText = event.isAllDay
+    ? "All Day"
+    : startTime
     ? startTime.toLocaleString(DateTime.TIME_SIMPLE)
-    : "All Day";
-
+    : "No Time";
   const hasActivities = event.activities && event.activities.length > 0;
 
   // Find the calendar this event belongs to
@@ -169,8 +173,7 @@ const EventCard = ({
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => {
-              console.log("Add activity pressed for event:", event.title);
-              // if (onAddActivity) onAddActivity(event);
+              if (onAddActivity) onAddActivity(event);
             }}
           >
             <Ionicons
@@ -194,7 +197,13 @@ const EventCard = ({
       {/* Always Show Activities List if they exist */}
       {hasActivities && (
         <View style={styles.activitiesContent}>
-            <ActivityRow activities={event.activities} appName={appName} />
+          <ActivityRow 
+            activities={event.activities} 
+            appName={appName}
+            event={event}
+            onActivityPress={onActivityPress}
+            onActivityDelete={onActivityDelete}
+          />
         </View>
       )}
     </View>

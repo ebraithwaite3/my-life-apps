@@ -177,7 +177,7 @@ const createUserDocument = async (user, username, notifications, groupInvites = 
         groupInvites: groupInvites,
         groups: [],
         calendars: [],
-        joinedApps: ["organizer"],
+        joinedApps: [],
         createdAt: now,
         updatedAt: now,
         isActive: true,

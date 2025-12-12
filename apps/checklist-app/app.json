@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "MyChecklist",
+    "slug": "my-checklist",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/MyChecklistIcon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/MyChecklistIcon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ebraithwaite3.mychecklist",
+      "buildNumber": "1.0.0",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.ebraithwaite3.mychecklist"
+    },
+    "scheme": "mychecklist",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/MyChecklistIcon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "27ef1245-fbc5-48b1-ad1a-2a9a04ecd642"
+      }
+    },
+    "owner": "ebraithwaite3"
+  }
+}

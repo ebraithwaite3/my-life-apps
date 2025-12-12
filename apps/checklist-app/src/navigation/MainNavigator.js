@@ -15,55 +15,43 @@ import { DateTime } from "luxon";
 import { NotificationProvider } from "@my-apps/contexts";
 
 // Main screens
-import DashboardScreen from "../screens/DashboardScreen";
 import CalendarScreen from "../screens/CalendarScreen";
-import GroupsScreen from "../screens/GroupsScreen";
+import PinnedScreen from "../screens/PinnedScreen";
+import TemplatesScreen from "../screens/TemplatesScreen";
 import MessagesScreen from "../screens/MessagesScreen";
 import PreferencesScreen from "../screens/PreferencesScreen";
 import LoginScreen from "../screens/LoginScreen";
-import TodayScreen from "../screens/TodayScreen";
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
-const DashboardStack = createStackNavigator();
 const CalendarStack = createStackNavigator();
-const GroupsStack = createStackNavigator();
+const PinnedStack = createStackNavigator();
+const TemplatesStack = createStackNavigator();
 const MessagesStack = createStackNavigator();
 const PreferencesStack = createStackNavigator();
-const TodayStack = createStackNavigator();
 
 // Stack navigators for each tab
-function TodayStackScreen() {
-  return (
-    <TodayStack.Navigator screenOptions={{ headerShown: false }}>
-      <TodayStack.Screen name="TodayHome" component={TodayScreen} />
-    </TodayStack.Navigator>
-  );
-}
-
-function DashboardStackScreen() {
-  return (
-    <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
-      <DashboardStack.Screen name="DashboardHome" component={DashboardScreen} />
-    </DashboardStack.Navigator>
-  );
-}
-
 function CalendarStackScreen() {
   return (
     <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
-      <CalendarStack.Screen name="CalendarHome">
-        {(props) => <CalendarScreen {...props} />}
-      </CalendarStack.Screen>
+      <CalendarStack.Screen name="CalendarHome" component={CalendarScreen} />
     </CalendarStack.Navigator>
   );
 }
 
-function GroupsStackScreen() {
+function PinnedStackScreen() {
   return (
-    <GroupsStack.Navigator screenOptions={{ headerShown: false }}>
-      <GroupsStack.Screen name="GroupsHome" component={GroupsScreen} />
-    </GroupsStack.Navigator>
+    <PinnedStack.Navigator screenOptions={{ headerShown: false }}>
+      <PinnedStack.Screen name="PinnedHome" component={PinnedScreen} />
+    </PinnedStack.Navigator>
+  );
+}
+
+function TemplatesStackScreen() {
+  return (
+    <TemplatesStack.Navigator screenOptions={{ headerShown: false }}>
+      <TemplatesStack.Screen name="TemplatesHome" component={TemplatesScreen} />
+    </TemplatesStack.Navigator>
   );
 }
 
@@ -90,12 +78,12 @@ function PreferencesStackScreen() {
 function HeaderWithNavigation({ onLogout }) {
   const navigation = useNavigation();
 
-  // Build menu items for MyOrganizer
+  // Build menu items for MyChecklists
   const menuItems = [
     {
-      icon: "✅",
-      label: "Open Checklists",
-      onPress: () => Linking.openURL("mychecklist://"),
+      icon: "📆",
+      label: "Open Organizer",
+      onPress: () => Linking.openURL("myorganizer://"),
     },
     {
       icon: "💪",
@@ -115,24 +103,21 @@ function HeaderWithNavigation({ onLogout }) {
     },
   ];
 
-  return <AppHeader appName="MyOrganizer" menuItems={menuItems} />;
+  return <AppHeader appName="MyChecklists" menuItems={menuItems} />;
 }
 
 const getTabBarIcon = (routeName, unreadCount = 0) => {
   let icon;
 
   switch (routeName) {
-    case "Today":
-      icon = "📅";
-      break;
-    case "Dashboard":
-      icon = "🏠";
-      break;
     case "Calendar":
       icon = "📆";
       break;
-    case "Groups":
-      icon = "👥";
+    case "Pinned":
+      icon = "📌";
+      break;
+    case "Templates":
+      icon = "📋";
       break;
     case "Messages":
       icon = "💬";
@@ -188,7 +173,7 @@ function TabNavigator({ theme, onLogout }) {
       <HeaderWithNavigation onLogout={onLogout} />
 
       <Tab.Navigator
-        initialRouteName="Today"
+        initialRouteName="Calendar"
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarIcon: () => getTabBarIcon(route.name, unreadMessagesCount),
@@ -216,24 +201,19 @@ function TabNavigator({ theme, onLogout }) {
         })}
       >
         <Tab.Screen
-          name="Today"
-          component={TodayStackScreen}
-          options={{ tabBarLabel: "Today" }}
-        />
-        <Tab.Screen
-          name="Dashboard"
-          component={DashboardStackScreen}
-          options={{ tabBarLabel: "Home" }}
-        />
-        <Tab.Screen
           name="Calendar"
           component={CalendarStackScreen}
           options={{ tabBarLabel: "Calendar" }}
         />
         <Tab.Screen
-          name="Groups"
-          component={GroupsStackScreen}
-          options={{ tabBarLabel: "Groups" }}
+          name="Pinned"
+          component={PinnedStackScreen}
+          options={{ tabBarLabel: "Pinned" }}
+        />
+        <Tab.Screen
+          name="Templates"
+          component={TemplatesStackScreen}
+          options={{ tabBarLabel: "Templates" }}
         />
         <Tab.Screen
           name="Messages"
@@ -259,8 +239,8 @@ function RootNavigator({ onLogout }) {
   if (authLoading || userLoading) {
     return (
       <LoadingScreen
-        icon={require("../../assets/CalendarConnectionv2AppIcon.png")}
-        message="Loading your organizer..."
+        icon={require("../../assets/MyChecklistIcon.png")}
+        message="Loading your checklists..."
         iconSize={128}
       />
     );
@@ -283,29 +263,24 @@ const MainNavigator = ({ onLogout }) => {
   const { setSelectedDate, setSelectedMonth, setSelectedYear } = useData();
 
   const linking = {
-    prefixes: ["myorganizer://"],
+    prefixes: ["mychecklist://"],
     config: {
       screens: {
         Main: {
           screens: {
-            Today: {
-              screens: {
-                TodayHome: "today",
-              },
-            },
-            Dashboard: {
-              screens: {
-                DashboardHome: "home",
-              },
-            },
             Calendar: {
               screens: {
                 CalendarHome: "calendar",
               },
             },
-            Groups: {
+            Pinned: {
               screens: {
-                GroupsHome: "groups",
+                PinnedHome: "pinned",
+              },
+            },
+            Templates: {
+              screens: {
+                TemplatesHome: "templates",
               },
             },
             Messages: {

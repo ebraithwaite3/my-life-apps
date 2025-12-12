@@ -12,6 +12,8 @@ const DayView = ({
   onDeleteEvent,
   onAddActivity,
   onEditEvent,
+  onActivityPress,
+  onActivityDelete,
 }) => {
   const { getSpacing } = useTheme();
   console.log("Rendering DayView for date:", date, "with events:", events);
@@ -35,6 +37,8 @@ const DayView = ({
             onDelete={onDeleteEvent}
             onAddActivity={onAddActivity}
             onEdit={onEditEvent}
+            onActivityPress={onActivityPress}
+            onActivityDelete={onActivityDelete}
             userCalendars={userCalendars}
           />
         ))}

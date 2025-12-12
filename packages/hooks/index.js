@@ -7,3 +7,5 @@ export { useUpdateInternalActivities } from './src/useUpdateInternalActivities';
 export { useUpdateExternalActivities } from './src/useUpdateExternalActivities';
 export { useSetIphoneTimer } from './src/useSetIphoneTimer';
 export { useMessageActions } from './src/useMessageActions';
+export { useAppRegistration } from './src/useAppRegistration';
+export { useDeleteNotification } from './src/useDeleteNotification';
