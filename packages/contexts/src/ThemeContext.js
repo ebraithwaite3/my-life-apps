@@ -80,7 +80,7 @@ export const CustomThemeProvider = ({ children }) => {
     saveThemePreference(false, darkMode);
   };
 
-  const currentTheme = isDarkMode ? Theme.dark : Theme.light;
+  const currentTheme = isDarkMode ? Theme.darkSoft : Theme.light;
 
   const value = {
     isDarkMode,

@@ -11,13 +11,16 @@ import { useTheme } from '@my-apps/contexts';
 import { DateTime } from 'luxon';
 import SpinnerPicker from './SpinnerPicker';
 
+/**
+ * CustomTimePicker - Always stores as absolute time (ISO string)
+ * No more "minutes before" logic - everything is a specific date/time
+ */
 const CustomTimePicker = ({ 
   visible, 
-  eventStartTime, 
+  eventStartTime,
+  selectedTime, // ISO string or null
   onConfirm, 
   onClose,
-  initialMinutes,
-  isAllDay = false // For pinned checklists (no event)
 }) => {
   const { theme, getSpacing, getBorderRadius, getTypography } = useTheme();
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -26,62 +29,21 @@ const CustomTimePicker = ({
 
   useEffect(() => {
     if (visible) {
-      if (isAllDay) {
-        // For pinned checklists, default to tomorrow at 9 AM
+      if (selectedTime) {
+        // Use existing reminder time
+        setSelectedDateTime(new Date(selectedTime));
+      } else if (eventStartTime && eventStartTime instanceof Date && !isNaN(eventStartTime.getTime())) {
+        // Default to 1 hour before event
+        const eventDt = DateTime.fromJSDate(eventStartTime);
+        const defaultReminder = eventDt.minus({ hours: 1 });
+        setSelectedDateTime(defaultReminder.toJSDate());
+      } else {
+        // Default to tomorrow at 9 AM
         const tomorrow = DateTime.now().plus({ days: 1 }).set({ hour: 9, minute: 0, second: 0 });
         setSelectedDateTime(tomorrow.toJSDate());
-      } else if (eventStartTime) {
-        // For event-based, calculate from initialMinutes
-        if (initialMinutes !== null && initialMinutes !== undefined) {
-          const eventDt = DateTime.fromJSDate(new Date(eventStartTime));
-          const reminderDt = eventDt.minus({ minutes: initialMinutes });
-          setSelectedDateTime(reminderDt.toJSDate());
-        } else {
-          // Default to 1 hour before event
-          const eventDt = DateTime.fromJSDate(new Date(eventStartTime));
-          const defaultReminder = eventDt.minus({ hours: 1 });
-          setSelectedDateTime(defaultReminder.toJSDate());
-        }
       }
     }
-  }, [visible, eventStartTime, initialMinutes, isAllDay]);
-
-  const calculateDifference = () => {
-    // If no event (isAllDay for pinned checklists), always valid
-    if (isAllDay || !eventStartTime) {
-      return { isValid: true, totalMinutes: null };
-    }
-    
-    const eventDt = DateTime.fromJSDate(new Date(eventStartTime));
-    const reminderDt = DateTime.fromJSDate(selectedDateTime);
-    
-    const diff = eventDt.diff(reminderDt, ['days', 'hours', 'minutes']).toObject();
-    
-    return {
-      days: Math.floor(diff.days || 0),
-      hours: Math.floor(diff.hours || 0),
-      minutes: Math.floor(diff.minutes || 0),
-      totalMinutes: Math.floor(eventDt.diff(reminderDt, 'minutes').minutes),
-      isValid: reminderDt < eventDt
-    };
-  };
-
-  const formatDifference = () => {
-    const diff = calculateDifference();
-    if (!diff || !diff.isValid) return 'Invalid time (must be before event)';
-    
-    const parts = [];
-    if (diff.days > 0) parts.push(`${diff.days} day${diff.days > 1 ? 's' : ''}`);
-    if (diff.hours > 0) parts.push(`${diff.hours} hour${diff.hours > 1 ? 's' : ''}`);
-    if (diff.minutes > 0) parts.push(`${diff.minutes} minute${diff.minutes > 1 ? 's' : ''}`);
-    
-    if (parts.length === 0) return 'At time of event';
-    return parts.join(' ') + ' before';
-  };
-
-  const formatSelectedTime = () => {
-    return DateTime.fromJSDate(selectedDateTime).toFormat('EEE, MMM d, yyyy \'at\' h:mm a');
-  };
+  }, [visible, eventStartTime, selectedTime]);
 
   const handleDateConfirm = (newDate) => {
     // Update date but keep time
@@ -108,20 +70,9 @@ const CustomTimePicker = ({
   };
 
   const handleConfirm = () => {
-    if (isAllDay) {
-      // For pinned checklists, return the ISO string of the selected date/time
-      onConfirm(selectedDateTime.toISOString());
-      onClose();
-    } else {
-      // For event-based, return minutes before
-      const diff = calculateDifference();
-      if (diff && diff.isValid) {
-        onConfirm(diff.totalMinutes);
-        onClose();
-      } else {
-        alert('Reminder time must be before the event');
-      }
-    }
+    // Always return ISO string
+    onConfirm(selectedDateTime.toISOString());
+    onClose();
   };
 
   const formatDateDisplay = (date) => {
@@ -132,8 +83,9 @@ const CustomTimePicker = ({
     return DateTime.fromJSDate(date).toFormat('h:mm a');
   };
 
-  const diff = calculateDifference();
-  const isValid = diff && diff.isValid;
+  const formatFullDisplay = () => {
+    return DateTime.fromJSDate(selectedDateTime).toFormat("EEE, MMM d 'at' h:mm a");
+  };
 
   const styles = StyleSheet.create({
     modalOverlay: {
@@ -208,17 +160,17 @@ const CustomTimePicker = ({
     chevron: {
       color: theme.text.secondary,
     },
-    differenceContainer: {
-      backgroundColor: isValid ? theme.primary + '10' : theme.error + '10',
+    displayContainer: {
+      backgroundColor: theme.primary + '10',
       borderRadius: getBorderRadius.md,
       padding: getSpacing.md,
       borderWidth: 1,
-      borderColor: isValid ? theme.primary + '40' : theme.error + '40',
+      borderColor: theme.primary + '40',
     },
-    differenceText: {
+    displayText: {
       fontSize: getTypography.h4.fontSize,
       fontWeight: '600',
-      color: isValid ? theme.primary : theme.error,
+      color: theme.primary,
       textAlign: 'center',
     },
     subtitle: {
@@ -245,20 +197,12 @@ const CustomTimePicker = ({
               <View style={styles.container}>
                 <View style={styles.header}>
                   <View style={{ width: 60 }} />
-                  <Text style={styles.headerTitle}>
-                    {isAllDay ? 'Set Reminder' : 'Custom Reminder'}
-                  </Text>
+                  <Text style={styles.headerTitle}>Set Reminder</Text>
                   <TouchableOpacity 
                     style={styles.doneButton} 
                     onPress={handleConfirm}
-                    disabled={!isValid}
                   >
-                    <Text style={[
-                      styles.doneButtonText,
-                      !isValid && { color: theme.text.tertiary }
-                    ]}>
-                      Done
-                    </Text>
+                    <Text style={styles.doneButtonText}>Done</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -291,27 +235,14 @@ const CustomTimePicker = ({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Difference Display */}
-                  <View style={styles.differenceContainer}>
-                    {isAllDay ? (
-                      <>
-                        <Text style={styles.differenceText}>
-                          Reminder Set
-                        </Text>
-                        <Text style={styles.subtitle}>
-                          {formatSelectedTime()}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.differenceText}>
-                          {formatDifference()}
-                        </Text>
-                        <Text style={styles.subtitle}>
-                          {isValid ? formatSelectedTime() : 'Select a time before the event'}
-                        </Text>
-                      </>
-                    )}
+                  {/* Display */}
+                  <View style={styles.displayContainer}>
+                    <Text style={styles.displayText}>
+                      Reminder Set
+                    </Text>
+                    <Text style={styles.subtitle}>
+                      {formatFullDisplay()}
+                    </Text>
                   </View>
                 </View>
               </View>

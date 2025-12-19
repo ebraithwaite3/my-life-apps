@@ -13,6 +13,7 @@ const ChecklistContent = ({
   checklist,
   onItemToggle, // Callback when item is toggled
 }) => {
+  console.log("Rendering ChecklistContent with checklist:", checklist);
   const { theme, getSpacing, getTypography } = useTheme();
   const [items, setItems] = useState([]);
 

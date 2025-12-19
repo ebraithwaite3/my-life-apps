@@ -10,8 +10,8 @@ const EventCard = ({
   appName,
   event,
   userCalendars,
-  onEdit,
-  onDelete,
+  onEditEvent,
+  onDeleteEvent,
   onAddActivity,
   onActivityPress,
   onActivityDelete,
@@ -51,7 +51,7 @@ const EventCard = ({
         text: "Edit Event",
         onPress: () => {
           console.log("Edit pressed for event:", event.title);
-          if (onEdit) onEdit(event);
+          if (onEdit) onEditEvent(event);
         },
       });
     }
@@ -62,7 +62,7 @@ const EventCard = ({
       style: "destructive",
       onPress: () => {
         console.log("Delete pressed for event:", event.title);
-        if (onDelete) onDelete(event);
+        if (onDeleteEvent) onDeleteEvent(event);
       },
     });
 

@@ -9,3 +9,8 @@ export { useSetIphoneTimer } from './src/useSetIphoneTimer';
 export { useMessageActions } from './src/useMessageActions';
 export { useAppRegistration } from './src/useAppRegistration';
 export { useDeleteNotification } from './src/useDeleteNotification';
+export { useAutoScrollOnFocus } from './src/useAutoScrollOnFocus';
+export * from './src/calendarHooks';
+export * from './src/eventHooks';
+export * from './src/checklistHooks';
+export * from './src/notificationHooks';

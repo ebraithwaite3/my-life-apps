@@ -1,11 +1,40 @@
 // components/calendar/MonthView.js
 import React, { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, PanResponder } from 'react-native';
 import { useTheme } from '@my-apps/contexts';
 import { DateTime } from 'luxon';
 
-const MonthView = ({ month, year, events = [], onDayPress }) => {
+const MonthView = ({ 
+  month, 
+  year, 
+  events = [], 
+  onDayPress,
+  // Navigation handlers for swipe gestures
+  onSwipeLeft,  // ← Next month
+  onSwipeRight, // ← Previous month
+}) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+
+  // Swipe gesture handler
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      // Activate if horizontal swipe > 20px and vertical < 50px
+      return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 50;
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      const SWIPE_THRESHOLD = 50;
+      
+      if (gestureState.dx > SWIPE_THRESHOLD) {
+        // Swiped right → Previous month
+        console.log("👈 Swiped right - Previous month");
+        onSwipeRight?.();
+      } else if (gestureState.dx < -SWIPE_THRESHOLD) {
+        // Swiped left → Next month
+        console.log("👉 Swiped left - Next month");
+        onSwipeLeft?.();
+      }
+    },
+  }), [onSwipeLeft, onSwipeRight]);
 
   // Generate calendar days for the month
   const calendarDays = useMemo(() => {
@@ -171,7 +200,7 @@ const MonthView = ({ month, year, events = [], onDayPress }) => {
   });
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} {...panResponder.panHandlers}>
       {/* Week Header */}
       <View style={styles.weekHeader}>
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (

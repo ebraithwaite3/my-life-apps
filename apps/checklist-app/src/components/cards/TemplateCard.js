@@ -9,7 +9,7 @@ const TemplateCard = ({
   onPress, 
   onDelete, 
   onMove,
-  availableMoveTargets = [] // Array of { type: 'personal' | 'group', groupId?, groupName? }
+  availableMoveTargets = []
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -75,6 +75,20 @@ const TemplateCard = ({
     }
   ];
 
+  // Format time display (convert HH:mm to 12-hour format)
+  const formatTimeDisplay = (timeString) => {
+    if (!timeString) return null;
+    
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
+
+  const hasDefaults = template.defaultReminderTime || template.defaultNotifyAdmin;
+
   const styles = StyleSheet.create({
     templateCard: {
       backgroundColor: theme.surface,
@@ -126,10 +140,24 @@ const TemplateCard = ({
     ellipsisButton: {
       padding: getSpacing.xs,
     },
+    metadataRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: getSpacing.md,
+    },
+    metadataItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: getSpacing.xs,
+    },
     itemCount: {
       fontSize: getTypography.body.fontSize,
       color: theme.text.secondary,
-      marginBottom: getSpacing.xs,
+    },
+    metadataText: {
+      fontSize: getTypography.body.fontSize,
+      color: theme.text.secondary,
     },
     screenTimeIndicator: {
       flexDirection: "row",
@@ -180,9 +208,36 @@ const TemplateCard = ({
             />
           </TouchableOpacity>
         </View>
-        <Text style={styles.itemCount}>
-          {template.items?.length || 0} item{template.items?.length !== 1 ? 's' : ''}
-        </Text>
+
+        {/* Metadata Row: Items count, reminder time, notify admin */}
+        <View style={styles.metadataRow}>
+          {/* Item count */}
+          <Text style={styles.itemCount}>
+            {template.items?.length || 0} item{template.items?.length !== 1 ? 's' : ''}
+          </Text>
+
+          {/* Default reminder time */}
+          {template.defaultReminderTime && (
+            <View style={styles.metadataItem}>
+              <Ionicons name="time-outline" size={16} color={theme.text.secondary} />
+              <Text style={styles.metadataText}>
+                {formatTimeDisplay(template.defaultReminderTime)}
+              </Text>
+            </View>
+          )}
+
+          {/* Default notify admin */}
+          {template.defaultNotifyAdmin && (
+            <View style={styles.metadataItem}>
+              <Ionicons name="notifications-outline" size={16} color={theme.text.secondary} />
+              <Text style={styles.metadataText}>
+                Admin
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Screen time indicator (separate row if exists) */}
         {template.items?.some(i => i.requiredForScreenTime) && (
           <View style={styles.screenTimeIndicator}>
             <Ionicons name="phone-portrait" size={14} color={theme.primary} />

@@ -13,7 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { scheduleNotification } from "@my-apps/services";
-import { useDeleteNotification } from "@my-apps/hooks";
+import { useDeleteNotification, useChecklistTemplates } from "@my-apps/hooks";
 import { useChecklistData } from "../contexts/ChecklistDataContext";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 
@@ -23,6 +23,7 @@ const PinnedScreen = () => {
   const { user, groups } = useData();
   const { allPinned, checklistsLoading } = useChecklistData();
   const deleteNotification = useDeleteNotification();
+  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
   const editContentRef = useRef(null); // Ref for EditChecklistContent
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChecklistModal, setShowChecklistModal] = useState(false);
@@ -506,17 +507,31 @@ const PinnedScreen = () => {
             <ModalHeader
               title={selectedChecklist ? "Edit Checklist" : "New Checklist"}
               onCancel={handleCloseModal}
-              onAction={() => editContentRef.current?.save()}
-              actionText={selectedChecklist ? "Update" : "Create"}
+              onDone={() => editContentRef.current?.save()}
+              doneText={selectedChecklist ? "Update" : "Create"}
             />
 
             <EditChecklistContent
               ref={editContentRef}
               checklist={selectedChecklist}
-              onSave={(checklist) => handleSaveChecklist(checklist, handleCloseModal)}
+              onSave={(checklist, shouldSaveAsTemplate) => {
+                // First save the pinned checklist
+                handleSaveChecklist(checklist, handleCloseModal);
+                
+                // Then if "Save as Template" was enabled, save as template too
+                if (shouldSaveAsTemplate) {
+                  promptForContext(async (context) => {
+                    const success = await saveTemplate(checklist, context);
+                    if (success) {
+                      Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                    }
+                  });
+                }
+              }}
               isUserAdmin={user?.admin === true}
               addReminder={true}
               eventStartTime={null}
+              templates={allTemplates}
             />
           </View>
         </View>
@@ -544,7 +559,7 @@ const PinnedScreen = () => {
               backgroundColor: theme.surface,
               borderRadius: 12,
               width: "100%",
-              height: "90%", // ← This is the key!
+              height: "90%",
               overflow: "hidden",
             }}
           >
@@ -559,13 +574,13 @@ const PinnedScreen = () => {
                   : undefined
               }
               onCancel={closeChecklistModal}
-              onAction={
+              onDone={
                 checklistMode === "complete"
                   ? handleUpdateFromCompleteMode
-                  : () => editContentRef.current?.save() // Trigger save via ref in edit mode
+                  : () => editContentRef.current?.save()
               }
-              actionText="Update"
-              actionDisabled={getActionDisabled()}
+              doneText="Update"
+              doneDisabled={getActionDisabled()}
             />
 
             {/* Pill Toggle - Always visible */}
@@ -602,10 +617,24 @@ const PinnedScreen = () => {
               <EditChecklistContent
                 ref={editContentRef}
                 checklist={selectedChecklist}
-                onSave={(checklist) => handleSaveChecklist(checklist, closeChecklistModal)}
+                onSave={(checklist, shouldSaveAsTemplate) => {
+                  // First save the pinned checklist
+                  handleSaveChecklist(checklist, closeChecklistModal);
+                  
+                  // Then if "Save as Template" was enabled, save as template too
+                  if (shouldSaveAsTemplate) {
+                    promptForContext(async (context) => {
+                      const success = await saveTemplate(checklist, context);
+                      if (success) {
+                        Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                      }
+                    });
+                  }
+                }}
                 isUserAdmin={user?.admin === true}
                 addReminder={true}
                 eventStartTime={null}
+                templates={allTemplates}
               />
             )}
           </View>

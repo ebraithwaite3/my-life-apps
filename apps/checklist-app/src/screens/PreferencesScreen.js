@@ -22,6 +22,9 @@ const defaultPreferences = {
     checklistId: "",
   },
   defaultCalendarView: "day",
+  // --- NEW DEFAULT PREFERENCE ---
+  defaultCalendarId: "", 
+  // ------------------------------
   communicationPreferences: {
     notifications: {
       active: true,
@@ -79,7 +82,7 @@ const defaultPreferences = {
 const PreferencesScreen = ({ navigation, route }) => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
-  const { preferences, user, groups } = useData();
+  const { preferences, user, groups } = useData(); 
 
   // Use Memo to see if the user is just a 'member' role in any groups
   const isMemberInAnyGroup = useMemo(() => {
@@ -90,47 +93,88 @@ const PreferencesScreen = ({ navigation, route }) => {
       return member && member.role === "member";
     });
   }, [user, groups]);
+  
+  // --- NEW: Generate options for the Default Calendar SelectModal ---
+  const defaultCalendarOptions = useMemo(() => {
+    // 1. Start with the "None" option
+    const options = [{ label: "None", value: "" }];
+
+    // 2. Add Group Calendars
+    groups.forEach((group) => {
+      options.push({
+        label: `${group.name} Calendar`,
+        value: `group-${group.groupId}`,
+      });
+    });
+
+    // 3. Add Google Calendars
+    user?.calendars
+      ?.filter((cal) => cal.calendarType === "google")
+      .forEach((cal) => {
+        options.push({
+          label: cal.name, // Use the calendar's actual name
+          value: cal.calendarId,
+        });
+      });
+      
+    // 4. Add the Internal Calendar (Personal)
+    options.push({
+      label: "Personal Calendar",
+      value: "internal",
+    });
+
+    return options;
+  }, [groups, user?.calendars]);
+  // ------------------------------------------------------------------
 
   // Merge saved preferences with defaults
-  const initialPrefs =
-    preferences && Object.keys(preferences).length
+  const initialPrefs = useMemo(() => {
+    return preferences && Object.keys(preferences).length
       ? {
           ...defaultPreferences,
           ...preferences,
+          // Ensure defaultCalendarId is merged if it exists on saved preferences
+          defaultCalendarId: preferences.defaultCalendarId ?? "", 
           communicationPreferences: {
             ...defaultPreferences.communicationPreferences,
             ...preferences.communicationPreferences,
           },
         }
       : defaultPreferences;
+  }, [preferences]);
+
 
   const [updatedPreferences, setUpdatedPreferences] = useState(initialPrefs);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Update state when initialPrefs changes (e.g., data loads)
+  useEffect(() => {
+    setUpdatedPreferences(initialPrefs);
+  }, [initialPrefs]);
+
 
   // Detect changes
   useEffect(() => {
-    const currentBase =
-      preferences && Object.keys(preferences).length
-        ? {
-            ...defaultPreferences,
-            ...preferences,
-            communicationPreferences: {
-              ...defaultPreferences.communicationPreferences,
-              ...preferences.communicationPreferences,
-            },
-          }
-        : defaultPreferences;
-
+    // Use initialPrefs as the baseline for comparison
     const changesMade =
-      JSON.stringify(currentBase) !== JSON.stringify(updatedPreferences);
+      JSON.stringify(initialPrefs) !== JSON.stringify(updatedPreferences);
     setHasChanges(changesMade);
-  }, [preferences, updatedPreferences]);
+  }, [initialPrefs, updatedPreferences]);
+
 
   // 📅 Calendar View Handler
   const handleCalendarViewChange = (value) => {
     setUpdatedPreferences((prev) => ({
       ...prev,
       defaultCalendarView: value,
+    }));
+  };
+
+  // 📅 Default Calendar ID Handler (NEW)
+  const handleDefaultCalendarIdChange = (value) => {
+    setUpdatedPreferences((prev) => ({
+      ...prev,
+      defaultCalendarId: value,
     }));
   };
 
@@ -155,13 +199,13 @@ const PreferencesScreen = ({ navigation, route }) => {
     }
 
     try {
-      // Update user preferences
+      // 1. Update user preferences
       await updateDocument("users", user.userId, {
         preferences: updatedPreferences,
       });
       console.log("User preferences updated successfully!");
 
-      // Update communication preferences in all groups the user belongs to
+      // 2. Update communication preferences in all groups the user belongs to
       if (user.groups && user.groups.length > 0) {
         console.log("Updating preferences in groups:", user.groups);
 
@@ -211,18 +255,7 @@ const PreferencesScreen = ({ navigation, route }) => {
 
   // ❌ Cancel
   const handleCancel = () => {
-    const merged =
-      preferences && Object.keys(preferences).length
-        ? {
-            ...defaultPreferences,
-            ...preferences,
-            communicationPreferences: {
-              ...defaultPreferences.communicationPreferences,
-              ...preferences.communicationPreferences,
-            },
-          }
-        : defaultPreferences;
-    setUpdatedPreferences(merged);
+    setUpdatedPreferences(initialPrefs);
   };
 
   // Custom categories for organizer app
@@ -275,10 +308,20 @@ const PreferencesScreen = ({ navigation, route }) => {
       paddingHorizontal: getSpacing.md,
       marginBottom: getSpacing.xl,
     },
+    // Used for the main section headers (e.g., "Communication")
+    sectionHeaderText: {
+        ...getTypography.body,
+        fontWeight: "700", // Bolder style
+        color: theme.text.primary,
+        marginBottom: getSpacing.sm,
+    },
+    // Used for the field labels above the input boxes (e.g., "Default Calendar")
     subHeaderText: {
       ...getTypography.body,
       color: theme.text.secondary,
       marginBottom: getSpacing.sm,
+      marginTop: getSpacing.sm,
+      // Removed marginBottom here, will add it to the SelectModal for spacing
     },
     stickyFooter: {
       position: "absolute",
@@ -346,8 +389,15 @@ const PreferencesScreen = ({ navigation, route }) => {
       >
         {/* 📅 Calendar Preferences */}
         <View style={styles.settingContainer}>
-          <Text style={styles.subHeaderText}>Calendar</Text>
+          
+          {/* SECTION HEADER: BOLD, like Communication */}
+          <Text style={styles.sectionHeaderText}>Calendar Preferences</Text> 
+          
+          {/* Default Calendar View FIELD */}
+          <Text style={styles.subHeaderText}>Default Calendar Screen View</Text>
           <SelectModal
+            // Add margin to the bottom to separate it from the next label/field
+            style={{ marginBottom: getSpacing.md }} 
             title="Default Calendar View"
             value={updatedPreferences.defaultCalendarView || "day"}
             options={[
@@ -358,10 +408,25 @@ const PreferencesScreen = ({ navigation, route }) => {
             getValue={(option) => option.value}
             onSelect={handleCalendarViewChange}
           />
+          
+          {/* Default Calendar FIELD */}
+          <Text style={styles.subHeaderText}>Default Calendar</Text>
+          <SelectModal
+            // This modal is the last element in the section, no extra margin needed here
+            title="Default Calendar"
+            value={updatedPreferences.defaultCalendarId || ""}
+            options={defaultCalendarOptions}
+            getLabel={(option) => option.label}
+            getValue={(option) => option.value}
+            onSelect={handleDefaultCalendarIdChange}
+            placeholder="None"
+          />
+
         </View>
 
         {/* 🔔 Communication Preferences */}
         <View style={styles.settingContainer}>
+          {/* Note: CommunicationPreferences component likely contains its own "Communication" header */}
           <CommunicationPreferences
             preferences={updatedPreferences.communicationPreferences}
             onUpdate={handleCommunicationUpdate}

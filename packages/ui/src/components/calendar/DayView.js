@@ -1,48 +1,86 @@
-// packages/shared/components/calendar/DayView.js
-import React from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import React, { useRef, useMemo } from "react";
+import { View, ScrollView, StyleSheet, PanResponder } from "react-native";
 import { useTheme } from "@my-apps/contexts";
 import EventCard from "./EventCard";
 
+/**
+ * DayView - Calendar day view with swipe gestures
+ * 
+ * Swipe left → Next day
+ * Swipe right → Previous day
+ */
 const DayView = ({
   appName,
   date,
-  events,
-  userCalendars,
+  events = [],
+  userCalendars = [],
   onDeleteEvent,
-  onAddActivity,
   onEditEvent,
+  onAddActivity,
   onActivityPress,
   onActivityDelete,
+  // Navigation handlers for swipe gestures
+  onSwipeLeft,  // ← Next day
+  onSwipeRight, // ← Previous day
 }) => {
-  const { getSpacing } = useTheme();
-  console.log("Rendering DayView for date:", date, "with events:", events);
+  const { theme, getSpacing } = useTheme();
+  const scrollViewRef = useRef(null);
+
+  // Swipe gesture handler
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      // Activate if horizontal swipe > 20px and vertical < 50px
+      return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 50;
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      const SWIPE_THRESHOLD = 50;
+      
+      if (gestureState.dx > SWIPE_THRESHOLD) {
+        // Swiped right → Previous day
+        console.log("👈 Swiped right - Previous day");
+        onSwipeRight?.();
+      } else if (gestureState.dx < -SWIPE_THRESHOLD) {
+        // Swiped left → Next day
+        console.log("👉 Swiped left - Next day");
+        onSwipeLeft?.();
+      }
+    },
+  }), [onSwipeLeft, onSwipeRight]);
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
+    },
+    scrollContent: {
       paddingHorizontal: getSpacing.lg,
-      marginTop: getSpacing.md,
+      paddingTop: getSpacing.md,
+      paddingBottom: getSpacing.xl * 2,
     },
   });
 
   return (
-    <ScrollView style={styles.container}>
-      {events &&
-        events.map((event, index) => (
+    <View style={styles.container} {...panResponder.panHandlers}>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {events.map((event, index) => (
           <EventCard
-            key={index}
+            key={`${event.eventId}-${index}`}
             appName={appName}
             event={event}
-            onDelete={onDeleteEvent}
+            userCalendars={userCalendars}
+            onDeleteEvent={onDeleteEvent}
+            onEditEvent={onEditEvent}
             onAddActivity={onAddActivity}
-            onEdit={onEditEvent}
             onActivityPress={onActivityPress}
             onActivityDelete={onActivityDelete}
-            userCalendars={userCalendars}
           />
         ))}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 

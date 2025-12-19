@@ -1,6 +1,6 @@
 // Export everything from category folders
 export * from './forms';
-export { AppHeader, PageHeader, ModalHeader } from './headers';
+export { AppHeader, PageHeader, ModalHeader, PopUpModalHeader } from './headers';
 export * from './menus';
 export * from './checklists';
 export * from './dropdowns';
@@ -10,3 +10,4 @@ export * from './calendar';
 export * from './messages';
 export * from './modals';
 export * from './buttons';
+export * from './general';

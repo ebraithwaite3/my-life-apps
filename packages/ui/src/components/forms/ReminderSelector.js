@@ -1,124 +1,137 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { useTheme } from "@my-apps/contexts";
+import React, { useState } from "react";
+import { SelectorRow, OptionsSelectionModal } from "@my-apps/ui";
+import CustomReminderModal from "../modals/composed/modals/CustomReminderModal";
 import { DateTime } from "luxon";
 
-const ReminderSelector = ({
-  label = "Reminder",
-  reminderMinutes,
-  reminderTime, // NEW: for absolute time reminders (pinned checklists)
-  onPress,
-  isAllDay = false,
-  eventStartTime,
+const ReminderSelector = ({ 
+  reminder, 
+  onReminderChange, 
+  eventStartDate,
+  isAllDay = false, // NEW: Pass this from parent
 }) => {
-  const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+  const [customModalVisible, setCustomModalVisible] = useState(false);
 
-  // Standard reminder options (these will show as "X before")
-  const STANDARD_OPTIONS = [null, 0, 15, 30, 60];
-
-  const getReminderLabel = (minutes) => {
-    // NEW: If we have reminderTime instead of reminderMinutes, show the absolute time
-    if (reminderTime && !minutes) {
-      const dt = DateTime.fromISO(reminderTime);
-      return dt.toFormat("EEE, MMM d 'at' h:mm a");
-    }
-
-    if (minutes === null) return "No Alert";
-
-    console.log('getReminderLabel:', { 
-      minutes, 
-      eventStartTime, 
-      isValid: eventStartTime instanceof Date,
-      isStandard: STANDARD_OPTIONS.includes(minutes)
-    });
+  const formatReminderDisplay = () => {
+    if (!reminder) return "None";
     
+    const reminderTime = DateTime.fromISO(reminder);
     
-    // For standard options, always show "X before" format
-    if (STANDARD_OPTIONS.includes(minutes)) {
-      if (minutes === 0) return "At time of event";
-      
-      const days = Math.floor(minutes / 1440);
-      const hours = Math.floor((minutes % 1440) / 60);
-      const mins = minutes % 60;
-
-      const parts = [];
-      if (days > 0) parts.push(`${days} day${days > 1 ? "s" : ""}`);
-      if (hours > 0) parts.push(`${hours} hour${hours > 1 ? "s" : ""}`);
-      if (mins > 0) parts.push(`${mins} minute${mins > 1 ? "s" : ""}`);
-
-      return parts.join(" ") + " before";
+    // For all-day events, just show the date/time
+    if (isAllDay) {
+      return reminderTime.toFormat("MMM d 'at' h:mm a");
     }
-
-    // For ALL custom reminders (any event type), show the actual time
-    if (eventStartTime) {
-      const eventDt = DateTime.fromJSDate(new Date(eventStartTime));
-      const reminderDt = eventDt.minus({ minutes });
-      return reminderDt.toFormat("EEE, MMM d 'at' h:mm a");
-    }
-
-    // Fallback (shouldn't happen if eventStartTime is provided)
-    return "Custom reminder";
+    
+    // For timed events, check presets
+    const eventTime = DateTime.fromJSDate(eventStartDate);
+    const diffMinutes = Math.round(eventTime.diff(reminderTime, 'minutes').minutes);
+    
+    if (diffMinutes === 0) return "At time of event";
+    if (diffMinutes === 5) return "5 minutes before";
+    if (diffMinutes === 15) return "15 minutes before";
+    if (diffMinutes === 30) return "30 minutes before";
+    if (diffMinutes === 60) return "1 hour before";
+    if (diffMinutes === 1440) return "1 day before";
+    if (diffMinutes === 2880) return "2 days before";
+    if (diffMinutes === 10080) return "1 week before";
+    
+    // Custom time
+    return reminderTime.toFormat("MMM d 'at' h:mm a");
   };
 
-  const styles = StyleSheet.create({
-    sectionHeader: {
-      fontSize: getTypography.body.fontSize,
-      fontWeight: "600",
-      color: theme.text.primary,
-      marginTop: getSpacing.lg,
-      marginBottom: getSpacing.sm,
-      marginHorizontal: getSpacing.lg,
-    },
-    formSection: {
-      backgroundColor: theme.background,
-      marginHorizontal: getSpacing.lg,
-      borderRadius: getBorderRadius.md,
-      overflow: "hidden",
-    },
-    formRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: getSpacing.md,
-      paddingVertical: getSpacing.lg,
-      borderBottomWidth: 0,
-    },
-    formLabel: {
-      fontSize: getTypography.body.fontSize,
-      color: theme.text.primary,
-      marginRight: getSpacing.sm,
-      minWidth: 0,     // allow shrinking instead of forcing 80
-    },
-    reminderButton: {
-      backgroundColor: theme.surface,
-      borderRadius: getBorderRadius.sm,
-      paddingHorizontal: getSpacing.md,
-      paddingVertical: getSpacing.md,
-      borderWidth: 1,
-      borderColor: theme.border,
-      flex: 1,               // takes all remaining space
-      alignItems: "center",  // centers text
-      marginLeft: getSpacing.sm,
-    },    
-    reminderButtonText: {
-      fontSize: getTypography.body.fontSize,
-      color: theme.text.primary,
-      flexShrink: 1,  // allow text to shrink if needed
-    },
-  });
+  // Different presets for all-day vs timed events
+  const getPresetOptions = () => {
+    if (isAllDay) {
+      // All-day events: Only None and Custom
+      return [
+        { id: "none", label: "None", value: null },
+        { id: "custom", label: "Custom...", value: "CUSTOM" },
+      ];
+    }
+    
+    // Timed events: All the presets
+    return [
+      { id: "none", label: "None", value: null },
+      { id: "at-time", label: "At time of event", minutes: 0 },
+      { id: "5-min", label: "5 minutes before", minutes: 5 },
+      { id: "15-min", label: "15 minutes before", minutes: 15 },
+      { id: "30-min", label: "30 minutes before", minutes: 30 },
+      { id: "1-hour", label: "1 hour before", minutes: 60 },
+      { id: "1-day", label: "1 day before", minutes: 1440 },
+      { id: "2-days", label: "2 days before", minutes: 2880 },
+      { id: "1-week", label: "1 week before", minutes: 10080 },
+      { id: "custom", label: "Custom...", value: "CUSTOM" },
+    ];
+  };
+
+  const getCurrentPresetId = () => {
+    if (!reminder) return "none";
+    
+    // For all-day, it's always custom (if set)
+    if (isAllDay) return "custom";
+    
+    const reminderTime = DateTime.fromISO(reminder);
+    const eventTime = DateTime.fromJSDate(eventStartDate);
+    const diffMinutes = Math.round(eventTime.diff(reminderTime, 'minutes').minutes);
+    
+    const presetOptions = getPresetOptions();
+    for (const preset of presetOptions) {
+      if (preset.value === null && !reminder) return "none";
+      if (preset.value === "CUSTOM") continue;
+      if (preset.minutes === diffMinutes) return preset.id;
+    }
+    
+    return "custom";
+  };
+
+  const handlePresetSelect = (item) => {
+    if (item.value === "CUSTOM") {
+      setOptionsModalVisible(false);
+      setCustomModalVisible(true);
+    } else if (item.value === null) {
+      onReminderChange(null);
+      setOptionsModalVisible(false);
+    } else {
+      // Calculate ISO string based on preset minutes
+      const eventTime = DateTime.fromJSDate(eventStartDate);
+      const reminderTime = eventTime.minus({ minutes: item.minutes });
+      
+      onReminderChange(reminderTime.toISO());
+      setOptionsModalVisible(false);
+    }
+  };
+
+  const handleCustomConfirm = (customTime) => {
+    onReminderChange(customTime);
+    setCustomModalVisible(false);
+  };
 
   return (
     <>
-      <Text style={styles.sectionHeader}>{label}</Text>
-      <View style={styles.formSection}>
-        <View style={styles.formRow}>
-          <Text style={styles.formLabel}>Remind</Text>
-          <TouchableOpacity style={styles.reminderButton} onPress={onPress}>
-            <Text style={styles.reminderButtonText} numberOfLines={1} ellipsizeMode="tail">
-              {getReminderLabel(reminderMinutes)}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SelectorRow
+        label="Alert"
+        value={formatReminderDisplay()}
+        onPress={() => setOptionsModalVisible(true)}
+        icon="notifications-outline"
+      />
+      
+      <OptionsSelectionModal
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+        title="Alert"
+        options={getPresetOptions()}
+        selectedValue={getCurrentPresetId()}
+        onSelect={handlePresetSelect}
+      />
+      
+      <CustomReminderModal
+        visible={customModalVisible}
+        onClose={() => setCustomModalVisible(false)}
+        reminder={reminder}
+        eventStartDate={eventStartDate}
+        isAllDay={isAllDay}
+        onConfirm={handleCustomConfirm}
+      />
     </>
   );
 };

@@ -15,7 +15,8 @@ import { DateTime } from "luxon";
 import { NotificationProvider } from "@my-apps/contexts";
 
 // Main screens
-import CalendarScreen from "../screens/CalendarScreen";
+// import CalendarScreen from "../screens/CalendarScreen";
+import ChecklistCalendarScreen from "../screens/ChecklistCalendarScreen";
 import PinnedScreen from "../screens/PinnedScreen";
 import TemplatesScreen from "../screens/TemplatesScreen";
 import MessagesScreen from "../screens/MessagesScreen";
@@ -34,7 +35,7 @@ const PreferencesStack = createStackNavigator();
 function CalendarStackScreen() {
   return (
     <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
-      <CalendarStack.Screen name="CalendarHome" component={CalendarScreen} />
+      <CalendarStack.Screen name="CalendarHome" component={ChecklistCalendarScreen} />
     </CalendarStack.Navigator>
   );
 }

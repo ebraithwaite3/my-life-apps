@@ -132,3 +132,24 @@ export const formatMonthYearAbbreviation = (date) => {
   if (!dt.isValid) return "";
   return dt.toFormat("LLL yyyy"); // "Nov 2025"
 };
+
+/**
+ * Parse a 24-hour time string (e.g., '06:30' or '23:00') and format it as 
+ * 12-hour time (e.g., "6:30 AM" or "11:00 PM").
+ * * NOTE: This function assumes the time string is in the format 'HH:mm'. 
+ * It treats the time as being in the local timezone.
+ * * @param {string} timeString - Time string in 'HH:mm' format (e.g., '06:30', '23:00')
+ * @returns {string} Formatted time string like "6:30 AM"
+ */
+export const format24HourTimeString = (timeString) => {
+  // Use fromFormat to explicitly parse the 'HH:mm' string.
+  // We use a dummy date (1990-01-01) for the parsing to work, 
+  // as Luxon's fromFormat requires some form of date context by default 
+  // unless you set parsing options, but this is the simplest method.
+  const dt = DateTime.fromFormat(timeString, "HH:mm");
+  
+  if (!dt.isValid) return "";
+  
+  // Return in 12-hour format "h:mm a"
+  return dt.toFormat("h:mm a"); 
+};
