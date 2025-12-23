@@ -43,8 +43,9 @@ export async function requestNotificationPermissions() {
 export async function getPushToken() {
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: "8d24b3bd-9e5c-4de7-93b7-6268ea9a0d84",
+      projectId: "27ef1245-fbc5-48b1-ad1a-2a9a04ecd642", // ← Checklist app projectId!  TO DO: UPDATE THIS FOR OTHER APPS
     });
+    
 
     const token = tokenData.data;
 
