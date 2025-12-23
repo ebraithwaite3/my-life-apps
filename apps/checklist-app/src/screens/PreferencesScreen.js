@@ -14,6 +14,7 @@ import { useData } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { updateDocument } from "@my-apps/services";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
+import * as Notifications from "expo-notifications";
 
 const defaultPreferences = {
   workoutPreferences: {
@@ -83,6 +84,20 @@ const PreferencesScreen = ({ navigation, route }) => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
   const { preferences, user, groups } = useData(); 
+
+  const [debugInfo, setDebugInfo] = useState(null);
+
+  const showDebug = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    const token = await Notifications.getExpoPushTokenAsync({
+      projectId: '27ef1245-fbc5-48b1-ad1a-2a9a04ecd642'
+    });
+    
+    setDebugInfo({
+      permission: status,
+      token: token.data,
+    });
+  };
 
   // Use Memo to see if the user is just a 'member' role in any groups
   const isMemberInAnyGroup = useMemo(() => {
@@ -387,6 +402,26 @@ const PreferencesScreen = ({ navigation, route }) => {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
+        <TouchableOpacity onPress={showDebug}>
+  <Text style={{ padding: 10, backgroundColor: '#007AFF', color: 'white', borderRadius: 5 }}>
+    Show Debug Info
+  </Text>
+</TouchableOpacity>
+
+{debugInfo && (
+  <View style={{ padding: 10, backgroundColor: '#f5f5f5', marginTop: 10, borderRadius: 5 }}>
+    <Text style={{ fontWeight: 'bold' }}>Permission: {debugInfo.permission}</Text>
+    <Text style={{ fontWeight: 'bold', marginTop: 5 }}>Token:</Text>
+    <Text style={{ fontSize: 10 }}>{debugInfo.token}</Text>
+    <Text style={{ fontWeight: 'bold', marginTop: 5 }}>User ID:</Text>
+    <Text style={{ fontSize: 10 }}>{debugInfo.userId}</Text>
+    <Text style={{ fontWeight: 'bold', marginTop: 5 }}>Firestore Tokens:</Text>
+    <Text style={{ fontSize: 10 }}>{JSON.stringify(debugInfo.firestoreTokens, null, 2)}</Text>
+    {debugInfo.error && (
+      <Text style={{ color: 'red', marginTop: 5 }}>Error: {debugInfo.error}</Text>
+    )}
+  </View>
+)}
         {/* 📅 Calendar Preferences */}
         <View style={styles.settingContainer}>
           
