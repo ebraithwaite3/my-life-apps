@@ -45,21 +45,6 @@ const SharedEventModal = ({
   // Activity configurations
   activities = [],                    // Array of activity configs
 }) => {
-    // At the top of SharedEventModal, after imports
-// At the top of SharedEventModal, after imports
-console.log("All component checks:", {
-    ModalWrapper,
-    OptionsSelectionModal,
-    LoadingScreen,
-    TextInputRow,        // ← Add these
-    SelectorRow,         // ← Add these
-    ModalHeader,         // ← Add these
-    DateTimeSelector,    // ← Add these
-    ReminderSelector,    // ← Add these
-    ReminderPicker,      // ← Add these
-    ChecklistSelector: activities[0]?.SelectorComponent,
-    EditChecklistContent: activities[0]?.EditorComponent,
-  });
   const { theme, getSpacing, getBorderRadius } = useTheme();
   const { db } = useAuth();
   
