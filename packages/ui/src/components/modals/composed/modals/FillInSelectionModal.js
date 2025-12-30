@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 import { ModalHeader } from '../../../headers';
-import { PopUpModalWrapper } from '../../base/PopUpModalWrapper';
+import PopUpModalWrapper from '../../base/PopUpModalWrapper';
 import { generateUUID } from '@my-apps/utils';
 
 const FillInSelectionModal = ({
