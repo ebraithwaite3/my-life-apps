@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { PopUpModalWrapper, ModalHeader } from "@my-apps/ui";
+import { PopUpModalWrapper } from "../../base";
+import ModalHeader from "../../../headers/ModalHeader";
 import { useTheme } from "@my-apps/contexts";
 import SpinnerPickerContent from "../../content/pickers/SpinnerPickerContent";
 

@@ -8,7 +8,7 @@ import { useTheme } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { useData } from "@my-apps/contexts";
 import { AppHeader } from "@my-apps/ui";
-import { LoadingScreen } from "@my-apps/screens";
+import { LoadingScreen } from "@my-apps/ui";
 import { DateTime } from "luxon";
 
 // Keep NotificationProvider for deep linking
@@ -77,6 +77,8 @@ function PreferencesStackScreen() {
 
 // Header wrapper with navigation context
 function HeaderWithNavigation({ onLogout }) {
+  const { allCalendars } = useData();
+  console.log("ALL CALENDARS IN HEADER:", allCalendars);
   const navigation = useNavigation();
 
   // Build menu items for MyChecklists
@@ -104,7 +106,7 @@ function HeaderWithNavigation({ onLogout }) {
     },
   ];
 
-  return <AppHeader appName="MyChecklists" menuItems={menuItems} />;
+  return <AppHeader appName="MyChecklists" menuItems={menuItems} userCalendars={allCalendars || []} />;
 }
 
 const getTabBarIcon = (routeName, unreadCount = 0) => {

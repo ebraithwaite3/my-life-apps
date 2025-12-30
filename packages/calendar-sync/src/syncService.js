@@ -17,7 +17,7 @@ const getFunctionsInstance = (passedApp) => {
     if (Platform.OS === 'android') {
       emulatorHost = '10.0.2.2'; 
     } else {
-      emulatorHost = '10.0.0.178'; // ← your dev machine IP
+      emulatorHost = '10.0.0.177'; // ← your dev machine IP
     }
     
     console.log(`🔧 [Calendar Sync DEV] Connecting to Functions emulator at ${emulatorHost}:5001`);

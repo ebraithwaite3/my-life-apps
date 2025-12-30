@@ -2,20 +2,15 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DateTime } from 'luxon';
 
 /**
- * Manage calendar shards for MULTIPLE calendars
- * - Loads 3 months (prev, current, next) for each calendar
+ * Manage calendar metadata + shards for MULTIPLE calendars
+ * - Loads calendar metadata (subscribingUsers, name, color, etc.)
+ * - Loads 3 months (prev, current, next) of events for each calendar
  * - Automatically loads new months as user navigates
  * - Maintains persistent cache until app closes
- * - Dynamically handles calendars being added/removed
- * 
- * @param {object} db - Firestore database instance
- * @param {array} calendarIds - Array of calendar IDs ["cal1", "cal2"]
- * @param {string} currentMonth - Current month name (e.g., "November")
- * @param {number} currentYear - Current year (e.g., 2025)
- * @returns {object} { allCalendars, calendarsLoading, error, getEventsForMonth, getEventsForDay }
  */
 export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear) => {
-  const [allCalendars, setAllCalendars] = useState({});
+  const [calendarMetadata, setCalendarMetadata] = useState({});
+  const [calendarShards, setCalendarShards] = useState({});
   const [calendarsLoading, setCalendarsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeSubscriptions, setActiveSubscriptions] = useState({});
@@ -45,9 +40,52 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
     }
   }, [currentMonth, currentYear]);
 
+  // EFFECT 1: Load calendar metadata (subscribingUsers, name, color, etc.)
+  useEffect(() => {
+    if (!db || calendarIds.length === 0) {
+      setCalendarMetadata({});
+      return;
+    }
+
+    console.log(`📅 Loading metadata for ${calendarIds.length} calendars`);
+    const { doc, onSnapshot } = require('firebase/firestore');
+    const unsubscribes = [];
+
+    calendarIds.forEach((calendarId) => {
+      if (!calendarId) return;
+
+      const unsubscribe = onSnapshot(
+        doc(db, 'calendars', calendarId),
+        (docSnap) => {
+          if (docSnap.exists()) {
+            console.log(`✅ Calendar metadata loaded: ${calendarId}`);
+            setCalendarMetadata((prev) => ({
+              ...prev,
+              [calendarId]: {
+                ...docSnap.data(),
+                calendarId: docSnap.id,
+              },
+            }));
+          }
+        },
+        (err) => {
+          console.error(`❌ Calendar metadata error for ${calendarId}:`, err);
+          setError(err);
+        }
+      );
+
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [db, calendarIds.join(',')]);
+
+  // EFFECT 2: Load calendar shards (monthly events)
   useEffect(() => {
     if (!db || calendarIds.length === 0 || monthKeys.length === 0) {
-      setAllCalendars({});
+      setCalendarShards({});
       setCalendarsLoading(false);
       return;
     }
@@ -66,7 +104,7 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
       monthKeys.forEach((monthKey) => {
         const subKey = `${calendarId}-${monthKey}`;
 
-        if (allCalendars[calendarId]?.[monthKey]?.loaded || activeSubscriptions[subKey]) {
+        if (calendarShards[calendarId]?.[monthKey]?.loaded || activeSubscriptions[subKey]) {
           console.log(`✅ Shard ${calendarId}/${monthKey} already loaded/loading`);
           return;
         }
@@ -81,7 +119,7 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
               const eventCount = Object.keys(data.events || {}).length;
               console.log(`✅ Shard loaded: ${calendarId}/${monthKey} (${eventCount} events)`);
               
-              setAllCalendars((prev) => ({
+              setCalendarShards((prev) => ({
                 ...prev,
                 [calendarId]: {
                   ...prev[calendarId],
@@ -93,7 +131,7 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
               }));
             } else {
               console.log(`📅 No shard for ${calendarId}/${monthKey} (returning empty)`);
-              setAllCalendars((prev) => ({
+              setCalendarShards((prev) => ({
                 ...prev,
                 [calendarId]: {
                   ...prev[calendarId],
@@ -109,7 +147,7 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
             console.error(`❌ Shard ${calendarId}/${monthKey} error:`, err);
             setError(err);
             
-            setAllCalendars((prev) => ({
+            setCalendarShards((prev) => ({
               ...prev,
               [calendarId]: {
                 ...prev[calendarId],
@@ -142,21 +180,36 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
     };
   }, [db, calendarIds.join(','), monthKeys.join(',')]);
 
+  // COMBINE metadata + shards
+  const allCalendars = useMemo(() => {
+    const combined = {};
+    
+    calendarIds.forEach(calendarId => {
+      combined[calendarId] = {
+        // Metadata (subscribingUsers, name, color, etc.)
+        ...calendarMetadata[calendarId],
+        // Shards (monthly events)
+        shards: calendarShards[calendarId] || {},
+      };
+    });
+    
+    return combined;
+  }, [calendarIds, calendarMetadata, calendarShards]);
+
   // Helper: Get ALL events from ALL calendars for a specific month (as array)
   const getEventsForMonth = useCallback((monthKey) => {
     const combined = {};
     
     calendarIds.forEach((calendarId) => {
-      const monthEvents = allCalendars[calendarId]?.[monthKey]?.events || {};
+      const monthEvents = calendarShards[calendarId]?.[monthKey]?.events || {};
       Object.assign(combined, monthEvents);
     });
   
-    // Map object to array, preserving the key as eventId
     return Object.entries(combined).map(([eventId, eventData]) => ({
       eventId,
       ...eventData,
     }));
-  }, [allCalendars, calendarIds]);
+  }, [calendarShards, calendarIds]);
   
   const getEventsForDay = useCallback((dateString) => {
     try {
@@ -176,10 +229,10 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
   }, [getEventsForMonth]);
   
   const getEventsForCalendar = useCallback((calendarId) => {
-    const calendarShards = allCalendars[calendarId] || {};
+    const calendarShardsForCal = calendarShards[calendarId] || {};
     const allEvents = {};
   
-    Object.values(calendarShards).forEach((shard) => {
+    Object.values(calendarShardsForCal).forEach((shard) => {
       if (shard.events) Object.assign(allEvents, shard.events);
     });
   
@@ -187,24 +240,21 @@ export const useCalendarDocs = (db, calendarIds = [], currentMonth, currentYear)
       eventId,
       ...eventData,
     }));
-  }, [allCalendars]);
-  
+  }, [calendarShards]);
 
-// Helper: Get events for current month (as array)
-const getCurrentMonthEvents = useCallback(() => {
-  const currentMonthKey = monthKeys[1];
-  return getEventsForMonth(currentMonthKey);
-}, [monthKeys, getEventsForMonth]);
-  
+  const getCurrentMonthEvents = useCallback(() => {
+    const currentMonthKey = monthKeys[1];
+    return getEventsForMonth(currentMonthKey);
+  }, [monthKeys, getEventsForMonth]);
 
   return { 
-    allCalendars,
+    allCalendars, // Now includes metadata + shards
     calendarsLoading, 
     error,
-    getEventsForMonth,      // Get all events for a month: getEventsForMonth("2025-11")
-    getEventsForDay,        // Get all events for a day: getEventsForDay("2025-11-15")
-    getCurrentMonthEvents,  // Get current month's events
-    getEventsForCalendar,   // Get all events for one calendar (kept for future filtering)
+    getEventsForMonth,
+    getEventsForDay,
+    getCurrentMonthEvents,
+    getEventsForCalendar,
     loadedCalendars: Object.keys(allCalendars),
     loadedMonths: monthKeys,
   };

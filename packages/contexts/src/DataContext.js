@@ -147,6 +147,9 @@ export const DataProvider = ({ children }) => {
     unreadMessagesCount: messages?.messages?.filter((m) => !m.read).length || 0,
   });
 
+  // Hardcoded admin Id (for now testing but will change to MY user Id once ready for production)
+  const adminUserId = "Ef4aMVrsoEgHLHd8KOOb7W9O52T2"; // ← TO DO Replace with your user ID
+
   // Is User Admin
   const isUserAdmin = useMemo(() => {
     return user?.admin === true;
@@ -207,6 +210,7 @@ export const DataProvider = ({ children }) => {
 const navigateToDate = useCallback((dateISO) => {
   setSelectedDate(dateISO);
 }, []);
+console.log("All Calendars:", allCalendars);
 
   // ===== CONTEXT VALUE =====
 const value = useMemo(
@@ -215,6 +219,7 @@ const value = useMemo(
       user,
       userLoading: loading,
       isUserAdmin,
+      adminUserId,
   
       // Date states
       currentDate,
@@ -294,6 +299,7 @@ const value = useMemo(
       unacceptedChecklistsCount,
       messagesCount,
       isUserAdmin,
+      adminUserId,
       selectedDate,
       selectedMonth,
       selectedYear,

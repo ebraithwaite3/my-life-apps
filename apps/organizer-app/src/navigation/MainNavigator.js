@@ -8,7 +8,7 @@ import { useTheme } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { useData } from "@my-apps/contexts";
 import { AppHeader } from "@my-apps/ui";
-import { LoadingScreen } from "@my-apps/screens";
+import { LoadingScreen } from "@my-apps/ui";
 import { DateTime } from "luxon";
 
 // Keep NotificationProvider for deep linking

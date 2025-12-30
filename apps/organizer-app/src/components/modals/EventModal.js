@@ -23,7 +23,7 @@ import {
 } from "@my-apps/ui";
 import { useSaveInternalEvent, useSaveToGoogleCalendar } from "@my-apps/hooks";
 import { useAuth } from "@my-apps/contexts";
-import { LoadingScreen } from "@my-apps/screens";
+import { LoadingScreen } from "@my-apps/ui";
 import { scheduleNotification } from '@my-apps/services';
 import { showWarningToast } from '@my-apps/utils';
 

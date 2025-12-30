@@ -51,7 +51,7 @@ const EventCard = ({
         text: "Edit Event",
         onPress: () => {
           console.log("Edit pressed for event:", event.title);
-          if (onEdit) onEditEvent(event);
+          if (onEditEvent) onEditEvent(event);
         },
       });
     }
@@ -173,7 +173,8 @@ const EventCard = ({
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => {
-              if (onAddActivity) onAddActivity(event);
+              console.log("➕ Adding checklist to event with calendarId:", event.calendarId);
+              if (onAddActivity) onAddActivity(event); // Make sure 'event' has calendarId here
             }}
           >
             <Ionicons

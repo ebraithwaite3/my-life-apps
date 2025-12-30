@@ -10,9 +10,10 @@ const getFunctionsInstance = (app) => {
     if (Platform.OS === 'android') {
       emulatorHost = '10.0.2.2'; 
     } else {
-      emulatorHost = '10.0.0.178'; 
+      emulatorHost = '10.0.0.177'; 
     }
     
+    console.log(`🔧 [Google Calendar DEV] Connecting to Functions emulator at ${emulatorHost}:5001`);
     connectFunctionsEmulator(functionsInstance, emulatorHost, 5001);
   }
   
@@ -43,13 +44,14 @@ export const writeToGoogleCalendar = async (app, eventData) => {
 /**
  * Update event in Google Calendar
  */
-export const updateGoogleCalendarEvent = async (app, eventId, updates) => {
+export const updateGoogleCalendarEvent = async (app, eventId, calendarId, updates) => {
   try {
     const functions = getFunctionsInstance(app);
     const updateCalendarEvent = httpsCallable(functions, 'updateCalendarEvent');
     
     const result = await updateCalendarEvent({
       eventId,
+      calendarId,
       ...updates
     });
     
@@ -67,12 +69,17 @@ export const updateGoogleCalendarEvent = async (app, eventId, updates) => {
 /**
  * Delete event from Google Calendar
  */
-export const deleteGoogleCalendarEvent = async (app, eventId) => {
+export const deleteGoogleCalendarEvent = async (app, eventId, calendarId = 'primary') => {
   try {
     const functions = getFunctionsInstance(app);
     const deleteCalendarEvent = httpsCallable(functions, 'deleteCalendarEvent');
     
-    const result = await deleteCalendarEvent({ eventId });
+    console.log(`🗑️ Calling deleteCalendarEvent with eventId: ${eventId}, calendarId: ${calendarId}`);
+    
+    const result = await deleteCalendarEvent({ 
+      eventId,
+      calendarId // ← Pass calendarId to function
+    });
     
     if (result.data.success) {
       return { success: true };

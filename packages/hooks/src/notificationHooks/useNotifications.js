@@ -5,7 +5,7 @@ import {
   scheduleNotification,
   scheduleBatchNotification 
 } from '@my-apps/services';
-import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { DateTime } from 'luxon';
 
 export const useNotifications = () => {
@@ -46,10 +46,78 @@ export const useNotifications = () => {
   };
 
   /**
- * Send "Event Created" notification
- * Automatically uses batch if there are members to notify
- */
-const notifyEventCreated = async (event, membersToNotify = [], customData = {}) => {
+   * Get all member user IDs from a group
+   */
+  const getGroupMemberIds = async (groupId, excludeUserId = null) => {
+    try {
+      const groupDoc = await getDoc(doc(db, 'groups', groupId));
+      
+      if (!groupDoc.exists()) {
+        throw new Error('Group not found');
+      }
+
+      const groupData = groupDoc.data();
+      const members = groupData.members || [];
+      
+      // Extract user IDs, optionally excluding someone
+      const memberIds = members
+        .map(member => member.userId)
+        .filter(userId => excludeUserId ? userId !== excludeUserId : true);
+
+      return memberIds;
+    } catch (error) {
+      console.error('Error getting group members:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Notify group members (wrapper around notifyEventCreated)
+   */
+  const notifyGroupMembers = async (groupId, excludeUserId, title, body, data = {}) => {
+    try {
+      console.log(`📢 Getting members for group: ${groupId}`);
+      const memberIds = await getGroupMemberIds(groupId, excludeUserId);
+      
+      if (memberIds.length === 0) {
+        console.log('No members to notify');
+        return { success: true, notifiedCount: 0 };
+      }
+
+      console.log(`📢 Notifying ${memberIds.length} group members`);
+      return await sendBatchNotification(memberIds, title, body, data);
+    } catch (error) {
+      console.error('Error notifying group members:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Schedule group reminder (wrapper around scheduleBatchNotification)
+   */
+  const scheduleGroupReminder = async (groupId, title, body, eventId, reminderTime, data = {}) => {
+    try {
+      console.log(`⏰ Getting members for group reminder: ${groupId}`);
+      const memberIds = await getGroupMemberIds(groupId); // Include everyone
+      
+      if (memberIds.length === 0) {
+        console.log('No members to remind');
+        return { success: true, scheduledCount: 0 };
+      }
+
+      console.log(`⏰ Scheduling reminders for ${memberIds.length} group members`);
+      return await scheduleBatchNotification(memberIds, title, body, reminderTime, data);
+    } catch (error) {
+      console.error('Error scheduling group reminder:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Send "Event Created" notification
+   * Automatically uses batch if there are members to notify
+   */
+  const notifyEventCreated = async (event, membersToNotify = [], customData = {}) => {
     const title = "New Event Created";
     const body = `${event.title} on ${DateTime.fromISO(event.startTime).toFormat('MMM d')}`;
     const data = {
@@ -71,17 +139,11 @@ const notifyEventCreated = async (event, membersToNotify = [], customData = {}) 
   };
 
   /**
- * Send "Activity Created" notification
- * Generic for any activity type (checklist, workout, golf round, etc.)
- * Automatically uses batch if there are members to notify
- * 
- * @param {Object} activity - Activity object
- * @param {string} activityType - Type for display ('Checklist', 'Workout', 'Golf Round', etc.)
- * @param {Object} event - Optional event object if activity is attached to an event
- * @param {Array} membersToNotify - Array of user IDs to notify
- * @param {Object} customData - Custom data to include in notification
- */
-const notifyActivityCreated = async (
+   * Send "Activity Created" notification
+   * Generic for any activity type (checklist, workout, golf round, etc.)
+   * Automatically uses batch if there are members to notify
+   */
+  const notifyActivityCreated = async (
     activity,
     activityType = 'Activity',
     event = null,
@@ -90,7 +152,6 @@ const notifyActivityCreated = async (
   ) => {
     const title = `New ${activityType} Added`;
     
-    // Build body with event context if available
     let body = activity.name;
     if (event) {
       const eventDate = DateTime.fromISO(event.startTime).toFormat('MMM d');
@@ -104,14 +165,12 @@ const notifyActivityCreated = async (
       ...customData,
     };
   
-    // Filter out the creator
     const recipients = membersToNotify.filter(id => id !== userId);
     
     if (recipients.length === 0) {
       return { success: true, skipped: true };
     }
   
-    // Use batch for any number of recipients (1 or more)
     return await sendBatchNotification(recipients, title, body, data);
   };
   
@@ -139,7 +198,6 @@ const notifyActivityCreated = async (
       ...customData,
     };
   
-    // If group event (has members to notify)
     if (membersToNotify.length > 0) {
       return await scheduleBatchNotification(
         membersToNotify,
@@ -150,7 +208,6 @@ const notifyActivityCreated = async (
       );
     }
   
-    // Personal event - notify creator only
     return await scheduleNotification(
       userId,
       title,
@@ -163,13 +220,6 @@ const notifyActivityCreated = async (
 
   /**
    * Schedule activity reminder notification (generic for any activity type)
-   * Handles both specific time and event-relative reminders
-   * 
-   * @param {Object} activity - Activity object (checklist, workout, golf round, etc.)
-   * @param {string} activityType - Type for display ('Checklist', 'Workout', 'Golf Round', etc.)
-   * @param {string} eventId - Optional event ID if activity is attached to an event
-   * @param {string} eventStartTime - Optional event start time for relative reminders
-   * @param {Object} customData - Custom data to include in notification
    */
   const scheduleActivityReminder = async (
     activity, 
@@ -180,21 +230,15 @@ const notifyActivityCreated = async (
   ) => {
     let reminderTime;
 
-    // Relative reminder (X minutes before event)
     if (activity.reminderMinutes && eventStartTime) {
       const eventTime = DateTime.fromISO(eventStartTime);
       reminderTime = eventTime.minus({ minutes: activity.reminderMinutes });
-    }
-    // Specific time reminder (all-day events or pinned activities)
-    else if (activity.reminderTime) {
+    } else if (activity.reminderTime) {
       reminderTime = DateTime.fromISO(activity.reminderTime);
-    }
-    // No reminder set
-    else {
+    } else {
       return { success: true, skipped: true };
     }
 
-    // Don't schedule past reminders
     if (reminderTime < DateTime.now()) {
       console.log('⏰ Activity reminder time is in the past, skipping');
       return { success: true, skipped: true };
@@ -202,7 +246,6 @@ const notifyActivityCreated = async (
 
     const title = `${activityType} Reminder: ${activity.name}`;
     
-    // Build body based on activity type/content
     let body = activity.name;
     if (activity.items?.length) {
       const itemCount = activity.items.length;
@@ -213,7 +256,7 @@ const notifyActivityCreated = async (
       screen: eventId ? 'Calendar' : 'Pinned',
       eventId: eventId,
       activityId: activity.id,
-      ...customData, // Allow override/additional data
+      ...customData,
     };
 
     return await scheduleNotification(
@@ -228,7 +271,6 @@ const notifyActivityCreated = async (
 
   /**
    * Send immediate notification (generic)
-   * For custom use cases
    */
   const sendImmediate = async (recipients, title, body, data = {}) => {
     if (Array.isArray(recipients) && recipients.length > 1) {
@@ -241,7 +283,6 @@ const notifyActivityCreated = async (
 
   /**
    * Schedule notification (generic)
-   * For custom use cases
    */
   const scheduleForLater = async (recipients, title, body, scheduledFor, data = {}) => {
     if (Array.isArray(recipients) && recipients.length > 1) {
@@ -256,11 +297,16 @@ const notifyActivityCreated = async (
     // Deletion
     deleteNotificationsByEventId,
     
+    // Group helpers (NEW)
+    getGroupMemberIds,
+    notifyGroupMembers,
+    scheduleGroupReminder,
+    
     // Specific helpers
     notifyEventCreated,
     notifyActivityCreated,
     scheduleEventReminder,
-    scheduleActivityReminder, // ✅ Generic for all activities
+    scheduleActivityReminder,
     
     // Generic helpers
     sendImmediate,

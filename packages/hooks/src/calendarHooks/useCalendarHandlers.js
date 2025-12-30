@@ -1,11 +1,12 @@
 import { Alert } from 'react-native';
-import { useDeleteFromGoogleCalendar } from '../useDeleteFromGoogleCalendar';
-import { useDeleteInternalEvent } from '../useDeleteInternalEvent';
+import { useDeleteFromGoogleCalendar } from '../googleCalendarHooks/useDeleteFromGoogleCalendar';
+import { useDeleteInternalEvent } from '../internalCalendarHooks/useDeleteInternalEvent';
 import { useDeleteIcalEvent } from '../useDeleteIcalEvent';
 import { useUpdateInternalActivities } from '../useUpdateInternalActivities';
 import { useUpdateExternalActivities } from '../useUpdateExternalActivities';
 import { useDeleteNotification } from '../useDeleteNotification';
-import { scheduleNotification } from '@my-apps/services';
+import { useNotifications } from '../notificationHooks/useNotifications';
+import { useData } from '@my-apps/contexts';
 
 /**
  * Remove undefined values from object (Firestore doesn't allow undefined)
@@ -46,6 +47,9 @@ export const useCalendarHandlers = ({
   selectedEvent,
   updatedItems,
 }) => {
+  // Get full calendar data and admin ID from context
+  const { allCalendars, adminUserId } = useData();
+
   // Hooks for operations
   const deleteFromGoogleCalendar = useDeleteFromGoogleCalendar();
   const deleteInternalEvent = useDeleteInternalEvent();
@@ -53,6 +57,13 @@ export const useCalendarHandlers = ({
   const updateExternalActivities = useUpdateExternalActivities();
   const updateInternalActivities = useUpdateInternalActivities();
   const deleteNotification = useDeleteNotification();
+  
+  // Notification hooks
+  const {
+    notifyActivityCreated,
+    scheduleActivityReminder,
+    scheduleBatchNotification,
+  } = useNotifications();
 
   // ==========================================
   // EVENT OPERATIONS
@@ -173,7 +184,7 @@ export const useCalendarHandlers = ({
   };
 
   const handleAddChecklist = (event) => {
-    console.log("Add checklist to event:", event);
+    console.log("🔍 Add checklist to event:", event);
     setSelectedEvent(event);
     setAddChecklistModalVisible(true);
   };
@@ -202,14 +213,12 @@ export const useCalendarHandlers = ({
       }
 
       // Add notifyAdmin if enabled
-if (checklist.notifyAdmin) {
-  newActivity.notifyAdmin = true;
-}
-
+      if (checklist.notifyAdmin) {
+        newActivity.notifyAdmin = true;
+      }
 
       // Clean undefined values before saving
       const cleanedActivity = cleanUndefined(newActivity);
-      console.log("🧹 Cleaned activity:", cleanedActivity);
 
       // Add to event's activities
       const currentActivities = selectedEvent?.activities || [];
@@ -237,17 +246,20 @@ if (checklist.notifyAdmin) {
           `Checklist added to "${selectedEvent.title}"`
         );
 
-        // Schedule notification based on event type
-        if (selectedEvent.isAllDay && checklist.reminderTime) {
-          const reminderTime = new Date(checklist.reminderTime);
+        // Get full calendar with subscribers from DataContext
+        const fullCalendar = allCalendars[selectedEvent.calendarId];
+        const subscribers = fullCalendar?.subscribingUsers || [];
+        const isSharedEvent = subscribers.length > 1;
 
-          if (reminderTime > new Date()) {
-            scheduleNotification(
-              user.userId,
-              `Checklist Reminder: ${checklist.name}`,
-              `Complete checklist for "${selectedEvent.title}"`,
-              `${selectedEvent.eventId}-checklist-${checklist.id}`,
-              reminderTime,
+        // 1. IMMEDIATE NOTIFICATION: Notify other subscribers (exclude creator)
+        if (isSharedEvent) {
+          console.log(`📢 Notifying subscribers about new checklist: ${checklist.name}`);
+          try {
+            await notifyActivityCreated(
+              checklist,
+              'Checklist',
+              selectedEvent,
+              subscribers,
               {
                 screen: "Calendar",
                 eventId: selectedEvent.eventId,
@@ -255,30 +267,73 @@ if (checklist.notifyAdmin) {
                 activityModalOpen: true,
                 app: "checklist-app",
               }
-            ).catch(console.error);
+            );
+            console.log("✅ Subscribers notified");
+          } catch (error) {
+            console.error("❌ Failed to notify subscribers:", error);
           }
-        } else if (!selectedEvent.isAllDay && checklist.reminderMinutes != null) {
-          const eventStart = new Date(selectedEvent.startTime);
-          const reminderTime = new Date(eventStart);
-          reminderTime.setMinutes(
-            reminderTime.getMinutes() - checklist.reminderMinutes
-          );
+        }
+
+        // 2. SCHEDULED REMINDER: Schedule for ALL subscribers (including creator)
+        const hasReminder = (selectedEvent.isAllDay && checklist.reminderTime) ||
+                          (!selectedEvent.isAllDay && checklist.reminderMinutes != null);
+
+        if (hasReminder) {
+          let reminderTime;
+          
+          if (selectedEvent.isAllDay) {
+            reminderTime = new Date(checklist.reminderTime);
+          } else {
+            const eventStart = new Date(selectedEvent.startTime);
+            reminderTime = new Date(eventStart);
+            reminderTime.setMinutes(reminderTime.getMinutes() - checklist.reminderMinutes);
+          }
 
           if (reminderTime > new Date()) {
-            scheduleNotification(
-              user.userId,
-              `Checklist Reminder: ${checklist.name}`,
-              `Complete checklist for "${selectedEvent.title}"`,
-              `${selectedEvent.eventId}-checklist-${checklist.id}`,
-              reminderTime,
-              {
-                screen: "Calendar",
-                eventId: selectedEvent.eventId,
-                checklistId: checklist.id,
-                activityModalOpen: true,
-                app: "checklist-app",
+            try {
+              if (isSharedEvent) {
+                // Schedule for ALL subscribers (including creator)
+                console.log(`⏰ Scheduling checklist reminder for ${subscribers.length} subscriber(s)`);
+                
+                await scheduleBatchNotification(
+                  subscribers,
+                  `Checklist Reminder: ${checklist.name}`,
+                  `Complete checklist for "${selectedEvent.title}"`,
+                  reminderTime,
+                  {
+                    screen: "Calendar",
+                    eventId: selectedEvent.eventId,
+                    checklistId: checklist.id,
+                    activityModalOpen: true,
+                    app: "checklist-app",
+                  }
+                );
+                console.log("✅ Batch reminders scheduled");
+              } else {
+                // Personal event - just remind creator
+                console.log(`⏰ Scheduling personal checklist reminder`);
+                await scheduleActivityReminder(
+                  {
+                    id: checklist.id,
+                    name: checklist.name,
+                    reminderTime: reminderTime.toISOString(),
+                  },
+                  'Checklist',
+                  selectedEvent.eventId,
+                  null,
+                  {
+                    screen: "Calendar",
+                    eventId: selectedEvent.eventId,
+                    checklistId: checklist.id,
+                    activityModalOpen: true,
+                    app: "checklist-app",
+                  }
+                );
+                console.log("✅ Personal reminder scheduled");
               }
-            ).catch(console.error);
+            } catch (error) {
+              console.error("❌ Failed to schedule reminder:", error);
+            }
           }
         }
       } else {
@@ -303,10 +358,21 @@ if (checklist.notifyAdmin) {
       items: updatedItems,
       updatedAt: new Date().toISOString(),
     };
-    await handleUpdateChecklist(updatedChecklist, closeViewChecklistModal);
+
+    // Check if this is the first completion
+    const wasJustCompleted = 
+      !selectedChecklist.completedAt && // Never completed before
+      updatedItems.every(item => item.completed); // All items now completed
+    
+    if (wasJustCompleted) {
+      updatedChecklist.completedAt = new Date().toISOString();
+      console.log("🎉 Checklist completed for the first time!");
+    }
+    
+    await handleUpdateChecklist(updatedChecklist, closeViewChecklistModal, wasJustCompleted);
   };
 
-  const handleUpdateChecklist = async (updatedChecklist, onClose) => {
+  const handleUpdateChecklist = async (updatedChecklist, onClose, wasJustCompleted = false) => {
     try {
       console.log("💾 Updating checklist:", updatedChecklist.name);
 
@@ -325,6 +391,11 @@ if (checklist.notifyAdmin) {
           // Only add notifyAdmin if it exists
           if (updatedChecklist.notifyAdmin !== undefined) {
             updated.notifyAdmin = updatedChecklist.notifyAdmin;
+          }
+
+          // Add completedAt if exists (tracks first completion)
+          if (updatedChecklist.completedAt) {
+            updated.completedAt = updatedChecklist.completedAt;
           }
 
           // Handle reminder based on event type
@@ -364,52 +435,98 @@ if (checklist.notifyAdmin) {
       if (result.success) {
         Alert.alert("Success", `Checklist "${updatedChecklist.name}" updated`);
 
-        // Cancel old notification
+        // ADMIN NOTIFICATION: Send on first completion if enabled
+        if (wasJustCompleted && updatedChecklist.notifyAdmin) {
+          console.log(`📧 Sending completion notification to admin: ${adminUserId}`);
+          try {
+            const { sendNotification } = await import("@my-apps/services");
+            await sendNotification(
+              adminUserId,
+              `✅ Checklist Completed: ${updatedChecklist.name}`,
+              `"${updatedChecklist.name}" was completed for "${selectedChecklistEvent.title}"`,
+              {
+                screen: "Calendar",
+                eventId: selectedChecklistEvent.eventId,
+                checklistId: updatedChecklist.id,
+                activityModalOpen: true,
+                app: "checklist-app",
+              }
+            );
+            console.log("✅ Admin notified of completion");
+          } catch (error) {
+            console.error("❌ Failed to notify admin:", error);
+          }
+        }
+
+        // Get full calendar with subscribers from DataContext
+        const fullCalendar = allCalendars[selectedChecklistEvent.calendarId];
+        const subscribers = fullCalendar?.subscribingUsers || [];
+        const isSharedEvent = subscribers.length > 1;
+
+        // Cancel old notifications for ALL subscribers
         const notificationId = `${selectedChecklistEvent.eventId}-checklist-${updatedChecklist.id}`;
         await deleteNotification(notificationId);
 
-        // Schedule new notification based on event type
-        if (selectedChecklistEvent.isAllDay && updatedChecklist.reminderTime) {
-          const reminderTime = new Date(updatedChecklist.reminderTime);
+        // Schedule new reminders for ALL subscribers (including creator)
+        const hasReminder = (selectedChecklistEvent.isAllDay && updatedChecklist.reminderTime) ||
+                          (!selectedChecklistEvent.isAllDay && updatedChecklist.reminderMinutes != null);
 
-          if (reminderTime > new Date()) {
-            scheduleNotification(
-              user.userId,
-              `Checklist Reminder: ${updatedChecklist.name}`,
-              `Complete checklist for "${selectedChecklistEvent.title}"`,
-              notificationId,
-              reminderTime,
-              {
-                screen: "Calendar",
-                eventId: selectedChecklistEvent.eventId,
-                checklistId: updatedChecklist.id,
-                activityModalOpen: true,
-                app: "checklist-app",
-              }
-            ).catch(console.error);
+        if (hasReminder) {
+          let reminderTime;
+          
+          if (selectedChecklistEvent.isAllDay) {
+            reminderTime = new Date(updatedChecklist.reminderTime);
+          } else {
+            const eventStart = new Date(selectedChecklistEvent.startTime);
+            reminderTime = new Date(eventStart);
+            reminderTime.setMinutes(reminderTime.getMinutes() - updatedChecklist.reminderMinutes);
           }
-        } else if (!selectedChecklistEvent.isAllDay && updatedChecklist.reminderMinutes != null) {
-          const eventStart = new Date(selectedChecklistEvent.startTime);
-          const reminderTime = new Date(eventStart);
-          reminderTime.setMinutes(
-            reminderTime.getMinutes() - updatedChecklist.reminderMinutes
-          );
 
           if (reminderTime > new Date()) {
-            scheduleNotification(
-              user.userId,
-              `Checklist Reminder: ${updatedChecklist.name}`,
-              `Complete checklist for "${selectedChecklistEvent.title}"`,
-              notificationId,
-              reminderTime,
-              {
-                screen: "Calendar",
-                eventId: selectedChecklistEvent.eventId,
-                checklistId: updatedChecklist.id,
-                activityModalOpen: true,
-                app: "checklist-app",
+            try {
+              if (isSharedEvent) {
+                // Schedule for ALL subscribers (including creator)
+                console.log(`⏰ Rescheduling checklist reminder for ${subscribers.length} subscriber(s)`);
+                
+                await scheduleBatchNotification(
+                  subscribers,
+                  `Checklist Reminder: ${updatedChecklist.name}`,
+                  `Complete checklist for "${selectedChecklistEvent.title}"`,
+                  reminderTime,
+                  {
+                    screen: "Calendar",
+                    eventId: selectedChecklistEvent.eventId,
+                    checklistId: updatedChecklist.id,
+                    activityModalOpen: true,
+                    app: "checklist-app",
+                  }
+                );
+                console.log("✅ Batch reminders rescheduled");
+              } else {
+                // Personal event
+                console.log(`⏰ Rescheduling personal checklist reminder`);
+                await scheduleActivityReminder(
+                  {
+                    id: updatedChecklist.id,
+                    name: updatedChecklist.name,
+                    reminderTime: reminderTime.toISOString(),
+                  },
+                  'Checklist',
+                  selectedChecklistEvent.eventId,
+                  null,
+                  {
+                    screen: "Calendar",
+                    eventId: selectedChecklistEvent.eventId,
+                    checklistId: updatedChecklist.id,
+                    activityModalOpen: true,
+                    app: "checklist-app",
+                  }
+                );
+                console.log("✅ Personal reminder rescheduled");
               }
-            ).catch(console.error);
+            } catch (error) {
+              console.error("❌ Failed to reschedule reminder:", error);
+            }
           }
         }
       } else {
@@ -444,7 +561,7 @@ if (checklist.notifyAdmin) {
               const currentActivities = event.activities || [];
               const updatedActivities = currentActivities
                 .filter((a) => a.id !== activity.id)
-                .map(cleanUndefined); // Clean remaining activities
+                .map(cleanUndefined);
 
               let result;
               if (event.calendarId === "internal") {

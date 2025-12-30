@@ -1,3 +1,7 @@
 export { default as ChecklistModal } from './ChecklistModal';
 export { default as CustomReminderModal } from './CustomReminderModal';
 export { default as TimePickerModal } from './TimePickerModal';
+export { default as SharedEventModal } from './SharedEventModal';
+export { default as ChecklistItemConfigModal } from './ChecklistItemConfigModal';
+export { default as MultipleChoiceSelectionModal } from './MultipleChoiceSelectionModals';
+export { default as FillInSelectionModal } from './FillInSelectionModal';

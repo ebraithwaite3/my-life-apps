@@ -94,11 +94,12 @@ export const scheduleBatchNotification = async (userIds, title, body, scheduledF
     for (const userId of userIds) {
       const notificationData = {
         userId,
+        eventId: data.eventId, // ← ADD THIS (extract from data)
         title,
         body,
         data: {
           ...data,
-          app: data.app || 'organizer-app',
+          app: data.app || 'checklist-app',
         },
         scheduledFor: Timestamp.fromDate(scheduledFor),
         createdAt: Timestamp.now(),

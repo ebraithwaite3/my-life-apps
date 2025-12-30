@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { SelectorRow, OptionsSelectionModal } from "@my-apps/ui";
+import OptionsSelectionModal from "../modals/composed/pickers/OptionsSelectionModal";
+import SelectorRow from "./SelectorRow";
 import CustomReminderModal from "../modals/composed/modals/CustomReminderModal";
 import { DateTime } from "luxon";
 

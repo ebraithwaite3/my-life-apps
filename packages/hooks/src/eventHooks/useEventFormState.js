@@ -1,8 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
-import { DateTime } from 'luxon';
+import { useState, useEffect, useMemo } from "react";
+import { DateTime } from "luxon";
+import { useData } from "@my-apps/contexts";
 
 const getStartOfDay = (date = null) =>
-  (date ? DateTime.fromJSDate(date) : DateTime.local()).startOf("day").toJSDate();
+  (date ? DateTime.fromJSDate(date) : DateTime.local())
+    .startOf("day")
+    .toJSDate();
 
 const getEndOfDay = (date = null) =>
   (date ? DateTime.fromJSDate(date) : DateTime.local()).endOf("day").toJSDate();
@@ -11,7 +14,7 @@ const getEndOfDay = (date = null) =>
 const getRoundedToNearestHalfHour = (date = null) => {
   const dt = date ? DateTime.fromJSDate(date) : DateTime.now();
   const minutes = dt.minute;
-  
+
   let roundedMinutes;
   if (minutes < 15) {
     // 0-14 minutes → round down to :00
@@ -21,10 +24,15 @@ const getRoundedToNearestHalfHour = (date = null) => {
     roundedMinutes = 30;
   } else {
     // 45-59 minutes → round up to next hour :00
-    return dt.plus({ hours: 1 }).set({ minute: 0, second: 0, millisecond: 0 }).toJSDate();
+    return dt
+      .plus({ hours: 1 })
+      .set({ minute: 0, second: 0, millisecond: 0 })
+      .toJSDate();
   }
-  
-  return dt.set({ minute: roundedMinutes, second: 0, millisecond: 0 }).toJSDate();
+
+  return dt
+    .set({ minute: roundedMinutes, second: 0, millisecond: 0 })
+    .toJSDate();
 };
 
 // NEW: Get 1 hour after rounded time
@@ -45,9 +53,11 @@ export const useEventFormState = ({
   userCalendars = [],
   groups = [],
   defaultTitle = "Event",
-  userPreferences = {}, 
+  userPreferences = {},
 }) => {
   console.log("GRoups in useEventFormState:", groups);
+  const { allCalendars: fullCalendars } = useData();
+
   const isEditing = event !== null;
 
   // Build available calendars
@@ -71,20 +81,19 @@ export const useEventFormState = ({
       ...userCalendars.filter((cal) => cal.calendarType === "google"),
     ];
 
-    return [
-      ...externalAndGroupCalendars,
-      internalCalendar,
-    ];
+    return [...externalAndGroupCalendars, internalCalendar];
   }, [userCalendars, groups]);
-  console.log("✅ useEventFormState - availableCalendars:", availableCalendars);
 
   const defaultCalendarId = useMemo(() => {
     const preferenceId = userPreferences?.defaultCalendarId;
-    
-    if (preferenceId && availableCalendars.some(cal => cal.calendarId === preferenceId)) {
+
+    if (
+      preferenceId &&
+      availableCalendars.some((cal) => cal.calendarId === preferenceId)
+    ) {
       return preferenceId;
     }
-    
+
     if (availableCalendars.length > 0) {
       return availableCalendars[0].calendarId;
     }
@@ -97,49 +106,55 @@ export const useEventFormState = ({
   const [isAllDay, setIsAllDay] = useState(false); // Already false, confirmed!
   const [startDate, setStartDate] = useState(getRoundedToNearestHalfHour);
   const [endDate, setEndDate] = useState(getOneHourAfterRounded);
-  
-  const [selectedCalendarId, setSelectedCalendarId] = useState(defaultCalendarId);
-  
+
+  const [selectedCalendarId, setSelectedCalendarId] =
+    useState(defaultCalendarId);
+
   const membersToNotify = useMemo(() => {
-    let memberIds = [];
-    let targetGroup = null;
-    let effectiveDontNotifyList = [];
+    // Safety check - fullCalendars might be undefined/loading
+    if (!fullCalendars || !selectedCalendarId) {
+      return [];
+    }
 
-    const selectedCalendar = availableCalendars.find(
-        (cal) => cal.calendarId === selectedCalendarId
+    // Get the full calendar document (not just metadata)
+    const fullCalendar = fullCalendars[selectedCalendarId];
+
+    if (!fullCalendar) {
+      console.log("No full calendar found for:", selectedCalendarId);
+      // Find the group, based on selectedCalendarId with group- removed, in the groups array
+      const groupId =
+        selectedCalendarId.startsWith("group-") &&
+        selectedCalendarId.replace("group-", "");
+      const group = groups.find((g) => g.groupId === groupId);
+      if (group) {
+        // map through and create an array of member userIds
+        const memberIds = group.members
+          ? group.members.map((member) => member.userId)
+          : [];
+        console.log(
+          `➡️ Group members for ${selectedCalendarId}:`,
+          memberIds
+        );
+        return memberIds;
+      }
+      return [];
+    }
+
+    // Use calendar's subscribingUsers directly
+    const subscribers = fullCalendar.subscribingUsers || [];
+
+    console.log(
+      `➡️ Calendar subscribers for ${selectedCalendarId}:`,
+      subscribers
     );
-    
-    if (selectedCalendarId.startsWith('group-')) {
-        const groupIdMatch = selectedCalendarId.replace('group-', '');
-        targetGroup = groups.find((g) => g.groupId === groupIdMatch);
-        effectiveDontNotifyList = targetGroup?.dontNotify || []; 
-    } 
-    else if (selectedCalendar && selectedCalendar.groupId) {
-        targetGroup = groups.find((g) => g.groupId === selectedCalendar.groupId);
-        effectiveDontNotifyList = selectedCalendar.dontNotify || [];
-    }
-    
-    if (targetGroup) {
-      console.log("1. TARGET GROUP ID:", targetGroup.groupId);
-      console.log("2. ALL GROUP MEMBERS:", targetGroup.members.map(m => m.userId));
-      console.log("3. EXCLUSION LIST:", effectiveDontNotifyList);
-      
-      const isTestUserInBase = targetGroup.members.some(m => m.userId === "eylhN1q46shFnFu6FdxgKqI2I1g2");
-      console.log("4. IS TEST USER IN BASE MEMBERS LIST?", isTestUserInBase);
-      
-      const isTestUserExcluded = effectiveDontNotifyList.includes("eylhN1q46shFnFu6FdxgKqI2I1g2");
-      console.log("5. IS TEST USER IN DONT NOTIFY LIST?", isTestUserExcluded);
+    return subscribers;
+  }, [selectedCalendarId, fullCalendars]);
+  console.log("✅ useEventFormState - membersToNotify**:", membersToNotify);
 
-      memberIds = targetGroup.members
-          .filter((member) => !effectiveDontNotifyList.includes(member.userId))
-          .map((member) => member.userId);
-    }
-    
-    console.log(`➡️ membersToNotify calculated for ${selectedCalendarId}:`, memberIds);
-    return memberIds;
-  }, [selectedCalendarId, availableCalendars, groups]);
-  
-  console.log("✅ useEventFormState - selectedCalendarId:", selectedCalendarId);
+  console.log(
+    "✅ useEventFormState** - selectedCalendarId:",
+    selectedCalendarId
+  );
   const [description, setDescription] = useState("");
   const [reminderMinutes, setReminderMinutes] = useState(null);
   const [errors, setErrors] = useState([]);
@@ -167,56 +182,59 @@ export const useEventFormState = ({
   const [selectedActivity, setSelectedActivity] = useState(null);
 
   // Initialize form when modal opens
-useEffect(() => {
-  if (!isVisible) return;
+  useEffect(() => {
+    if (!isVisible) return;
 
-  if (isEditing && event) {
-    setTitle(event.title || defaultTitle);
-    setIsAllDay(event.isAllDay ?? false);
-    setSelectedCalendarId(event.calendarId || defaultCalendarId); 
-    setDescription(event.description || "");
-    setReminderMinutes(event.reminderMinutes ?? null);
+    // If we have an event (either editing OR adding activity to existing event)
+    if (event) {
+      console.log("📅 Initializing with event data:", event.calendarId);
+      setTitle(event.title || defaultTitle);
+      setIsAllDay(event.isAllDay ?? false);
+      setSelectedCalendarId(event.calendarId || defaultCalendarId); // ← Use event's calendar!
+      setDescription(event.description || "");
+      setReminderMinutes(event.reminderMinutes ?? null);
 
-    if (event.startTime) setStartDate(new Date(event.startTime));
-    if (event.endTime) setEndDate(new Date(event.endTime));
-  } else {
-    // NEW EVENT: Always use rounded current time
-    let newStartDate, newEndDate;
-    
-    if (initialDate && DateTime.fromISO(initialDate).isValid) {
-      // If initialDate provided, use that DATE but with current rounded TIME
-      const targetDate = DateTime.fromISO(initialDate);
-      const now = DateTime.now();
-      const roundedNow = DateTime.fromJSDate(getRoundedToNearestHalfHour());
-      
-      // Combine target date with rounded current time
-      newStartDate = targetDate.set({
-        hour: roundedNow.hour,
-        minute: roundedNow.minute,
-        second: 0,
-        millisecond: 0
-      }).toJSDate();
-      
-      newEndDate = DateTime.fromJSDate(newStartDate).plus({ hours: 1 }).toJSDate();
+      if (event.startTime) setStartDate(new Date(event.startTime));
+      if (event.endTime) setEndDate(new Date(event.endTime));
     } else {
-      // No initialDate: use rounded current time
-      newStartDate = getRoundedToNearestHalfHour();
-      newEndDate = getOneHourAfterRounded();
-    }
-    
-    setStartDate(newStartDate);
-    setEndDate(newEndDate);
-    setTitle(defaultTitle);
-    setIsAllDay(false);
-    setReminderMinutes(null);
-    setSelectedCalendarId(defaultCalendarId);
-    setDescription("");
-    setSelectedActivity(null);
-  }
+      // NEW EVENT: No event object, use defaults
+      let newStartDate, newEndDate;
 
-  setErrors([]);
-  setCurrentScreen("event");
-}, [isVisible, event, initialDate, isEditing, defaultTitle, defaultCalendarId]);
+      if (initialDate && DateTime.fromISO(initialDate).isValid) {
+        const targetDate = DateTime.fromISO(initialDate);
+        const now = DateTime.now();
+        const roundedNow = DateTime.fromJSDate(getRoundedToNearestHalfHour());
+
+        newStartDate = targetDate
+          .set({
+            hour: roundedNow.hour,
+            minute: roundedNow.minute,
+            second: 0,
+            millisecond: 0,
+          })
+          .toJSDate();
+
+        newEndDate = DateTime.fromJSDate(newStartDate)
+          .plus({ hours: 1 })
+          .toJSDate();
+      } else {
+        newStartDate = getRoundedToNearestHalfHour();
+        newEndDate = getOneHourAfterRounded();
+      }
+
+      setStartDate(newStartDate);
+      setEndDate(newEndDate);
+      setTitle(defaultTitle);
+      setIsAllDay(false);
+      setReminderMinutes(null);
+      setSelectedCalendarId(defaultCalendarId); // ← Use default for NEW events
+      setDescription("");
+      setSelectedActivity(null);
+    }
+
+    setErrors([]);
+    setCurrentScreen("event");
+  }, [isVisible, event, initialDate, defaultTitle, defaultCalendarId]);
 
   // Picker handlers
   const openPicker = (target, mode) => {

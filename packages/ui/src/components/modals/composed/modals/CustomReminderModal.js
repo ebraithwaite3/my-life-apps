@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { PopUpModalWrapper, ModalHeader } from "@my-apps/ui";
+import { ModalHeader } from "../../../headers";
+import { PopUpModalWrapper } from "../../base";
 import { useTheme } from "@my-apps/contexts";
 import { DateTime } from "luxon";
 import SpinnerPickerContent from "../../content/pickers/SpinnerPickerContent";

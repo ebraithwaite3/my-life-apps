@@ -22,11 +22,12 @@ import {
   ReminderSelector,
 } from "@my-apps/ui";
 import { useAuth } from "@my-apps/contexts";
-import { LoadingScreen } from "@my-apps/screens";
+import { LoadingScreen } from "@my-apps/ui";
 import {
   useEventFormState,
   useEventValidation,
   useEventCreation,
+  useEventUpdate,
   useChecklistTemplates,
 } from "@my-apps/hooks";
 
@@ -47,7 +48,8 @@ const ChecklistEventModal = ({
   const editChecklistRef = useRef(null);
 
   // Use the template hook
-  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
+  const { allTemplates, saveTemplate, promptForContext } =
+    useChecklistTemplates();
 
   // HOOK 1: Form state (shared)
   const formState = useEventFormState({
@@ -59,12 +61,15 @@ const ChecklistEventModal = ({
     defaultTitle: "Checklist",
     userPreferences: user?.preferences,
   });
+  console.log("Are we editing?", formState.isEditing);
 
   // HOOK 2: Validation (shared)
   const { validateEvent } = useEventValidation();
 
   // HOOK 3: Event creation (shared)
   const { createEvent } = useEventCreation({ user, db });
+  // HOOK 4: Event update (shared)
+  const { updateEvent } = useEventUpdate({ user, db });
 
   // Modal state
   const [showCalendarModal, setShowCalendarModal] = useState(false);
@@ -84,18 +89,6 @@ const ChecklistEventModal = ({
       template: template,
     })),
   ];
-
-  // Helper function to format reminder time
-  const getReminderLabel = (reminderISO) => {
-    if (!reminderISO) return "No Alert";
-    try {
-      const dt = DateTime.fromISO(reminderISO);
-      if (dt.isValid) return dt.toFormat("EEE, MMM d 'at' h:mm a");
-    } catch (error) {
-      console.error("Error parsing reminder:", error);
-    }
-    return "No Alert";
-  };
 
   // Handle calendar selector press
   const handleCalendarSelectorPress = () => {
@@ -175,7 +168,7 @@ const ChecklistEventModal = ({
       startDate: formState.startDate,
       endDate: formState.endDate,
       selectedActivity: formState.selectedActivity,
-      activityRequired: true,
+      activityRequired: !formState.isEditing,
       activityName: "checklist",
     });
 
@@ -187,7 +180,9 @@ const ChecklistEventModal = ({
     formState.setIsLoading(true);
 
     // Build activity data
-    const activities = formState.selectedActivity
+    const activities = formState.isEditing
+      ? event.activities || [] // ← Preserve existing activities when editing
+      : formState.selectedActivity
       ? [
           {
             id: formState.selectedActivity.id,
@@ -203,7 +198,24 @@ const ChecklistEventModal = ({
       : [];
 
     // Create event
-    const result = await createEvent({
+    const result = formState.isEditing
+      ? await updateEvent({
+          eventId: event.eventId,
+          originalStartTime: event.startTime,
+          title: formState.title,
+          description: formState.description,
+          startDate: formState.startDate,
+          endDate: formState.endDate,
+          isAllDay: formState.isAllDay,
+          selectedCalendarId: formState.selectedCalendarId,
+          selectedCalendar: formState.selectedCalendar,
+          reminderMinutes: formState.reminderMinutes,
+          activities,
+          appName: "checklist",
+          membersToNotify: formState.membersToNotify,
+        })
+      : 
+    await createEvent({
       title: formState.title,
       description: formState.description,
       startDate: formState.startDate,
@@ -215,6 +227,7 @@ const ChecklistEventModal = ({
       activities,
       appName: "checklist",
       notifyAdmin: formState.selectedActivity?.notifyAdmin || false,
+      membersToNotify: formState.membersToNotify,
     });
 
     formState.setIsLoading(false);
@@ -301,13 +314,15 @@ const ChecklistEventModal = ({
                     autoCapitalize="words"
                   />
 
-                  <ChecklistSelector
-                    label="Checklist"
-                    selectedChecklist={formState.selectedActivity}
-                    savedChecklists={allTemplates}
-                    onPress={handleChecklistSelectorPress}
-                    onClear={() => formState.setSelectedActivity(null)}
-                  />
+                  {!formState.isEditing && (
+                    <ChecklistSelector
+                      label="Checklist"
+                      selectedChecklist={formState.selectedActivity}
+                      savedChecklists={allTemplates}
+                      onPress={handleChecklistSelectorPress}
+                      onClear={() => formState.setSelectedActivity(null)}
+                    />
+                  )}
 
                   <SelectorRow
                     label="Calendar"
@@ -416,20 +431,20 @@ const ChecklistEventModal = ({
               onSave={(checklist, shouldSaveAsTemplate) => {
                 // Save the checklist to the event
                 formState.setSelectedActivity(checklist);
-                
+
                 // If "Save as Template" toggle was ON, save as template
                 if (shouldSaveAsTemplate) {
                   promptForContext(async (context) => {
                     const success = await saveTemplate(checklist, context);
                     if (success) {
                       Alert.alert(
-                        "Success", 
+                        "Success",
                         `Template "${checklist.name}" saved successfully`
                       );
                     }
                   });
                 }
-                
+
                 // Return to event screen
                 formState.setCurrentScreen("event");
               }}

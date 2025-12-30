@@ -1,12 +1,13 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { SharedCalendarScreen } from '@my-apps/screens';
-import { ChecklistModal } from '@my-apps/ui';
-import ChecklistEventModal from '../components/modals/ChecklistEventModal';
+import { ChecklistModal, SharedEventModal, ChecklistSelector, EditChecklistContent } from '@my-apps/ui';
+// import ChecklistEventModal from '../components/modals/ChecklistEventModal';
 import { useData } from '@my-apps/contexts';
 import { 
   useCalendarState,
   useCalendarEvents,
   useCalendarHandlers,
+  useChecklistTemplates,
 } from "@my-apps/hooks";
 
 /**
@@ -67,6 +68,9 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     selectedEvent: calendarState.selectedEvent,
     updatedItems: calendarState.updatedItems,
   });
+
+  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
+  const [selectedChecklist, setSelectedChecklist] = useState(null);
 
   // Handle navigation params for deep links (notifications, etc.)
   useEffect(() => {
@@ -142,14 +146,56 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
       />
 
       {/* Event Creation Modal */}
-      <ChecklistEventModal
+      {/* <ChecklistEventModal
         isVisible={calendarState.eventModalVisible}
-        onClose={() => calendarState.setEventModalVisible(false)}
+        onClose={() => {
+          calendarState.setSelectedEvent(null); // ← Clear the event
+          calendarState.setEventModalVisible(false);
+        }}
         event={calendarState.selectedEvent}
         userCalendars={user?.calendars || []}
         groups={groups || []}
         initialDate={selectedDate}
         user={user}
+      /> */}
+
+      {/* Shared Event Modal with Checklist Configuration */}
+      <SharedEventModal
+        isVisible={calendarState.eventModalVisible}
+        onClose={() => {
+          calendarState.setSelectedEvent(null);
+          calendarState.setEventModalVisible(false);
+        }}
+        event={calendarState.selectedEvent}
+        userCalendars={user?.calendars || []}
+        groups={groups || []}
+        initialDate={selectedDate}
+        user={user}
+        
+        // App-specific config
+        appName="checklist"
+        eventTitles={{ new: "New List", edit: "Edit List" }}
+        defaultTitle="Checklist"
+        
+        // Activity configuration
+        activities={[
+          {
+            type: "checklist",
+            label: "Checklist",
+            required: true,
+            SelectorComponent: ChecklistSelector,
+            EditorComponent: EditChecklistContent,
+            selectedActivity: selectedChecklist,
+            onSelectActivity: setSelectedChecklist,
+            editorProps: {
+              templates: allTemplates,
+              onSaveTemplate: saveTemplate,
+              promptForContext,
+              prefilledTitle: "Checklist",
+              isUserAdmin: user?.admin === true,
+            },
+          },
+        ]}
       />
 
       {/* Checklist Modals (shared component - all apps use this) */}

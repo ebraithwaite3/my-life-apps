@@ -16,6 +16,8 @@ import { scheduleNotification } from "@my-apps/services";
 import { useDeleteNotification, useChecklistTemplates } from "@my-apps/hooks";
 import { useChecklistData } from "../contexts/ChecklistDataContext";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { calculateChecklistProgress } from "@my-apps/utils";
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -25,6 +27,8 @@ const PinnedScreen = () => {
   const deleteNotification = useDeleteNotification();
   const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
   const editContentRef = useRef(null); // Ref for EditChecklistContent
+  const tabBarHeight = useBottomTabBarHeight();
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [checklistMode, setChecklistMode] = useState("complete"); // 'complete' or 'edit'
@@ -442,8 +446,13 @@ const PinnedScreen = () => {
     return !isDirtyComplete;
   };
 
+  // Calculate progress directly (no memo needed - it's fast)
+const progress = checklistMode === "complete" && updatedItems.length > 0
+? calculateChecklistProgress(updatedItems)
+: { completed: 0, total: 0 };
+
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <PageHeader
         title="Pinned Checklists"
         subtext="Always visible"
@@ -477,6 +486,9 @@ const PinnedScreen = () => {
             renderItem={renderChecklist}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingBottom: tabBarHeight,
+            }}
           />
         )}
       </View>
@@ -568,9 +580,7 @@ const PinnedScreen = () => {
               title={selectedChecklist?.name || "Checklist"}
               subtitle={
                 checklistMode === "complete"
-                  ? `${updatedItems.filter((i) => i.completed).length}/${
-                      updatedItems.length
-                    } Complete`
+                  ? `${progress.completed}/${progress.total} Complete`
                   : undefined
               }
               onCancel={closeChecklistModal}

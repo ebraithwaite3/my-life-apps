@@ -1,15 +1,16 @@
-import React, { useRef, useEffect } from 'react';
-import { View } from 'react-native';
-import { useTheme } from '@my-apps/contexts';
-import ModalWrapper from '../../base/ModalWrapper';
-import ModalHeader from '../../../headers/ModalHeader';
-import ChecklistContent from '../../content/checklists/ChecklistContent';
-import EditChecklistContent from '../../content/checklists/EditChecklistContent';
-import PillSelectionButton from '../../../buttons/PillSelectionButton';
+import React, { useRef, useEffect } from "react";
+import { View } from "react-native";
+import { useTheme } from "@my-apps/contexts";
+import { calculateChecklistProgress } from "@my-apps/utils";
+import ModalWrapper from "../../base/ModalWrapper";
+import ModalHeader from "../../../headers/ModalHeader";
+import ChecklistContent from "../../content/checklists/ChecklistContent";
+import EditChecklistContent from "../../content/checklists/EditChecklistContent";
+import PillSelectionButton from "../../../buttons/PillSelectionButton";
 
 /**
  * ChecklistModal - Reusable checklist modal component
- * 
+ *
  * Used by ALL apps (checklist, workout, golf)
  * Renders both Add and View/Edit checklist modals
  */
@@ -26,19 +27,25 @@ const ChecklistModal = ({
   setUpdatedItems,
   isDirtyComplete,
   setIsDirtyComplete,
-  
+
   // From calendarHandlers
   closeChecklistModal,
   closeViewChecklistModal,
   handleSaveChecklist,
   handleUpdateChecklist,
   handleUpdateFromCompleteMode,
-  
+
   // From context
   user,
 }) => {
   const { theme, getSpacing } = useTheme();
   const editContentRef = useRef(null);
+
+  // Calculate progress directly (no memo needed - it's fast)
+  const progress =
+    checklistMode === "complete" && updatedItems.length > 0
+      ? calculateChecklistProgress(updatedItems)
+      : { completed: 0, total: 0 };
 
   // Detect changes in complete mode
   useEffect(() => {
@@ -89,7 +96,11 @@ const ChecklistModal = ({
             }}
           >
             <ModalHeader
-              title={selectedEvent ? `${selectedEvent.title} Checklist` : "New Checklist"}
+              title={
+                selectedEvent
+                  ? `${selectedEvent.title} Checklist`
+                  : "New Checklist"
+              }
               onCancel={closeChecklistModal}
               onDone={() => editContentRef.current?.save()}
               doneText="Create"
@@ -148,9 +159,7 @@ const ChecklistModal = ({
               title={selectedChecklist?.name || "Checklist"}
               subtitle={
                 checklistMode === "complete"
-                  ? `${updatedItems.filter((i) => i.completed).length}/${
-                      updatedItems.length
-                    } Complete`
+                  ? `${progress.completed}/${progress.total} Complete`
                   : undefined
               }
               onCancel={closeViewChecklistModal}
@@ -160,7 +169,9 @@ const ChecklistModal = ({
                   : () => editContentRef.current?.save()
               }
               doneText="Update"
-              doneDisabled={checklistMode === "complete" ? !isDirtyComplete : false}
+              doneDisabled={
+                checklistMode === "complete" ? !isDirtyComplete : false
+              }
             />
 
             <View

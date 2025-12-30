@@ -54,10 +54,7 @@ exports.sendPushNotification = onCall(async (request) => {
 
     const responseData = await response.json();
 
-    console.log(
-        "Expo API Response:",
-        JSON.stringify(responseData, null, 2),
-    );
+    console.log("Expo API Response:", JSON.stringify(responseData, null, 2));
 
     if (responseData.data) {
       const result = responseData.data[0];
@@ -93,113 +90,82 @@ exports.sendPushNotification = onCall(async (request) => {
 
 exports.sendBatchPushNotification = onCall(async (request) => {
   const {userIds, title, body, data} = request.data;
-  const targetApp = data?.app; // Optional: specific app
+  const targetApp = data?.app || "checklist-app";
 
   if (!Array.isArray(userIds) || userIds.length === 0) {
     throw new Error("userIds must be a non-empty array");
   }
 
   try {
-    console.log(`📲 Sending batch notification to ${userIds.length} users`);
+    console.log(
+        `📲 Sending notifications to ${userIds.length} users for ${targetApp}`,
+    );
 
     const db = admin.firestore();
-    const messages = [];
-    const results = [];
+    let totalSent = 0;
+    let totalFailed = 0;
 
+    // Send individually to avoid cross-app batching issues
     for (const userId of userIds) {
       try {
         const userDoc = await db.collection("users").doc(userId).get();
 
         if (!userDoc.exists) {
-          results.push({userId, success: false, error: "User not found"});
+          console.log(`⚠️ User ${userId} not found`);
+          totalFailed++;
           continue;
         }
 
         const userData = userDoc.data();
+        const pushToken = userData.pushTokens?.[targetApp];
 
-        if (targetApp) {
-          // Send to specific app only
-          const pushToken = userData.pushTokens?.[targetApp];
+        if (!pushToken || !pushToken.startsWith("ExponentPushToken[")) {
+          console.log(`⚠️ User ${userId} has no valid ${targetApp} token`);
+          totalFailed++;
+          continue;
+        }
 
-          if (!pushToken) {
-            results.push({
-              userId,
-              success: false,
-              error: `No ${targetApp} token`,
-            });
-            continue;
-          }
+        // Send individual notification
+        const message = {
+          to: pushToken,
+          sound: "default",
+          title: title || "Notification",
+          body: body || "",
+          data: data || {},
+        };
 
-          messages.push({
-            to: pushToken,
-            sound: "default",
-            title: title || "MyOrganizer",
-            body: body || "",
-            data: Object.assign({}, data || {}, {userId}),
-          });
+        const response = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(message),
+        });
+
+        const responseData = await response.json();
+
+        // Individual sends return data.status, not data[0].status
+        if (responseData.data?.status === "ok") {
+          // ← Remove [0]
+          console.log(`✅ Sent to user ${userId}`);
+          totalSent++;
         } else {
-          // Send to ALL apps user has
-          const tokens = userData.pushTokens || {};
-
-          for (const [app, token] of Object.entries(tokens)) {
-            messages.push({
-              to: token,
-              sound: "default",
-              title: title || "MyOrganizer",
-              body: body || "",
-              data: Object.assign({}, data || {}, {userId, app}),
-            });
-          }
+          console.error(`❌ Failed for user ${userId}:`, responseData);
+          totalFailed++;
         }
       } catch (error) {
-        results.push({
-          userId,
-          success: false,
-          error: error.message,
-        });
+        console.error(`Error sending to user ${userId}:`, error);
+        totalFailed++;
       }
     }
 
-    // Send batch to Expo
-    if (messages.length > 0) {
-      const response = await fetch(
-          "https://exp.host/--/api/v2/push/send",
-          {
-            method: "POST",
-            headers: {
-              "Accept": "application/json",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(messages),
-          },
-      );
-
-      const responseData = await response.json();
-      console.log(
-          "Expo Batch Response:",
-          JSON.stringify(responseData, null, 2),
-      );
-
-      if (responseData.data) {
-        responseData.data.forEach((result, index) => {
-          results.push({
-            userId: userIds[index],
-            success: result.status === "ok",
-            messageId: result.id,
-            error: result.status === "error" ? result.message : null,
-          });
-        });
-      }
-    }
-
-    const successCount = results.filter((r) => r.success).length;
-    console.log(`✅ Batch complete: ${successCount}/${userIds.length} sent`);
+    console.log(`✅ Complete: ${totalSent} sent, ${totalFailed} failed`);
 
     return {
       success: true,
-      totalSent: successCount,
-      totalFailed: userIds.length - successCount,
-      results: results,
+      totalSent,
+      totalFailed,
       sentAt: new Date().toISOString(),
     };
   } catch (error) {

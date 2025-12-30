@@ -25,6 +25,7 @@ const DayView = ({
 }) => {
   const { theme, getSpacing } = useTheme();
   const scrollViewRef = useRef(null);
+  console.log("Events in DayView:", events);
 
   // Swipe gesture handler
   const panResponder = useMemo(() => PanResponder.create({

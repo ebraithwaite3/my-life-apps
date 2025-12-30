@@ -32,7 +32,8 @@ exports.writeToCalendar = onRequest(
           endTime,
           description,
           location,
-          reminderMinutes,
+          calendarId = "primary",
+          // reminderMinutes removed - we don't use Google's reminders
         } = req.body.data || req.body;
 
         console.log("📋 Extracted data:", {
@@ -41,7 +42,6 @@ exports.writeToCalendar = onRequest(
           endTime,
           description,
           location,
-          reminderMinutes,
         });
 
         // Validate required fields
@@ -67,19 +67,7 @@ exports.writeToCalendar = onRequest(
 
         const calendar = google.calendar({version: "v3", auth: oauth2Client});
 
-        // Build reminders object
-        const reminders = reminderMinutes ?
-          {
-            useDefault: false,
-            overrides: [
-              {method: "popup", minutes: reminderMinutes},
-            ],
-          } :
-          {
-            useDefault: false,
-            overrides: [],
-          };
-
+        // NO REMINDERS - we handle notifications in our app
         const event = {
           summary: title,
           description: description,
@@ -92,14 +80,17 @@ exports.writeToCalendar = onRequest(
             dateTime: stripOffset(endTime),
             timeZone: "America/New_York",
           },
-          reminders: reminders,
+          reminders: {
+            useDefault: false,
+            overrides: [], // No Google reminders
+          },
         };
 
         console.log("📅 Event object to send:", JSON.stringify(event, null, 2));
         console.log("🚀 Calling Google Calendar API...");
 
         const response = await calendar.events.insert({
-          calendarId: "primary",
+          calendarId: calendarId,
           requestBody: event,
         });
 
@@ -140,12 +131,13 @@ exports.updateCalendarEvent = onRequest(
       try {
         const {
           eventId,
+          calendarId = "primary",
           title,
           description,
           startTime,
           endTime,
           location,
-          reminderMinutes,
+          // reminderMinutes removed - we don't use Google's reminders
         } = req.body.data || req.body;
 
         const oauth2Client = new google.auth.OAuth2(
@@ -178,23 +170,14 @@ exports.updateCalendarEvent = onRequest(
           };
         }
 
-        // Handle reminders if provided
-        if (reminderMinutes !== undefined) {
-          event.reminders = reminderMinutes ?
-            {
-              useDefault: false,
-              overrides: [
-                {method: "popup", minutes: reminderMinutes},
-              ],
-            } :
-            {
-              useDefault: false,
-              overrides: [],
-            };
-        }
+        // Always set no reminders - we handle notifications in our app
+        event.reminders = {
+          useDefault: false,
+          overrides: [],
+        };
 
         const response = await calendar.events.patch({
-          calendarId: "primary",
+          calendarId: calendarId,
           eventId: eventId,
           requestBody: event,
         });
@@ -223,12 +206,17 @@ exports.deleteCalendarEvent = onRequest(
       secrets: [googleClientId, googleClientSecret, googleRefreshToken],
     },
     async (req, res) => {
+      console.log("🗑️ deleteCalendarEvent function called");
+      console.log("Request body:", JSON.stringify(req.body, null, 2));
+
       try {
-        const {eventId} = req.body.data || req.body;
+        const {eventId, calendarId = "primary"} = req.body.data || req.body;
 
         if (!eventId) {
           throw new Error("Missing required parameter: eventId");
         }
+
+        console.log(`🗑️ Deleting event ${eventId} from calendar ${calendarId}`);
 
         const oauth2Client = new google.auth.OAuth2(
             googleClientId.value(),
@@ -243,9 +231,11 @@ exports.deleteCalendarEvent = onRequest(
         const calendar = google.calendar({version: "v3", auth: oauth2Client});
 
         await calendar.events.delete({
-          calendarId: "primary",
+          calendarId: calendarId, // ← Use the parameter, "primary"
           eventId: eventId,
         });
+
+        console.log(`✅ Deleted event ${eventId} from calendar ${calendarId}`);
 
         res.json({
           data: {
@@ -255,7 +245,9 @@ exports.deleteCalendarEvent = onRequest(
           },
         });
       } catch (error) {
-        console.error("Error deleting calendar event:", error);
+        console.error("❌ Error deleting calendar event:", error.message);
+        console.error("Error stack:", error.stack);
+
         res.status(500).json({
           data: {
             success: false,

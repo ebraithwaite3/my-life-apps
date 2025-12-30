@@ -24,6 +24,8 @@ import DoneButton from "../../../buttons/DoneButton";
 import ReminderSelector from "../../../forms/ReminderSelector";
 import TimePickerModal from "../../composed/modals/TimePickerModal";
 import FilterChips from "../../../general/FilterChips";
+import ChecklistEditingRow from "../../../checklists/ChecklistEditingRow";
+import ChecklistItemConfigModal from "../../composed/modals/ChecklistItemConfigModal";
 import { useAutoScrollOnFocus } from "@my-apps/hooks";
 import { canSaveAsTemplate, getChecklistStats } from "@my-apps/utils";
 import { useChecklistState } from "@my-apps/hooks";
@@ -52,8 +54,11 @@ const EditChecklistContent = forwardRef(
     const [reminderMinutes, setReminderMinutes] = useState(null);
     const [reminderTime, setReminderTime] = useState(null);
     const [showReminderPicker, setShowReminderPicker] = useState(false);
-    const [notifyAdminOnCompletion, setNotifyAdminOnCompletion] =
-      useState(false);
+    const [notifyAdminOnCompletion, setNotifyAdminOnCompletion] = useState(false);
+
+    // Config modal state
+    const [showConfigModal, setShowConfigModal] = useState(false);
+    const [selectedItemForConfig, setSelectedItemForConfig] = useState(null);
 
     // Template defaults
     const [defaultNotifyAdmin, setDefaultNotifyAdmin] = useState(false);
@@ -63,6 +68,7 @@ const EditChecklistContent = forwardRef(
     const [saveAsTemplateEnabled, setSaveAsTemplateEnabled] = useState(false);
 
     const uuidv4 = () => Crypto.randomUUID();
+    console.log("ITEMS:", items);
 
     const isEditing = checklist !== null;
     const hasEventTime = eventStartTime != null;
@@ -125,13 +131,18 @@ const EditChecklistContent = forwardRef(
             id: item.id || String(Date.now() + index),
             name: item.name || "",
             completed: isTemplate ? false : item.completed ?? false,
+            itemType: item.itemType || "checkbox",
             requiredForScreenTime: item.requiredForScreenTime ?? false,
+            requiresParentApproval: item.requiresParentApproval ?? false,
+            yesNoConfig: item.yesNoConfig || null,
+            subItems: item.subItems || [],
+            parentId: item.parentId || null,
           })) || [
             {
               id: uuidv4(),
               name: "",
               completed: false,
-              requiredForScreenTime: false,
+              itemType: "checkbox",
             },
           ]
         );
@@ -147,7 +158,7 @@ const EditChecklistContent = forwardRef(
             id: uuidv4(),
             name: "",
             completed: false,
-            requiredForScreenTime: false,
+            itemType: "checkbox",
           },
         ]);
       }
@@ -164,20 +175,10 @@ const EditChecklistContent = forwardRef(
       );
     }, []);
 
-    const toggleScreenTimeRequirement = useCallback((id) => {
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, requiredForScreenTime: !item.requiredForScreenTime }
-            : item
-        )
-      );
-    }, []);
-
     const addItem = useCallback(() => {
       const id = uuidv4();
       setItems((prev) => [
-        { id, name: "", completed: false, requiredForScreenTime: false },
+        { id, name: "", completed: false, itemType: "checkbox" },
         ...prev,
       ]);
 
@@ -237,12 +238,26 @@ const EditChecklistContent = forwardRef(
       [items, addItem, focusInput]
     );
 
-    const handleEllipsisPress = useCallback(
-      (itemId) => {
-        toggleScreenTimeRequirement(itemId);
-      },
-      [toggleScreenTimeRequirement]
-    );
+    /* ---------------- Config Modal Handlers ---------------- */
+
+    const handleToggleConfig = useCallback((itemId) => {
+      const item = items.find((i) => i.id === itemId);
+      setSelectedItemForConfig(item);
+      setShowConfigModal(true);
+    }, [items]);
+
+    const handleSaveConfig = useCallback((updatedItem) => {
+      setItems((prev) =>
+        prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+      );
+      setShowConfigModal(false);
+      setSelectedItemForConfig(null);
+    }, []);
+
+    const handleCancelConfig = useCallback(() => {
+      setShowConfigModal(false);
+      setSelectedItemForConfig(null);
+    }, []);
 
     /* ---------------- Validation & Save ---------------- */
 
@@ -280,14 +295,35 @@ const EditChecklistContent = forwardRef(
 
       const validItems = items
         .filter((i) => i.name.trim())
-        .map((item) => ({
-          id: item.id,
-          name: item.name.trim(),
-          completed: isTemplate ? undefined : item.completed ?? false,
-          ...(item.requiredForScreenTime && {
-            requiredForScreenTime: true,
-          }),
-        }));
+        .map((item) => {
+          const baseItem = {
+            id: item.id,
+            name: item.name.trim(),
+            completed: isTemplate ? undefined : item.completed ?? false,
+          };
+
+          // Only include non-default values (sparse storage)
+          if (item.itemType && item.itemType !== "checkbox") {
+            baseItem.itemType = item.itemType;
+          }
+          if (item.requiredForScreenTime) {
+            baseItem.requiredForScreenTime = true;
+          }
+          if (item.requiresParentApproval) {
+            baseItem.requiresParentApproval = true;
+          }
+          if (item.yesNoConfig) {
+            baseItem.yesNoConfig = item.yesNoConfig;
+          }
+          if (item.subItems && item.subItems.length > 0) {
+            baseItem.subItems = item.subItems;
+          }
+          if (item.parentId) {
+            baseItem.parentId = item.parentId;
+          }
+
+          return baseItem;
+        });
 
       const newChecklist = {
         id: isEditing ? checklist.id : uuidv4(),
@@ -413,39 +449,6 @@ const EditChecklistContent = forwardRef(
         marginBottom: getSpacing.lg,
       },
 
-      itemRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: getSpacing.sm,
-        paddingVertical: getSpacing.xs,
-        backgroundColor: theme.background,
-        borderRadius: getBorderRadius.sm,
-        paddingHorizontal: getSpacing.sm,
-      },
-
-      itemNumber: {
-        width: 30,
-        fontSize: getTypography.body.fontSize,
-        color: theme.text.secondary,
-      },
-
-      itemInput: {
-        flex: 1,
-        fontSize: getTypography.body.fontSize,
-        color: theme.text.primary,
-        paddingVertical: getSpacing.sm,
-        paddingHorizontal: getSpacing.sm,
-      },
-
-      removeButton: {
-        padding: getSpacing.xs,
-      },
-
-      screenTimeIconActive: {
-        backgroundColor: theme.primary + "20",
-        borderRadius: getBorderRadius.xs,
-      },
-
       addButton: {
         flexDirection: "row",
         alignItems: "center",
@@ -539,70 +542,30 @@ const EditChecklistContent = forwardRef(
             <Text style={styles.sectionHeader}>Items</Text>
 
             {items.map((item, index) => (
-              <View key={item.id} style={styles.itemRow}>
-                <Text style={styles.itemNumber}>{index + 1}.</Text>
-
-                <TextInput
-                  ref={(r) => registerInput(item.id, r)}
-                  style={styles.itemInput}
-                  placeholder="Enter checklist item..."
-                  placeholderTextColor={theme.text.tertiary}
-                  value={item.name}
-                  onChangeText={(t) => updateItem(item.id, t)}
-                  onFocus={() => {
-                    scrollToInput(item.id);
-                    if (index === items.length - 1) {
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 150);
-                    }
-                  }}
-                  onBlur={() => handleBlur(item.id)}
-                  onSubmitEditing={() => handleSubmitEditing(item.id)}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                />
-
-                {item.name.trim() !== "" && (
-                  <>
-                    <TouchableOpacity
-                      onPress={() => removeItem(item.id)}
-                      style={styles.removeButton}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={20}
-                        color={theme.error}
-                      />
-                    </TouchableOpacity>
-
-                    {isUserAdmin && (
-                      <TouchableOpacity
-                        onPress={() => handleEllipsisPress(item.id)}
-                        style={[
-                          styles.removeButton,
-                          item.requiredForScreenTime &&
-                            styles.screenTimeIconActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name={
-                            item.requiredForScreenTime
-                              ? "phone-portrait"
-                              : "phone-portrait-outline"
-                          }
-                          size={20}
-                          color={
-                            item.requiredForScreenTime
-                              ? theme.primary
-                              : theme.text.secondary
-                          }
-                        />
-                      </TouchableOpacity>
-                    )}
-                  </>
-                )}
-              </View>
+              <ChecklistEditingRow
+                key={item.id}
+                item={item}
+                index={index}
+                theme={theme}
+                getSpacing={getSpacing}
+                getTypography={getTypography}
+                getBorderRadius={getBorderRadius}
+                isUserAdmin={isUserAdmin}
+                onUpdateItem={updateItem}
+                onRemoveItem={removeItem}
+                onToggleConfig={handleToggleConfig}
+                onFocus={(id) => {
+                  scrollToInput(id);
+                  if (index === items.length - 1) {
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 150);
+                  }
+                }}
+                onBlur={handleBlur}
+                onSubmitEditing={handleSubmitEditing}
+                registerInput={registerInput}
+              />
             ))}
 
             {showAddButton && (
@@ -679,6 +642,15 @@ const EditChecklistContent = forwardRef(
             />
           )}
         </KeyboardAvoidingView>
+
+        {/* Item Config Modal */}
+        <ChecklistItemConfigModal
+          visible={showConfigModal}
+          item={selectedItemForConfig}
+          onSave={handleSaveConfig}
+          onCancel={handleCancelConfig}
+          isUserAdmin={isUserAdmin}
+        />
       </View>
     );
   }

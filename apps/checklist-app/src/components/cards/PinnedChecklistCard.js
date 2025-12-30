@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import { ModalDropdown } from "@my-apps/ui";
+import { ProgressBar } from "@my-apps/ui";
+import { calculateChecklistProgress } from "@my-apps/utils";
 
 const PinnedChecklistCard = ({ 
   checklist, 
@@ -87,9 +89,8 @@ const PinnedChecklistCard = ({
     }
   ];
 
-  // Count completed items
-  const completedCount = checklist.items?.filter(item => item.completed).length || 0;
-  const totalCount = checklist.items?.length || 0;
+  // Calculate progress using shared utility (handles nested items)
+  const { completed, total } = calculateChecklistProgress(checklist.items || []);
 
   const styles = StyleSheet.create({
     checklistCard: {
@@ -142,28 +143,6 @@ const PinnedChecklistCard = ({
     ellipsisButton: {
       padding: getSpacing.xs,
     },
-    progressRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginBottom: getSpacing.sm,
-    },
-    progressText: {
-      fontSize: getTypography.body.fontSize,
-      color: theme.text.secondary,
-      marginRight: getSpacing.sm,
-    },
-    progressBar: {
-      flex: 1,
-      height: 6,
-      backgroundColor: theme.border,
-      borderRadius: 3,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      backgroundColor: theme.primary,
-      borderRadius: 3,
-    },
     reminderRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -175,8 +154,6 @@ const PinnedChecklistCard = ({
       color: theme.text.secondary,
     },
   });
-
-  const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   return (
     <>
@@ -216,15 +193,14 @@ const PinnedChecklistCard = ({
           </TouchableOpacity>
         </View>
 
-        {/* Progress Bar */}
-        <View style={styles.progressRow}>
-          <Text style={styles.progressText}>
-            {completedCount}/{totalCount}
-          </Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
-          </View>
-        </View>
+        {/* Progress Bar - Now uses nested-aware calculation */}
+        <ProgressBar
+          completed={completed}
+          total={total}
+          showCount={true}
+          height={6}
+          style={{ marginBottom: getSpacing.sm }}
+        />
 
         {/* Reminder Display */}
         {checklist.reminderTime && (

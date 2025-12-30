@@ -101,7 +101,7 @@ const MonthView = ({
             key={index}
             style={[
               styles.eventBar,
-              { backgroundColor: event.calendarColor || theme.primary },
+              { backgroundColor: event.calendarColor || theme.error },
             ]}
           >
             <Text style={styles.eventText} numberOfLines={1}>
@@ -157,7 +157,7 @@ const MonthView = ({
     },
     todayCell: {
       borderWidth: 2,
-      borderColor: theme.error || '#FF0000',
+      borderColor: theme.primary || '#FF0000',
     },
     otherMonthCell: {
       opacity: 0,
@@ -169,7 +169,7 @@ const MonthView = ({
       marginBottom: getSpacing.xs,
     },
     todayText: {
-      color: theme.error || '#FF0000',
+      color: theme.primary || '#FF0000',
       fontWeight: '700',
     },
     eventIndicators: {
