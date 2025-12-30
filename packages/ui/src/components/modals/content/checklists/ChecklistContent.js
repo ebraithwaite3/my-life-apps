@@ -12,7 +12,7 @@ import ChecklistItemRow from '../../../checklists/ChecklistItemRow';
 import ProgressBar from '../../../general/ProgressBar';
 import MultipleChoiceSelectionModal from '../../composed/modals/MultipleChoiceSelectionModals';
 import FillInSelectionModal from '../../composed/modals/FillInSelectionModal';
-import * as Crypto from 'expo-crypto';
+import { generateUUID } from '@my-apps/utils';
 
 const ChecklistContent = ({ checklist, onItemToggle }) => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -159,7 +159,7 @@ const ChecklistContent = ({ checklist, onItemToggle }) => {
 
     // Create sub-items from selected options
     const subItems = selectedOptions.map(option => ({
-      id: Crypto.randomUUID(),
+      id: generateUUID(),
       name: option,
       itemType: 'checkbox',
       completed: false,
@@ -196,7 +196,7 @@ const ChecklistContent = ({ checklist, onItemToggle }) => {
 
     // Create sub-items from typed items
     const subItems = typedItems.map(itemText => ({
-      id: Crypto.randomUUID(),
+      id: generateUUID(),
       name: itemText,
       itemType: 'checkbox',
       completed: false,

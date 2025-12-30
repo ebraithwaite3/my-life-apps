@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 import { ModalHeader } from '../../../headers';
 import { PopUpModalWrapper } from '../../base/PopUpModalWrapper';
-import * as Crypto from 'expo-crypto';
+import { generateUUID } from '@my-apps/utils';
 
 const FillInSelectionModal = ({
   visible,
@@ -28,7 +28,7 @@ const FillInSelectionModal = ({
   useEffect(() => {
     // Start with one empty input when modal opens
     if (visible) {
-      const initialId = Crypto.randomUUID();
+      const initialId = generateUUID();
       setItems([{ id: initialId, text: '' }]);
     }
   }, [visible]);
@@ -47,7 +47,7 @@ const FillInSelectionModal = ({
   };
 
   const addItem = () => {
-    const id = Crypto.randomUUID();
+    const id = generateUUID();
     setItems(prev => [{ id, text: '' }, ...prev]);
     
     // Focus new input after render
