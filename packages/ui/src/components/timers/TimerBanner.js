@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
-import { SpinnerPicker } from '@my-apps/ui'; // Adjust path as needed
+import { SpinnerPicker } from '../dropdowns/SpinnerPicker';
 
 /**
  * TimerBanner - Banner-style timer with setup and running states

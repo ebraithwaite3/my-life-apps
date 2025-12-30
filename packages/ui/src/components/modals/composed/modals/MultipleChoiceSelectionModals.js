@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
-import { PopUpModalWrapper, ModalHeader } from '@my-apps/ui';
+import { ModalHeader } from '../../../headers';
+import { PopUpModalWrapper } from '../../base/PopUpModalWrapper';
 
 const MultipleChoiceSelectionModal = ({
   visible,
