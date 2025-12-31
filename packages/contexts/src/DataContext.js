@@ -148,7 +148,7 @@ export const DataProvider = ({ children }) => {
   });
 
   // Hardcoded admin Id (for now testing but will change to MY user Id once ready for production)
-  const adminUserId = "Ef4aMVrsoEgHLHd8KOOb7W9O52T2"; // ← TO DO Replace with your user ID
+  const adminUserId = "LCqH5hKx2bP8Q5gDGPmzRd65PB32";
 
   // Is User Admin
   const isUserAdmin = useMemo(() => {

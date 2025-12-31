@@ -83,21 +83,21 @@ function HeaderWithNavigation({ onLogout }) {
 
   // Build menu items for MyChecklists
   const menuItems = [
-    {
-      icon: "📆",
-      label: "Open Organizer",
-      onPress: () => Linking.openURL("myorganizer://"),
-    },
-    {
-      icon: "💪",
-      label: "Open Workouts",
-      onPress: () => console.log("TODO: Deep link to workout app"),
-    },
-    {
-      icon: "⛳",
-      label: "Open Golf",
-      onPress: () => console.log("TODO: Deep link to golf app"),
-    },
+    // {
+    //   icon: "📆",
+    //   label: "Open Organizer",
+    //   onPress: () => Linking.openURL("myorganizer://"),
+    // },
+    // {
+    //   icon: "💪",
+    //   label: "Open Workouts",
+    //   onPress: () => console.log("TODO: Deep link to workout app"),
+    // },
+    // {
+    //   icon: "⛳",
+    //   label: "Open Golf",
+    //   onPress: () => console.log("TODO: Deep link to golf app"),
+    // },
     {
       icon: "🚪",
       label: "Logout",

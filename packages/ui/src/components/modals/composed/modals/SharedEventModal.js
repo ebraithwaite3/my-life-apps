@@ -9,7 +9,12 @@ import {
 } from "react-native";
 import { useTheme } from "@my-apps/contexts";
 import { ModalHeader } from "../../../headers";
-import { TextInputRow, SelectorRow, DateTimeSelector, ReminderSelector } from "../../../forms";
+import {
+  TextInputRow,
+  SelectorRow,
+  DateTimeSelector,
+  ReminderSelector,
+} from "../../../forms";
 import { ReminderPicker } from "../../../dropdowns";
 import { ModalWrapper } from "../../base";
 import { OptionsSelectionModal } from "../pickers";
@@ -24,7 +29,7 @@ import {
 
 /**
  * SharedEventModal - Universal event creation/editing modal
- * 
+ *
  * Used by ALL apps (checklist, workout, golf, etc.)
  * Accepts activity configurations to customize behavior per app
  */
@@ -36,18 +41,18 @@ const SharedEventModal = ({
   groups = [],
   initialDate = null,
   user,
-  
+
   // App-specific configuration
-  appName = "app",                    // For notifications (e.g., "checklist", "workout")
+  appName = "app", // For notifications (e.g., "checklist", "workout")
   eventTitles = { new: "New Event", edit: "Edit Event" }, // Modal titles
-  defaultTitle = "Event",             // Default event title
-  
+  defaultTitle = "Event", // Default event title
+
   // Activity configurations
-  activities = [],                    // Array of activity configs
+  activities = [], // Array of activity configs
 }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
   const { db } = useAuth();
-  
+
   // Refs for embedded editors (one per activity)
   const editorRefs = useRef({});
 
@@ -67,7 +72,7 @@ const SharedEventModal = ({
 
   // HOOK 3: Event creation (shared)
   const { createEvent } = useEventCreation({ user, db });
-  
+
   // HOOK 4: Event update (shared)
   const { updateEvent } = useEventUpdate({ user, db });
 
@@ -121,15 +126,15 @@ const SharedEventModal = ({
     // Create activity from template
     const template = option.template;
     const activityConfig = currentTemplateActivity;
-    
+
     const newActivity = {
       id: `${activityConfig.type}_${Date.now()}`,
       name: template.name,
+      // ✅ FIXED - Preserves subItems and all other properties
       items: template.items.map((item, index) => ({
-        id: item.id || `item_${Date.now()}_${index}`,
-        name: item.name,
-        completed: false,
-        requiredForScreenTime: item.requiredForScreenTime || false,
+        ...item, // ← Spread ALL properties from template
+        id: item.id || `item_${Date.now()}_${index}`, // Override/ensure ID
+        completed: false, // Reset completion state
       })),
       createdAt: Date.now(),
       ...(template.defaultNotifyAdmin && { notifyAdmin: true }),
@@ -139,8 +144,12 @@ const SharedEventModal = ({
 
     // Set reminder from template if provided
     if (template.defaultReminderTime) {
-      const [hours, minutes] = template.defaultReminderTime.split(":").map(Number);
-      const reminderDate = formState.startDate ? new Date(formState.startDate) : new Date();
+      const [hours, minutes] = template.defaultReminderTime
+        .split(":")
+        .map(Number);
+      const reminderDate = formState.startDate
+        ? new Date(formState.startDate)
+        : new Date();
       reminderDate.setHours(hours, minutes, 0, 0);
       formState.setReminderMinutes(reminderDate.toISOString());
     }
@@ -153,11 +162,13 @@ const SharedEventModal = ({
     formState.setErrors([]);
 
     // Check if all required activities are selected
-    const requiredActivities = activities.filter(a => a.required);
-    const missingActivities = requiredActivities.filter(a => !a.selectedActivity);
-    
+    const requiredActivities = activities.filter((a) => a.required);
+    const missingActivities = requiredActivities.filter(
+      (a) => !a.selectedActivity
+    );
+
     if (missingActivities.length > 0 && !formState.isEditing) {
-      const missingNames = missingActivities.map(a => a.label).join(", ");
+      const missingNames = missingActivities.map((a) => a.label).join(", ");
       formState.setErrors([`Please select: ${missingNames}`]);
       return;
     }
@@ -183,8 +194,8 @@ const SharedEventModal = ({
     const activitiesData = formState.isEditing
       ? event.activities || [] // Preserve existing activities when editing
       : activities
-          .filter(a => a.selectedActivity) // Only include selected activities
-          .map(a => ({
+          .filter((a) => a.selectedActivity) // Only include selected activities
+          .map((a) => ({
             id: a.selectedActivity.id,
             activityType: a.type,
             name: a.selectedActivity.name,
@@ -228,7 +239,7 @@ const SharedEventModal = ({
 
     if (result.success) {
       // Clear all activity selections
-      activities.forEach(a => a.onSelectActivity(null));
+      activities.forEach((a) => a.onSelectActivity(null));
       formState.resetForm();
       onClose();
     }
@@ -237,7 +248,7 @@ const SharedEventModal = ({
   // Handle close
   const handleClose = () => {
     // Clear all activity selections
-    activities.forEach(a => a.onSelectActivity(null));
+    activities.forEach((a) => a.onSelectActivity(null));
     formState.resetForm();
     onClose();
   };
@@ -245,13 +256,19 @@ const SharedEventModal = ({
   // Build template options for current activity
   const templateOptions = currentTemplateActivity
     ? [
-        { id: "new", label: `➕ New ${currentTemplateActivity.label}`, value: "new" },
-        ...(currentTemplateActivity.editorProps?.templates || []).map((template) => ({
-          id: template.id,
-          label: template.name,
-          value: template.id,
-          template: template,
-        })),
+        {
+          id: "new",
+          label: `➕ New ${currentTemplateActivity.label}`,
+          value: "new",
+        },
+        ...(currentTemplateActivity.editorProps?.templates || []).map(
+          (template) => ({
+            id: template.id,
+            label: template.name,
+            value: template.id,
+            template: template,
+          })
+        ),
       ]
     : [];
 
@@ -292,7 +309,9 @@ const SharedEventModal = ({
         <>
           {formState.isLoading ? (
             <LoadingScreen
-              message={formState.isEditing ? "Updating event..." : "Creating event..."}
+              message={
+                formState.isEditing ? "Updating event..." : "Creating event..."
+              }
               icon="📅"
             />
           ) : (
@@ -303,7 +322,9 @@ const SharedEventModal = ({
                 keyboardVerticalOffset={Platform.OS === "ios" ? -100 : 20}
               >
                 <ModalHeader
-                  title={formState.isEditing ? eventTitles.edit : eventTitles.new}
+                  title={
+                    formState.isEditing ? eventTitles.edit : eventTitles.new
+                  }
                   onCancel={handleClose}
                   onDone={handleSave}
                   doneText={formState.isEditing ? "Update" : "Add"}
@@ -324,30 +345,39 @@ const SharedEventModal = ({
                   />
 
                   {/* Render all activity selectors (only when not editing) */}
-                  {!formState.isEditing && activities.map((activityConfig) => {
-                    const SelectorComponent = activityConfig.SelectorComponent;
-                    return (
-                      <SelectorComponent
-                        key={activityConfig.type}
-                        label={activityConfig.label}
-                        selectedChecklist={activityConfig.selectedActivity}
-                        savedChecklists={activityConfig.editorProps?.templates || []}
-                        onPress={() => handleActivitySelectorPress(activityConfig)}
-                        onClear={() => activityConfig.onSelectActivity(null)}
-                      />
-                    );
-                  })}
+                  {!formState.isEditing &&
+                    activities.map((activityConfig) => {
+                      const SelectorComponent =
+                        activityConfig.SelectorComponent;
+                      return (
+                        <SelectorComponent
+                          key={activityConfig.type}
+                          label={activityConfig.label}
+                          selectedChecklist={activityConfig.selectedActivity}
+                          savedChecklists={
+                            activityConfig.editorProps?.templates || []
+                          }
+                          onPress={() =>
+                            handleActivitySelectorPress(activityConfig)
+                          }
+                          onClear={() => activityConfig.onSelectActivity(null)}
+                        />
+                      );
+                    })}
 
                   <SelectorRow
                     label="Calendar"
                     rowLabel="Calendar"
                     value={formState.selectedCalendar?.name}
                     placeholder="Select calendar"
-                    colorDot={formState.selectedCalendar?.color || theme.primary}
+                    colorDot={
+                      formState.selectedCalendar?.color || theme.primary
+                    }
                     onPress={handleCalendarSelectorPress}
                     disabled={formState.availableCalendars?.length <= 1}
                     showChevron={
-                      !formState.isEditing && formState.availableCalendars?.length > 1
+                      !formState.isEditing &&
+                      formState.availableCalendars?.length > 1
                     }
                   />
 
@@ -393,7 +423,9 @@ const SharedEventModal = ({
                 {/* Template selection modal */}
                 <OptionsSelectionModal
                   visible={showTemplateModal}
-                  title={`Select ${currentTemplateActivity?.label || "Activity"}`}
+                  title={`Select ${
+                    currentTemplateActivity?.label || "Activity"
+                  }`}
                   options={templateOptions}
                   onSelect={handleTemplateSelect}
                   onClose={() => {
@@ -410,7 +442,7 @@ const SharedEventModal = ({
       {/* Activity Editors - Render based on currentScreen */}
       {activities.map((activityConfig) => {
         if (formState.currentScreen !== activityConfig.type) return null;
-        
+
         const EditorComponent = activityConfig.EditorComponent;
         if (!EditorComponent) return null;
 
@@ -456,19 +488,25 @@ const SharedEventModal = ({
                   activityConfig.onSelectActivity(activity);
 
                   // If "Save as Template" toggle was ON, save as template
-                  if (shouldSaveAsTemplate && activityConfig.editorProps?.onSaveTemplate) {
-                    activityConfig.editorProps.promptForContext?.(async (context) => {
-                      const success = await activityConfig.editorProps.onSaveTemplate(
-                        activity,
-                        context
-                      );
-                      if (success) {
-                        Alert.alert(
-                          "Success",
-                          `Template "${activity.name}" saved successfully`
-                        );
+                  if (
+                    shouldSaveAsTemplate &&
+                    activityConfig.editorProps?.onSaveTemplate
+                  ) {
+                    activityConfig.editorProps.promptForContext?.(
+                      async (context) => {
+                        const success =
+                          await activityConfig.editorProps.onSaveTemplate(
+                            activity,
+                            context
+                          );
+                        if (success) {
+                          Alert.alert(
+                            "Success",
+                            `Template "${activity.name}" saved successfully`
+                          );
+                        }
                       }
-                    });
+                    );
                   }
 
                   // Return to event screen
