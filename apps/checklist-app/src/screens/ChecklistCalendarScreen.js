@@ -1,7 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { SharedCalendarScreen } from '@my-apps/screens';
 import { ChecklistModal, SharedEventModal, ChecklistSelector, EditChecklistContent } from '@my-apps/ui';
-// import ChecklistEventModal from '../components/modals/ChecklistEventModal';
 import { useData } from '@my-apps/contexts';
 import { 
   useCalendarState,
@@ -144,20 +143,6 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         onActivityPress={calendarHandlers.handleViewChecklist}
         onActivityDelete={calendarHandlers.handleDeleteChecklist}
       />
-
-      {/* Event Creation Modal */}
-      {/* <ChecklistEventModal
-        isVisible={calendarState.eventModalVisible}
-        onClose={() => {
-          calendarState.setSelectedEvent(null); // ← Clear the event
-          calendarState.setEventModalVisible(false);
-        }}
-        event={calendarState.selectedEvent}
-        userCalendars={user?.calendars || []}
-        groups={groups || []}
-        initialDate={selectedDate}
-        user={user}
-      /> */}
 
       {/* Shared Event Modal with Checklist Configuration */}
       <SharedEventModal

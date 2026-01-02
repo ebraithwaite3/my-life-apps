@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { doc, updateDoc } from 'firebase/firestore';
-import { useAuth, useData } from '@my-apps/contexts';
+import { useAuth } from '../../../contexts/src/AuthContext';
+import { useData } from '../../../contexts/src/DataContext';
 
 /**
  * useChecklistTemplates - Manage checklist templates (CRUD operations)

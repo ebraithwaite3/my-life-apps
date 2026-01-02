@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useData } from '@my-apps/contexts';
-import { useChecklistDoc } from '../hooks/useChecklistDoc';
-import { useGroupChecklistDocs } from '../hooks/useGroupChecklistDocs';
+import { useData } from './DataContext';
+import { useChecklistDoc, useGroupChecklistDocs } from '../../hooks/src/checklistHooks';
 
 const ChecklistDataContext = createContext();
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, FlatList, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useTheme, useData, useAuth } from "@my-apps/contexts";
+import { useTheme, useData, useAuth, useChecklistData } from "@my-apps/contexts";
 import {
   PageHeader,
   EditChecklistContent,
@@ -14,7 +14,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { scheduleNotification } from "@my-apps/services";
 import { useDeleteNotification, useChecklistTemplates } from "@my-apps/hooks";
-import { useChecklistData } from "../contexts/ChecklistDataContext";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { calculateChecklistProgress } from "@my-apps/utils";

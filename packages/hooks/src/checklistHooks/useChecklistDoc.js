@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { useAuth } from '@my-apps/contexts';
+import { useAuth } from '../../../contexts/src/AuthContext';
 
 export const useChecklistDoc = (userId) => {
   const { db } = useAuth();

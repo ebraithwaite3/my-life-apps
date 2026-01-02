@@ -7,9 +7,10 @@ import {
   AuthProvider,
   useAuth,
   DataProvider,
+  ChecklistDataProvider
 } from "@my-apps/contexts";
 import { useAppRegistration } from "@my-apps/hooks";
-import { ChecklistDataProvider } from "./src/contexts/ChecklistDataContext";
+// import { ChecklistDataProvider } from "./src/contexts/ChecklistDataContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MainNavigator from "./src/navigation/MainNavigator";
 import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
