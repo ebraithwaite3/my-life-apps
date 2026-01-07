@@ -1,67 +1,67 @@
 // src/navigation/MainNavigator.js
-import React from 'react';
-import { Text, View, TouchableOpacity } from 'react-native';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
-import { useData } from '../contexts/DataContext';
-import { useTheme } from '@my-apps/contexts';
-import { useAuth } from '../contexts/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { Text, View, ActivityIndicator, Linking } from "react-native";
+import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createStackNavigator } from "@react-navigation/stack";
+import { useTheme } from "@my-apps/contexts";
+import { useAuth } from "@my-apps/contexts";
+import { useData } from "@my-apps/contexts";
+import { AppHeader } from "@my-apps/ui";
+import { LoadingScreen } from "@my-apps/ui";
+import { DateTime } from "luxon";
 
-// 👇 CHANGED: Import AppHeader from shared UI
-import { AppHeader } from '@my-apps/ui';
+// Keep NotificationProvider for deep linking
+import { NotificationProvider } from "@my-apps/contexts";
 
 // Main screens
-import CalendarScreen from '../screens/CalendarScreen';
-import GroupScreen from '../screens/GroupScreen';
-import LoadingScreen from '../components/LoadingScreen';
-import AddScreen from '../screens/AddScreen';
-import PreferencesScreen from '../screens/PreferencesScreen';
-import ImportCalendarScreen from '../screens/ImportCalendarScreen';
-import CreateGroupScreen from '../screens/CreateGroupScreen';
-import JoinGroupScreen from '../screens/JoinGroupScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import CreateTaskScreen from '../screens/CreateTaskScreen';
-import DayScreen from '../screens/DayScreen';
-import CalendarEditScreen from '../screens/CalendarEditScreen';
-import AddPublicCalendarsScreen from '../screens/AddPublicCalendarsScreen';
-
-// Sub-screens
-import EventDetailsScreen from '../screens/EventDetailsScreen';
-import CreateEventScreen from '../screens/CreateEventScreen';
-import GroupDetailsScreen from '../screens/GroupDetailsScreen';
+import WorkoutsCalendarScreen from "../screens/WorkoutsCalendarScreen";
+import WorkoutTemplatesScreen from "../screens/WorkoutTemplatesScreen";
+import WorkoutHistoryScreen from "../screens/WorkoutHistoryScreen";
+import ExercisesScreen from "../screens/ExercisesScreen";
+import MessagesScreen from "../screens/MessagesScreen";
+import PreferencesScreen from "../screens/PreferencesScreen";
+import LoginScreen from "../screens/LoginScreen";
 
 const Tab = createBottomTabNavigator();
+const RootStack = createStackNavigator();
 const CalendarStack = createStackNavigator();
-const GroupsStack = createStackNavigator();
+const WorkoutTemplatesStack = createStackNavigator();
+const WorkoutHistoryStack = createStackNavigator();
+const ExercisesStack = createStackNavigator();
 const MessagesStack = createStackNavigator();
 const PreferencesStack = createStackNavigator();
 
+// Stack navigators for each tab
 function CalendarStackScreen() {
   return (
     <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
-      <CalendarStack.Screen name="CalendarHome" component={CalendarScreen} />
-      <CalendarStack.Screen name="EventDetails" component={EventDetailsScreen} />
-      <CalendarStack.Screen name="CreateEvent" component={CreateEventScreen} />
-      <CalendarStack.Screen name="AddScreen" component={AddScreen} />
-      <CalendarStack.Screen name="ImportCalendar" component={ImportCalendarScreen} />
-      <CalendarStack.Screen name="CreateTask" component={CreateTaskScreen} />
-      <CalendarStack.Screen name="DayScreen" component={DayScreen} />
-      <CalendarStack.Screen name="CalendarEdit" component={CalendarEditScreen} />
-      <CalendarStack.Screen name="PublicCalendars" component={AddPublicCalendarsScreen} />
+      <CalendarStack.Screen name="CalendarHome" component={WorkoutsCalendarScreen} />
     </CalendarStack.Navigator>
   );
 }
 
-function GroupsStackScreen() {
+function WorkoutTemplatesStackScreen() {
   return (
-    <GroupsStack.Navigator screenOptions={{ headerShown: false }}>
-      <GroupsStack.Screen name="GroupsHome" component={GroupScreen} />
-      <GroupsStack.Screen name="GroupDetails" component={GroupDetailsScreen} />
-      <GroupsStack.Screen name="CreateGroup" component={CreateGroupScreen} />
-      <GroupsStack.Screen name="JoinGroup" component={JoinGroupScreen} />
-    </GroupsStack.Navigator>
+    <WorkoutTemplatesStack.Navigator screenOptions={{ headerShown: false }}>
+      <WorkoutTemplatesStack.Screen name="WorkoutTemplatesHome" component={WorkoutTemplatesScreen} />
+    </WorkoutTemplatesStack.Navigator>
+  );
+}
+
+function WorkoutHistoryStackScreen() {
+  return (
+    <WorkoutHistoryStack.Navigator screenOptions={{ headerShown: false }}>
+      <WorkoutHistoryStack.Screen name="WorkoutHistoryHome" component={WorkoutHistoryScreen} />
+    </WorkoutHistoryStack.Navigator>
+  );
+}
+
+function ExercisesStackScreen() {
+  return (
+    <ExercisesStack.Navigator screenOptions={{ headerShown: false }}>
+      <ExercisesStack.Screen name="ExercisesHome" component={ExercisesScreen} />
+    </ExercisesStack.Navigator>
   );
 }
 
@@ -76,85 +76,118 @@ function MessagesStackScreen() {
 function PreferencesStackScreen() {
   return (
     <PreferencesStack.Navigator screenOptions={{ headerShown: false }}>
-      <PreferencesStack.Screen name="PreferencesHome" component={PreferencesScreen} />
+      <PreferencesStack.Screen
+        name="PreferencesHome"
+        component={PreferencesScreen}
+      />
     </PreferencesStack.Navigator>
   );
 }
 
-// 👇 NEW: Wrapper component to provide navigation context to AppHeader
+// Header wrapper with navigation context
 function HeaderWithNavigation({ onLogout }) {
+  const { allCalendars } = useData();
+  console.log("ALL CALENDARS IN HEADER:", allCalendars);
   const navigation = useNavigation();
-  const { user, calendars, isUserAdmin } = useData();
 
-  // Build app-specific menu items for Calendar app
+  // Build menu items for MyWorkouts
   const menuItems = [
-    { 
-      icon: '📅', 
-      label: `My Calendars (${calendars?.length || 0})`, 
-      onPress: () => navigation.navigate('Calendar', { screen: 'CalendarEdit' })
-    },
-    // Logout
     {
-      icon: '🚪',
-      label: 'Logout',
+      icon: "🚪",
+      label: "Logout",
       onPress: onLogout,
-      variant: 'danger'
-    }
+      variant: "danger",
+    },
   ];
 
-  return (
-    <AppHeader
-      appName="My Workouts"
-      menuItems={menuItems}
-    />
-  );
+  return <AppHeader appName="MyWorkouts" menuItems={menuItems} userCalendars={allCalendars || []} />;
 }
 
-function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklistsCount }) {
-  const getTabBarIcon = (routeName, focused) => {
-    let icon;
-    
-    switch (routeName) {
-      case 'Calendar':
-        icon = focused ? '🗓️' : '📆';
-        break;
-      case 'Groups':
-        icon = focused ? '👥' : '👤';
-        break;
-      case 'Preferences':
-        icon = focused ? '⚙️' : '🔧';
-        break;
-      case 'Messages':
-        icon = focused ? '💬' : '🗨️';
-        break;
-      default:
-        icon = '❓';
-    }
-    
-    return <Text style={{ fontSize: 20 }}>{icon}</Text>;
-  };
+const getTabBarIcon = (routeName, unreadCount = 0) => {
+  let icon;
 
-  const formatBadgeCount = (count) => {
-    if (count === 0) return null;
-    if (count <= 99) return count.toString();
-    return '99+';
-  };
+  switch (routeName) {
+    case "Calendar":
+      icon = "📆";
+      break;
+    case "WorkoutTemplates":
+      icon = "📋";
+      break;
+    case "Exercises":
+      icon = "🏋️";
+      break;
+    case "WorkoutHistory":
+      icon = "📊";
+      break;
+    case "Messages":
+      icon = "💬";
+      break;
+    case "Preferences":
+      icon = "⚙️";
+      break;
+    default:
+      icon = "❓";
+  }
+
+  // Show badge for Messages tab if there are unread messages
+  if (routeName === "Messages" && unreadCount > 0) {
+    return (
+      <View style={{ position: 'relative' }}>
+        <Text style={{ fontSize: 20 }}>{icon}</Text>
+        <View
+          style={{
+            position: 'absolute',
+            top: -4,
+            right: -8,
+            backgroundColor: '#F44336',
+            borderRadius: 10,
+            minWidth: 20,
+            height: 20,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 4,
+          }}
+        >
+          <Text
+            style={{
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 'bold',
+            }}
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return <Text style={{ fontSize: 20 }}>{icon}</Text>;
+};
+
+function TabNavigator({ theme, onLogout }) {
+  const { unreadMessagesCount } = useData();
 
   return (
     <>
-      {/* 👇 CHANGED: Use new HeaderWithNavigation wrapper */}
       <HeaderWithNavigation onLogout={onLogout} />
-      
+
       <Tab.Navigator
         initialRouteName="Calendar"
         screenOptions={({ route }) => ({
           headerShown: false,
-          tabBarIcon: ({ focused }) => getTabBarIcon(route.name, focused),
-          tabBarActiveTintColor: theme.primary,
-          tabBarInactiveTintColor: theme.text?.secondary || '#999',
+          tabBarIcon: () => getTabBarIcon(route.name, unreadMessagesCount),
+          tabBarActiveTintColor: theme.text?.secondary || "#333",
+          tabBarInactiveTintColor: theme.text?.secondary || "#999",
+          tabBarActiveBackgroundColor: theme.primarySoft || "#e3f2ff",
+          tabBarItemStyle: {
+            borderRadius: 12,
+            marginHorizontal: 2,
+            marginTop: -8
+          },
           tabBarStyle: {
-            backgroundColor: theme.card || theme.surface || '#fff',
-            borderTopColor: theme.border || '#e0e0e0',
+            backgroundColor: theme.card || theme.surface || "#fff",
+            borderTopColor: theme.border || "#e0e0e0",
             borderTopWidth: 1,
             paddingBottom: 8,
             paddingTop: 8,
@@ -162,200 +195,150 @@ function TabNavigator({ theme, onLogout, unreadMessagesCount, unacceptedChecklis
           },
           tabBarLabelStyle: {
             fontSize: 12,
-            fontWeight: '500',
+            fontWeight: "500",
             marginTop: 4,
-          },
-          tabBarBadgeStyle: {
-            backgroundColor: theme.error || '#ef4444',
-            color: '#ffffff',
-            fontSize: 12,
-            fontWeight: '600',
-            minWidth: 18,
-            height: 18,
-            borderRadius: 9,
-            paddingHorizontal: 4,
-            marginLeft: -6,
-            marginTop: 2,
           },
         })}
       >
-        <Tab.Screen 
-          name="Calendar" 
+        <Tab.Screen
+          name="Calendar"
           component={CalendarStackScreen}
-          options={{
-            tabBarLabel: 'Calendars',
-          }}
-          listeners={({ navigation }) => ({
-            tabPress: (e) => {
-              const state = navigation.getState();
-              if (state.index === 0) {
-                e.preventDefault();
-              }
-              navigation.navigate('Calendar', { screen: 'CalendarHome' });
-            },
-          })}
+          options={{ tabBarLabel: "Calendar" }}
         />
-        <Tab.Screen 
-          name="Groups" 
-          component={GroupsStackScreen}
-          options={{
-            tabBarLabel: 'Groups',
-          }}
-          listeners={({ navigation }) => ({
-            tabPress: (e) => {
-              const state = navigation.getState();
-              if (state.index === 0) {
-                e.preventDefault();
-              }
-              navigation.navigate('Groups', { screen: 'GroupsHome' });
-            },
-          })}
+        <Tab.Screen
+          name="WorkoutTemplates"
+          component={WorkoutTemplatesStackScreen}
+          options={{ tabBarLabel: "Templates" }}
         />
-        <Tab.Screen 
-          name="Messages" 
+        <Tab.Screen
+          name="Exercises"
+          component={ExercisesStackScreen}
+          options={{ tabBarLabel: "Exercises" }}
+        />
+        <Tab.Screen
+          name="WorkoutHistory"
+          component={WorkoutHistoryStackScreen}
+          options={{ tabBarLabel: "History" }}
+        />
+        <Tab.Screen
+          name="Messages"
           component={MessagesStackScreen}
-          options={{
-            tabBarLabel: 'Messages',
-            tabBarBadge: formatBadgeCount(unreadMessagesCount),
-          }}
-          listeners={({ navigation }) => ({
-            tabPress: (e) => {
-              const state = navigation.getState();
-              if (state.index === 0) {
-                e.preventDefault();
-              }
-              navigation.navigate('Messages', { screen: 'MessagesHome' });
-            },
-          })}
+          options={{ tabBarLabel: "Messages" }}
         />
         <Tab.Screen
           name="Preferences"
           component={PreferencesStackScreen}
-          options={{
-            tabBarLabel: 'Preferences',
-            tabBarBadge: formatBadgeCount(unacceptedChecklistsCount),
-          }}
-          listeners={({ navigation }) => ({
-            tabPress: (e) => {
-              const state = navigation.getState();
-              if (state.index === 0) {
-                e.preventDefault();
-              }
-              navigation.navigate('Preferences', { screen: 'PreferencesHome' });
-            },
-          })}
+          options={{ tabBarLabel: "Settings" }}
         />
       </Tab.Navigator>
     </>
   );
 }
 
-const MainNavigator = ({ onLogout }) => {
+// Root navigator that handles auth state
+function RootNavigator({ onLogout }) {
+  const { user, authLoading } = useAuth();
+  const { userLoading } = useData();
   const { theme } = useTheme();
-  const { loading, user, unreadMessagesCount, unacceptedChecklistsCount, retryUserSubscription } = useData();
-  const { user: authUser } = useAuth();
 
-  console.log("Unread messages in MainNavigator:", unreadMessagesCount);
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  const showRetry = !loading && !user && authUser;
-  console.log("Show retry option:", showRetry);
-
-  const linking = {
-    prefixes: ['myworkouts://'],
-    config: {
-      screens: {
-        Calendar: {
-          screens: {
-            CalendarHome: 'calendar',
-            EventDetails: 'calendar/event/:eventId',
-            CreateEvent: 'calendar/create',
-            ImportCalendar: 'calendar/import',
-            Messages: 'calendar/messages',
-            CreateTask: 'calendar/create-task',
-          },
-        },
-        Groups: {
-          screens: {
-            GroupsHome: 'groups',
-            GroupDetails: 'groups/:groupId',
-            CreateGroup: 'groups/create',
-            JoinGroup: 'groups/join',
-            Messages: 'groups/messages',
-          },
-        },
-        Messages: {
-          screens: {
-            MessagesHome: 'messages',
-          },
-        },
-        Preferences: {
-          screens: {
-            PreferencesHome: 'preferences',
-            Messages: 'preferences/messages',
-          },
-        },
-        NotFound: '*',
-      },
-    },
-  };
-
-  if (showRetry) {
+  if (authLoading || userLoading) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: theme.background,
-        paddingHorizontal: 20 
-      }}>
-        <Ionicons name="alert-circle-outline" size={64} color={theme.text.secondary} />
-        <Text style={{ 
-          fontSize: 18, 
-          color: theme.text.primary, 
-          marginVertical: 16,
-          textAlign: 'center' 
-        }}>
-          Unable to load your profile
-        </Text>
-        <Text style={{ 
-          fontSize: 14, 
-          color: theme.text.secondary, 
-          marginBottom: 24,
-          textAlign: 'center' 
-        }}>
-          Please check your connection and try again
-        </Text>
-        <TouchableOpacity 
-          style={{ 
-            backgroundColor: theme.primary, 
-            paddingHorizontal: 24, 
-            paddingVertical: 12, 
-            borderRadius: 8 
-          }}
-          onPress={retryUserSubscription}
-        >
-          <Text style={{ color: theme.text.inverse, fontWeight: '600', fontSize: 16 }}>
-            Retry
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <LoadingScreen
+        icon={require("../../assets/MyWorkoutsIcon.png")}
+        message="Loading your workouts..."
+        iconSize={128}
+      />
     );
   }
 
   return (
-    <NavigationContainer 
-      linking={linking}
-    >
-      <TabNavigator 
-        theme={theme} 
-        onLogout={onLogout}
-        unreadMessagesCount={unreadMessagesCount}
-        unacceptedChecklistsCount={unacceptedChecklistsCount}
-      />
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      {user ? (
+        <RootStack.Screen name="Main">
+          {() => <TabNavigator theme={theme} onLogout={onLogout} />}
+        </RootStack.Screen>
+      ) : (
+        <RootStack.Screen name="Login" component={LoginScreen} />
+      )}
+    </RootStack.Navigator>
+  );
+}
+
+const MainNavigator = ({ onLogout }) => {
+  const { setSelectedDate, setSelectedMonth, setSelectedYear } = useData();
+
+  const linking = {
+    prefixes: ["myworkout://"],
+    config: {
+      screens: {
+        Main: {
+          screens: {
+            Calendar: {
+              screens: {
+                CalendarHome: "calendar",
+              },
+            },
+            WorkoutTemplates: {
+              screens: {
+                WorkoutTemplatesHome: "templates",
+              },
+            },
+            Exercises: {
+              screens: {
+                ExercisesHome: "exercises",
+              },
+            },
+            WorkoutHistory: {
+              screens: {
+                WorkoutHistoryHome: "history",
+              },
+            },
+            Messages: {
+              screens: {
+                MessagesHome: "messages",
+              },
+            },
+            Preferences: {
+              screens: {
+                PreferencesHome: "preferences",
+              },
+            },
+          },
+        },
+        Login: "login",
+        NotFound: "*",
+      },
+    },
+
+    subscribe(listener) {
+      const onReceiveURL = ({ url }) => {
+        console.log("🔗 Deep link received:", url);
+
+        const { queryParams } = Linking.parse(url);
+
+        if (queryParams?.date) {
+          console.log("📅 Setting date from deep link:", queryParams.date);
+          const dt = DateTime.fromISO(queryParams.date);
+
+          setSelectedDate(queryParams.date);
+          setSelectedMonth(dt.monthLong);
+          setSelectedYear(dt.year);
+        }
+
+        listener(url);
+      };
+
+      const subscription = Linking.addEventListener("url", onReceiveURL);
+
+      return () => subscription?.remove();
+    },
+  };
+
+  return (
+    <NavigationContainer linking={linking}>
+      <NotificationProvider>
+        <RootNavigator onLogout={onLogout} />
+      </NotificationProvider>
     </NavigationContainer>
   );
 };

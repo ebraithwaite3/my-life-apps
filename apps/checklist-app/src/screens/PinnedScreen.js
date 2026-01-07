@@ -1,7 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, FlatList, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useTheme, useData, useAuth, useChecklistData } from "@my-apps/contexts";
+import {
+  useTheme,
+  useData,
+  useAuth,
+  useChecklistData,
+} from "@my-apps/contexts";
 import {
   PageHeader,
   EditChecklistContent,
@@ -24,7 +29,8 @@ const PinnedScreen = () => {
   const { user, groups } = useData();
   const { allPinned, checklistsLoading } = useChecklistData();
   const deleteNotification = useDeleteNotification();
-  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
+  const { allTemplates, saveTemplate, promptForContext } =
+    useChecklistTemplates();
   const editContentRef = useRef(null); // Ref for EditChecklistContent
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -41,9 +47,13 @@ const PinnedScreen = () => {
     if (checklistMode !== "complete" || !selectedChecklist) return;
 
     const originalItems = selectedChecklist.items || [];
-    const hasChanges = updatedItems.some((item, index) => {
-      const originalItem = originalItems[index];
-      return originalItem ? item.completed !== originalItem.completed : false;
+
+    // Deep compare using JSON.stringify to catch sub-item changes
+    const hasChanges =
+      JSON.stringify(updatedItems) !== JSON.stringify(originalItems);
+    console.log("🔍 Dirty check:", {
+      checklistMode,
+      hasChanges,
     });
 
     setIsDirtyComplete(hasChanges);
@@ -446,9 +456,10 @@ const PinnedScreen = () => {
   };
 
   // Calculate progress directly (no memo needed - it's fast)
-const progress = checklistMode === "complete" && updatedItems.length > 0
-? calculateChecklistProgress(updatedItems)
-: { completed: 0, total: 0 };
+  const progress =
+    checklistMode === "complete" && updatedItems.length > 0
+      ? calculateChecklistProgress(updatedItems)
+      : { completed: 0, total: 0 };
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
@@ -528,13 +539,16 @@ const progress = checklistMode === "complete" && updatedItems.length > 0
               onSave={(checklist, shouldSaveAsTemplate) => {
                 // First save the pinned checklist
                 handleSaveChecklist(checklist, handleCloseModal);
-                
+
                 // Then if "Save as Template" was enabled, save as template too
                 if (shouldSaveAsTemplate) {
                   promptForContext(async (context) => {
                     const success = await saveTemplate(checklist, context);
                     if (success) {
-                      Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                      Alert.alert(
+                        "Success",
+                        `Template "${checklist.name}" saved successfully`
+                      );
                     }
                   });
                 }
@@ -549,10 +563,7 @@ const progress = checklistMode === "complete" && updatedItems.length > 0
       </ModalWrapper>
 
       {/* View/Complete Checklist Modal */}
-      <ModalWrapper
-        visible={showChecklistModal}
-        onClose={closeChecklistModal}
-      >
+      <ModalWrapper visible={showChecklistModal} onClose={closeChecklistModal}>
         <View
           style={{
             position: "absolute",
@@ -629,13 +640,16 @@ const progress = checklistMode === "complete" && updatedItems.length > 0
                 onSave={(checklist, shouldSaveAsTemplate) => {
                   // First save the pinned checklist
                   handleSaveChecklist(checklist, closeChecklistModal);
-                  
+
                   // Then if "Save as Template" was enabled, save as template too
                   if (shouldSaveAsTemplate) {
                     promptForContext(async (context) => {
                       const success = await saveTemplate(checklist, context);
                       if (success) {
-                        Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                        Alert.alert(
+                          "Success",
+                          `Template "${checklist.name}" saved successfully`
+                        );
                       }
                     });
                   }

@@ -6,21 +6,30 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 export const useUpdateInternalActivities = () => {
   const { user: authUser, db } = useAuth();
 
-  const updateInternalActivities = async (eventId, startTime, activities) => {
+  const updateInternalActivities = async (eventId, startTime, activities, groupId = null) => {
     if (!authUser?.uid) {
       console.error('No authUser ID available');
       return { success: false, error: 'User not authenticated' };
     }
     
     try {
-      // Get the month key from the start time
       const eventDateTime = DateTime.fromISO(startTime);
       const monthKey = eventDateTime.toFormat("yyyy-LL");
       
-      console.log("📝 Updating internal event activities:", monthKey, eventId);
+      console.log("📝 Updating internal event activities:", monthKey, eventId, groupId ? `(Group: ${groupId})` : '(User)');
 
-      // Build path to activities month document
-      const monthRef = doc(db, 'activities', authUser.uid, 'months', monthKey);
+      let monthRef;
+      
+      if (groupId) {
+        // GROUP PATH: activities/{groupId}/months/{monthKey}
+        monthRef = doc(db, 'activities', groupId, 'months', monthKey);
+      } else {
+        // USER PATH: activities/{userId}/months/{monthKey}
+        monthRef = doc(db, 'activities', authUser.uid, 'months', monthKey);
+      }
+      
+      console.log("📂 Path:", monthRef.path);
+      
       const monthDoc = await getDoc(monthRef);
       
       if (!monthDoc.exists() || !monthDoc.data().items) {
@@ -28,25 +37,22 @@ export const useUpdateInternalActivities = () => {
         return { success: false, error: 'Month document not found' };
       }
 
-      // Get the items map (not events!)
       const existingItems = { ...monthDoc.data().items };
       
-      // Check if the event exists in the map
       if (!existingItems[eventId]) {
         console.error('Event not found in items map:', eventId);
+        console.log('Available event IDs:', Object.keys(existingItems));
         return { success: false, error: 'Event not found' };
       }
 
-      // Update the event with new activities
       existingItems[eventId] = {
         ...existingItems[eventId],
         activities: activities || []
       };
 
-      // Write back with merge
       await setDoc(monthRef, { items: existingItems }, { merge: true });
 
-      console.log('✅ Internal event activities updated:', eventId);
+      console.log('✅ Internal event activities updated:', eventId, groupId ? '(Group)' : '(User)');
       return { success: true };
       
     } catch (error) {

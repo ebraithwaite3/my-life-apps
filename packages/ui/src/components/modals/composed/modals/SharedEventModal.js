@@ -114,51 +114,47 @@ const SharedEventModal = ({
     formState.setCurrentScreen(activityConfig.type);
   };
 
-  // Handle template selection
-  const handleTemplateSelect = (option) => {
-    setShowTemplateModal(false);
+  // Handle template selection (Handles multiple types of activities, coming from each apps CalendarScreen)
+const handleTemplateSelect = (option) => {
+  setShowTemplateModal(false);
 
-    if (option.value === "new") {
-      formState.setCurrentScreen(currentTemplateActivity.type);
-      return;
-    }
+  if (option.value === "new") {
+    formState.setCurrentScreen(currentTemplateActivity.type);
+    return;
+  }
 
-    // Create activity from template
-    const template = option.template;
-    const activityConfig = currentTemplateActivity;
+  const template = option.template;
+  const activityConfig = currentTemplateActivity;
 
-    const newActivity = {
-      id: `${activityConfig.type}_${Date.now()}`,
-      name: template.name,
-      // ✅ FIXED - Preserves subItems and all other properties
-      items: template.items.map((item, index) => ({
-        ...item, // ← Spread ALL properties from template
-        id: item.id || `item_${Date.now()}_${index}`, // Override/ensure ID
-        completed: false, // Reset completion state
-      })),
-      createdAt: Date.now(),
-      ...(template.defaultNotifyAdmin && { notifyAdmin: true }),
-    };
+  // Use activity-specific transformer OR fallback to generic
+  const newActivity = activityConfig.transformTemplate
+    ? activityConfig.transformTemplate(template)
+    : {
+        id: `${activityConfig.type}_${Date.now()}`,
+        name: template.name,
+        ...template,
+        createdAt: Date.now(),
+      };
 
-    activityConfig.onSelectActivity(newActivity);
+  activityConfig.onSelectActivity(newActivity);
 
-    // Set reminder from template if provided
-    if (template.defaultReminderTime) {
-      const [hours, minutes] = template.defaultReminderTime
-        .split(":")
-        .map(Number);
-      const reminderDate = formState.startDate
-        ? new Date(formState.startDate)
-        : new Date();
-      reminderDate.setHours(hours, minutes, 0, 0);
-      formState.setReminderMinutes(reminderDate.toISOString());
-    }
+  // Set reminder from template if provided
+  if (template.defaultReminderTime) {
+    const [hours, minutes] = template.defaultReminderTime.split(":").map(Number);
+    const reminderDate = formState.startDate
+      ? new Date(formState.startDate)
+      : new Date();
+    reminderDate.setHours(hours, minutes, 0, 0);
+    formState.setReminderMinutes(reminderDate.toISOString());
+  }
 
-    setCurrentTemplateActivity(null);
-  };
+  setCurrentTemplateActivity(null);
+};
 
   // Handle save
   const handleSave = async () => {
+    console.log('💾 SharedEventModal: handleSave called');
+    console.log('Activity that are being saved: ', activities);
     formState.setErrors([]);
 
     // Check if all required activities are selected
@@ -192,17 +188,13 @@ const SharedEventModal = ({
 
     // Build activities array from all selected activities
     const activitiesData = formState.isEditing
-      ? event.activities || [] // Preserve existing activities when editing
-      : activities
-          .filter((a) => a.selectedActivity) // Only include selected activities
-          .map((a) => ({
-            id: a.selectedActivity.id,
-            activityType: a.type,
-            name: a.selectedActivity.name,
-            items: a.selectedActivity.items,
-            createdAt: a.selectedActivity.createdAt,
-            ...(a.selectedActivity.notifyAdmin && { notifyAdmin: true }),
-          }));
+  ? event.activities || []
+  : activities
+      .filter((a) => a.selectedActivity)
+      .map((a) => ({
+        ...a.selectedActivity, // ← Spread FIRST (gets everything)
+        activityType: a.type,   // ← Override to ensure correct type
+      }));
 
     // Create or update event
     const result = formState.isEditing

@@ -5,25 +5,41 @@ import { useTheme } from '@my-apps/contexts';
 import { Ionicons } from '@expo/vector-icons';
 
 const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDelete }) => {
-  // console.log("Rendering ActivityRow with activities:", activities);
   const { theme, getSpacing, getBorderRadius } = useTheme();
 
   const handlePress = (activity) => {
-    if (activity.activityType === 'checklist' && onActivityPress) {
-      onActivityPress(event, activity);
+    // Special case: Checklists are universal and work in all apps
+    if (activity.activityType === 'checklist') {
+      console.log('✅ Checklist activity pressed (universal)');
+      if (onActivityPress) {
+        onActivityPress(activity, event);
+      }
       return;
     }
-    
+
+    // Check if this is an internal activity (same as current app)
     if (activity.activityType === appName) {
-      console.log("Internal Activity pressed:", activity);
+      // Internal activity - handle in current app
+      console.log(`✅ Internal ${appName} activity pressed`);
+      if (onActivityPress) {
+        onActivityPress(activity, event);
+      }
     } else {
-      console.log("External Activity pressed:", activity);
+      // External activity - should navigate to other app
+      console.log(`🔗 External activity: Should navigate to ${activity.activityType} app`);
+      console.log('Activity:', activity);
+      console.log('Event:', event);
+      // TODO: Implement navigation to other app
+      // navigation.navigate(`${activity.activityType}-app`, { 
+      //   activityId: activity.id,
+      //   eventId: event.eventId 
+      // });
     }
   };
 
   const handleLongPress = (activity) => {
     if (onActivityDelete) {
-      onActivityDelete(event, activity);
+      onActivityDelete(activity, event);
     }
   };
 
@@ -44,7 +60,6 @@ const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDe
       paddingLeft: getSpacing.md,
       gap: getSpacing.lg,
     },
-    // Base style for the container
     iconContainer: {
       width: 40,
       height: 40,
@@ -59,25 +74,32 @@ const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDe
   return (
     <View style={styles.container}>
       {activities.map((activity, index) => {
-        
-        // 1. Determine if this specific activity is a completed checklist
+        // Determine if this specific activity is a completed checklist
         const isChecklistComplete = 
             activity.activityType === 'checklist' && 
             activity.items && 
             activity.items.length > 0 && 
             activity.items.every(item => item.completed === true);
 
-        // 2. Determine colors based on completion status
-        // Use a standard green or theme.success if you have it
-        const activeColor = isChecklistComplete ? '#4CAF50' : theme.primary;
-        const activeBorderColor = isChecklistComplete ? '#4CAF50' : (theme.border || '#E0E0E0');
+        // Determine if workout is complete (all sets done)
+        const isWorkoutComplete =
+            activity.activityType === 'workout' &&
+            activity.exercises &&
+            activity.exercises.length > 0 &&
+            activity.exercises.every(ex => 
+              ex.sets && ex.sets.length > 0 && ex.sets.every(set => set.completed)
+            );
+
+        // Determine colors based on completion status
+        const isComplete = isChecklistComplete || isWorkoutComplete;
+        const activeColor = isComplete ? '#4CAF50' : theme.primary;
+        const activeBorderColor = isComplete ? '#4CAF50' : (theme.border || '#E0E0E0');
 
         return (
           <TouchableOpacity 
             key={index} 
             style={[
               styles.iconContainer, 
-              // 3. Apply the dynamic border color
               { borderColor: activeBorderColor } 
             ]}
             onPress={() => handlePress(activity)}
@@ -88,7 +110,6 @@ const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDe
             <Ionicons
               name={getActivityIcon(activity.activityType)}
               size={28}
-              // 4. Apply the dynamic icon color
               color={activeColor}
             />
           </TouchableOpacity>

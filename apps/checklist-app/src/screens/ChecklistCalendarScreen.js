@@ -140,8 +140,14 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         onDeleteEvent={calendarHandlers.handleDeleteEvent}
         onEditEvent={calendarHandlers.handleEditEvent}
         onAddActivity={calendarHandlers.handleAddChecklist}
-        onActivityPress={calendarHandlers.handleViewChecklist}
-        onActivityDelete={calendarHandlers.handleDeleteChecklist}
+        onActivityPress={(activity, event) => {
+          // ActivityRow passes (activity, event) but handleViewChecklist expects (event, activity)
+          calendarHandlers.handleViewChecklist(event, activity);
+        }}
+        onActivityDelete={(activity, event) => {
+          // ActivityRow passes (activity, event) but handleDeleteChecklist expects (event, activity)
+          calendarHandlers.handleDeleteChecklist(event, activity);
+        }}
       />
 
       {/* Shared Event Modal with Checklist Configuration */}
@@ -172,6 +178,18 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
             EditorComponent: EditChecklistContent,
             selectedActivity: selectedChecklist,
             onSelectActivity: setSelectedChecklist,
+            // Add this transformer
+            transformTemplate: (template) => ({
+              id: `checklist_${Date.now()}`,
+              name: template.name,
+              items: template.items.map((item, index) => ({
+                ...item,
+                id: item.id || `item_${Date.now()}_${index}`,
+                completed: false,
+              })),
+              createdAt: Date.now(),
+              ...(template.defaultNotifyAdmin && { notifyAdmin: true }),
+            }),
             editorProps: {
               templates: allTemplates,
               onSaveTemplate: saveTemplate,

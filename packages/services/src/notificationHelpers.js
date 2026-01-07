@@ -39,6 +39,7 @@ export const scheduleNotification = async (userId, title, body, eventId, schedul
       title,
       body,
       eventId,
+      notificationId: data.checklistId ? `${eventId}-checklist-${data.checklistId}` : eventId, // ← ADD THIS
       data: {
         ...data,
         app: data.app || 'organizer-app',
@@ -94,7 +95,8 @@ export const scheduleBatchNotification = async (userIds, title, body, scheduledF
     for (const userId of userIds) {
       const notificationData = {
         userId,
-        eventId: data.eventId, // ← ADD THIS (extract from data)
+        eventId: data.eventId,
+        notificationId: `${data.eventId}-checklist-${data.checklistId}`, // ← ADD THIS
         title,
         body,
         data: {

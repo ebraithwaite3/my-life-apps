@@ -52,10 +52,10 @@ const ChecklistModal = ({
     if (checklistMode !== "complete" || !selectedChecklist) return;
 
     const originalItems = selectedChecklist.items || [];
-    const hasChanges = updatedItems.some((item, index) => {
-      const originalItem = originalItems[index];
-      return originalItem ? item.completed !== originalItem.completed : false;
-    });
+
+    // Deep compare using JSON.stringify to catch sub-item changes
+    const hasChanges =
+      JSON.stringify(updatedItems) !== JSON.stringify(originalItems);
 
     console.log("🔍 Dirty check:", {
       checklistMode,

@@ -29,6 +29,7 @@ import ChecklistItemConfigModal from "../../composed/modals/ChecklistItemConfigM
 import { useAutoScrollOnFocus } from "@my-apps/hooks";
 import { canSaveAsTemplate, getChecklistStats } from "@my-apps/utils";
 import { useChecklistState } from "@my-apps/hooks";
+import { DateTime } from "luxon";
 
 const EditChecklistContent = forwardRef(
   (
@@ -109,7 +110,7 @@ const EditChecklistContent = forwardRef(
     useEffect(() => {
       if (wasJustCompleted) {
         console.log("🎉 Checklist just completed!");
-        const stats = getChecklistStats(currentChecklist);
+        const stats = getChecklistStats(currentChecklist.items);
         console.log("📊 Checklist stats:", stats);
         // TODO: Add celebration animation, toast, confetti, etc.
       }
@@ -347,10 +348,17 @@ const EditChecklistContent = forwardRef(
 
         if (hasEventTime && addReminder) {
           if (reminderMinutes !== null) {
-            newChecklist.reminderMinutes = reminderMinutes;
+            console.log("Storing reminderMinutes:", reminderMinutes);
+            // Convert ISO string back to minutes before event start
+            const eventTime = DateTime.fromISO(eventStartTime.toISOString());
+            const reminderTimeObj = DateTime.fromISO(reminderMinutes);
+            const minutesBefore = Math.round(eventTime.diff(reminderTimeObj, 'minutes').minutes);
+            
+            newChecklist.reminderMinutes = minutesBefore; // Store as number
           }
         } else if (!hasEventTime && reminderTime) {
-          newChecklist.reminderTime = reminderTime;
+          console.log("Storing reminderTime:", reminderTime);
+          newChecklist.reminderTime = reminderTime; // Store as ISO string
         }
       }
 

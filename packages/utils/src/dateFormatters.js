@@ -153,3 +153,50 @@ export const format24HourTimeString = (timeString) => {
   // Return in 12-hour format "h:mm a"
   return dt.toFormat("h:mm a"); 
 };
+
+/**
+ * Format the last used date with relative descriptions (Today, Yesterday, Weeks)
+ * and a fallback to a full numeric date.
+ * * Logic breakdown:
+ * - 0 days: "Today"
+ * - 1 day: "Yesterday"
+ * - < 7 days: "X days ago"
+ * - < 30 days: "X weeks ago (M/D)"
+ * - Default: "M/D/YYYY"
+ * * @param {string|DateTime} date - ISO date string or Luxon DateTime
+ * @returns {string|null} Human-readable relative date or null if input is empty
+ */
+export const formatLastUsed = (dateString) => {
+  if (!dateString) return null;
+
+  // Convert input to a Luxon DateTime object
+  const dt = typeof dateString === "string" ? DateTime.fromISO(dateString) : dateString;
+  if (!dt.isValid) return "";
+
+  // Get "today" and the "input date" at midnight (start of day) 
+  // to ensure we are comparing calendar days, not hours/minutes.
+  const today = DateTime.now().startOf("day");
+  const inputDate = dt.startOf("day");
+
+  // Calculate the difference in calendar days
+  const diffDays = Math.floor(today.diff(inputDate, "days").days);
+
+  // 1. Check for Today
+  if (diffDays === 0) return "Today";
+
+  // 2. Check for Yesterday
+  if (diffDays === 1) return "Yesterday";
+
+  // 3. Check for recent days (within the last week)
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  // 4. Check for recent weeks (within the last 30 days)
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    const dateStr = dt.toFormat("M/d"); // e.g., "11/23"
+    return `${weeks} week${weeks > 1 ? "s" : ""} ago (${dateStr})`;
+  }
+
+  // 5. Fallback for older dates (older than 30 days)
+  return dt.toFormat("M/d/yyyy"); // e.g., "10/15/2023"
+};

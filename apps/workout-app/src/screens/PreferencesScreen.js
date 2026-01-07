@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,13 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@my-apps/contexts";
-import { ToggleRow, SelectModal } from "@my-apps/ui";  // 👈 Import both components
-import { useData } from "../contexts/DataContext";
-import { useAuth } from "../contexts/AuthContext";
-import { updateUserDoc } from "../services/firestoreService";
-import EditChecklist from "../components/cards/ChecklistCard/EditChecklist";
+import { SelectModal, CommunicationPreferences, PageHeader } from "@my-apps/ui";
+import { useData } from "@my-apps/contexts";
+import { useAuth } from "@my-apps/contexts";
+import { updateDocument } from "@my-apps/services";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 
 const defaultPreferences = {
   workoutPreferences: {
@@ -20,54 +21,172 @@ const defaultPreferences = {
     addChecklistToWorkout: false,
     checklistId: "",
   },
+  defaultCalendarView: "day",
+  // --- NEW DEFAULT PREFERENCE ---
+  defaultCalendarId: "", 
+  // ------------------------------
+  communicationPreferences: {
+    notifications: {
+      active: true,
+      notifyFor: {
+        creation: {
+          events: true,
+          activities: true,
+        },
+        edits: {
+          events: true,
+          activities: true,
+        },
+        deletions: {
+          events: true,
+          activities: true,
+        },
+        reminders: {
+          events: true,
+          activities: true,
+        },
+        messages: {
+          events: true,
+          activities: true,
+        },
+      },
+    },
+    messages: {
+      active: true,
+      notifyFor: {
+        creation: {
+          events: true,
+          activities: true,
+        },
+        edits: {
+          events: true,
+          activities: true,
+        },
+        deletions: {
+          events: true,
+          activities: true,
+        },
+        reminders: {
+          events: true,
+          activities: true,
+        },
+        messages: {
+          events: true,
+          activities: true,
+        },
+      },
+    },
+  },
 };
 
 const PreferencesScreen = ({ navigation, route }) => {
-  const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+  const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
-  const { preferences, user } = useData();
+  const { preferences, user, groups } = useData();
 
-  const initialPrefs =
-    preferences && Object.keys(preferences).length
-      ? { ...defaultPreferences, ...preferences }
+  // Use Memo to see if the user is just a 'member' role in any groups
+  const isMemberInAnyGroup = useMemo(() => {
+    if (!user || !groups) return false;
+
+    return groups.some((group) => {
+      const member = group.members.find((m) => m.userId === user.userId);
+      return member && member.role === "member";
+    });
+  }, [user, groups]);
+  
+  // --- NEW: Generate options for the Default Calendar SelectModal ---
+  const defaultCalendarOptions = useMemo(() => {
+    // 1. Start with the "None" option
+    const options = [{ label: "None", value: "" }];
+
+    // 2. Add Group Calendars
+    groups.forEach((group) => {
+      options.push({
+        label: `${group.name} Calendar`,
+        value: `group-${group.groupId}`,
+      });
+    });
+
+    // 3. Add Google Calendars
+    user?.calendars
+      ?.filter((cal) => cal.calendarType === "google")
+      .forEach((cal) => {
+        options.push({
+          label: cal.name, // Use the calendar's actual name
+          value: cal.calendarId,
+        });
+      });
+      
+    // 4. Add the Internal Calendar (Personal)
+    options.push({
+      label: "Personal Calendar",
+      value: "internal",
+    });
+
+    return options;
+  }, [groups, user?.calendars]);
+  // ------------------------------------------------------------------
+
+  // Merge saved preferences with defaults
+  const initialPrefs = useMemo(() => {
+    return preferences && Object.keys(preferences).length
+      ? {
+          ...defaultPreferences,
+          ...preferences,
+          // Ensure defaultCalendarId is merged if it exists on saved preferences
+          defaultCalendarId: preferences.defaultCalendarId ?? "", 
+          communicationPreferences: {
+            ...defaultPreferences.communicationPreferences,
+            ...preferences.communicationPreferences,
+          },
+        }
       : defaultPreferences;
+  }, [preferences]);
+
 
   const [updatedPreferences, setUpdatedPreferences] = useState(initialPrefs);
   const [hasChanges, setHasChanges] = useState(false);
-  const [showEditChecklist, setShowEditChecklist] = useState(false);
-
+  
+  // Update state when initialPrefs changes (e.g., data loads)
   useEffect(() => {
-    const currentBase =
-      preferences && Object.keys(preferences).length
-        ? { ...defaultPreferences, ...preferences }
-        : defaultPreferences;
+    setUpdatedPreferences(initialPrefs);
+  }, [initialPrefs]);
+
+
+  // Detect changes
+  useEffect(() => {
+    // Use initialPrefs as the baseline for comparison
     const changesMade =
-      JSON.stringify(currentBase) !== JSON.stringify(updatedPreferences);
+      JSON.stringify(initialPrefs) !== JSON.stringify(updatedPreferences);
     setHasChanges(changesMade);
-  }, [preferences, updatedPreferences]);
+  }, [initialPrefs, updatedPreferences]);
 
-  const handleToggle = (key, value) => {
+
+  // 📅 Calendar View Handler
+  const handleCalendarViewChange = (value) => {
     setUpdatedPreferences((prev) => ({
       ...prev,
-      workoutPreferences: {
-        ...((prev && prev.workoutPreferences) ||
-          defaultPreferences.workoutPreferences),
-        [key]: value,
-      },
+      defaultCalendarView: value,
     }));
   };
 
-  const handleChecklistSelect = (checklistId) => {
+  // 📅 Default Calendar ID Handler (NEW)
+  const handleDefaultCalendarIdChange = (value) => {
     setUpdatedPreferences((prev) => ({
       ...prev,
-      workoutPreferences: {
-        ...((prev && prev.workoutPreferences) ||
-          defaultPreferences.workoutPreferences),
-        checklistId: checklistId || "",
-      },
+      defaultCalendarId: value,
     }));
   };
 
+  // 🔔 Communication Preferences Handler
+  const handleCommunicationUpdate = (newCommPrefs) => {
+    setUpdatedPreferences((prev) => ({
+      ...prev,
+      communicationPreferences: newCommPrefs,
+    }));
+  };
+
+  // 💾 Save
   const handleSave = async () => {
     if (!db || !user || !hasChanges) {
       console.warn(
@@ -79,20 +198,54 @@ const PreferencesScreen = ({ navigation, route }) => {
       return;
     }
 
-    if (
-      updatedPreferences.workoutPreferences?.addChecklistToWorkout &&
-      !updatedPreferences.workoutPreferences?.checklistId
-    ) {
-      Alert.alert(
-        "Checklist Required",
-        "Please select a checklist before saving, or disable 'Add Checklist To Workout'."
-      );
-      return;
-    }
-
     try {
-      await updateUserDoc(db, user.userId, { preferences: updatedPreferences });
+      // 1. Update user preferences
+      await updateDocument("users", user.userId, {
+        preferences: updatedPreferences,
+      });
       console.log("User preferences updated successfully!");
+
+      // 2. Update communication preferences in all groups the user belongs to
+      if (user.groups && user.groups.length > 0) {
+        console.log("Updating preferences in groups:", user.groups);
+
+        const groupUpdatePromises = user.groups.map(async (groupId) => {
+          try {
+            // Get fresh group data from Firestore
+            const groupDocRef = doc(db, "groups", groupId);
+            const groupDocSnap = await getDoc(groupDocRef);
+
+            if (groupDocSnap.exists()) {
+              const groupData = groupDocSnap.data();
+
+              if (groupData.members) {
+                // Update the member's preferences in the group
+                const updatedMembers = groupData.members.map((member) => {
+                  if (member.userId === user.userId) {
+                    return {
+                      ...member,
+                      preferences: updatedPreferences.communicationPreferences,
+                    };
+                  }
+                  return member;
+                });
+
+                // Update the group document
+                await updateDoc(groupDocRef, { members: updatedMembers });
+                console.log(
+                  `Updated preferences in group: ${groupData.name || groupId}`
+                );
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to update group ${groupId}:`, error);
+          }
+        });
+
+        await Promise.all(groupUpdatePromises);
+        console.log("All group preferences updated successfully!");
+      }
+
       Alert.alert("Success", "Preferences saved successfully!");
     } catch (error) {
       console.error("Failed to save preferences:", error);
@@ -100,30 +253,44 @@ const PreferencesScreen = ({ navigation, route }) => {
     }
   };
 
+  // ❌ Cancel
   const handleCancel = () => {
-    const merged =
-      preferences && Object.keys(preferences).length
-        ? { ...defaultPreferences, ...preferences }
-        : defaultPreferences;
-    setUpdatedPreferences(merged);
+    setUpdatedPreferences(initialPrefs);
   };
 
-  const handleChecklistSaved = () => {
-    console.log("Checklist saved successfully!");
-  };
+  // Custom categories for organizer app
+  const categories = [
+    {
+      key: "creation",
+      label: "Created",
+      description: "New events or activities",
+    },
+    {
+      key: "edits",
+      label: "Edited",
+      description: "Changes to events or activities",
+    },
+    {
+      key: "deletions",
+      label: "Deleted",
+      description: "Removed events or activities",
+    },
+    {
+      key: "reminders",
+      label: "Reminders",
+      description: "Upcoming event reminders",
+    },
+    {
+      key: "messages",
+      label: "Messages",
+      description: "Notes and messages on items",
+    },
+  ];
 
-  const isSaveDisabled = () => {
-    if (!hasChanges) return true;
-    
-    if (
-      updatedPreferences.workoutPreferences?.addChecklistToWorkout &&
-      !updatedPreferences.workoutPreferences?.checklistId
-    ) {
-      return true;
-    }
-    
-    return false;
-  };
+  const itemTypes = [
+    { key: "events", label: "Calendar Events" },
+    { key: "activities", label: "Group Activities" },
+  ];
 
   const styles = StyleSheet.create({
     container: {
@@ -133,59 +300,59 @@ const PreferencesScreen = ({ navigation, route }) => {
     scrollContent: {
       alignItems: "center",
       padding: getSpacing.md,
-      paddingTop: getSpacing.xl,
-      paddingBottom: getSpacing.xxl,
-    },
-    title: {
-      ...getTypography.h2,
-      color: theme.text.primary,
-      marginBottom: getSpacing.lg,
+      paddingTop: getSpacing.md,
+      paddingBottom: getSpacing.md,
     },
     settingContainer: {
       width: "100%",
       paddingHorizontal: getSpacing.md,
       marginBottom: getSpacing.xl,
     },
+    // Used for the main section headers (e.g., "Communication")
+    sectionHeaderText: {
+        ...getTypography.body,
+        fontWeight: "700", // Bolder style
+        color: theme.text.primary,
+        marginBottom: getSpacing.sm,
+    },
+    // Used for the field labels above the input boxes (e.g., "Default Calendar")
     subHeaderText: {
       ...getTypography.body,
       color: theme.text.secondary,
       marginBottom: getSpacing.sm,
-    },
-    createChecklistButton: {
-      width: "100%",
-      borderWidth: 1,
-      borderColor: theme.primary,
-      borderRadius: 8,
-      backgroundColor: theme.surface || theme.background,
-      paddingVertical: 12,
-      paddingHorizontal: 10,
-      flexDirection: "row",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    createChecklistButtonText: {
-      fontSize: 16,
-      color: theme.primary,
-      fontWeight: "600",
-    },
-    warningText: {
-      fontSize: getTypography.bodySmall.fontSize,
-      color: theme.error || "#ef4444",
       marginTop: getSpacing.sm,
-      fontStyle: "italic",
+      // Removed marginBottom here, will add it to the SelectModal for spacing
     },
-    buttonContainer: {
+    stickyFooter: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
       flexDirection: "row",
-      width: "100%",
       justifyContent: "space-around",
-      marginTop: getSpacing.xxl,
+      paddingHorizontal: getSpacing.lg,
+      paddingVertical: getSpacing.md,
+      paddingBottom: getSpacing.xl,
+      backgroundColor: theme.surface || theme.background,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: -2,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+      elevation: 5,
     },
     button: {
+      flex: 1,
       paddingVertical: getSpacing.md,
-      paddingHorizontal: getSpacing.xl,
+      paddingHorizontal: getSpacing.lg,
       borderRadius: 25,
       alignItems: "center",
       justifyContent: "center",
+      marginHorizontal: getSpacing.xs,
     },
     saveButton: {
       backgroundColor: theme.button.primary,
@@ -205,129 +372,95 @@ const PreferencesScreen = ({ navigation, route }) => {
     },
   });
 
-  const selectedChecklistId = String(
-    updatedPreferences?.workoutPreferences?.checklistId || ""
-  );
-
-  const selectedChecklist = user?.savedChecklists?.find(
-    (checklist) => String(checklist.id) === selectedChecklistId
-  );
-
-  const saveButtonDisabled = isSaveDisabled();
-
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <PageHeader
+        showBackButton={false}
+        showNavArrows={false}
+        title="Preferences"
+        subtext="Customize your app experience"
+        icons={[]}
+      />
+
       <ScrollView
         showsVerticalScrollIndicator
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Preferences</Text>
-
+        {/* 📅 Calendar Preferences */}
         <View style={styles.settingContainer}>
-          {/* 👇 REPLACED: Old verbose switch with clean ToggleRow */}
-          <ToggleRow
-            title="Sync Workouts to Calendar"
-            value={updatedPreferences.workoutPreferences?.syncWorkoutsToCalendar || false}
-            onValueChange={(value) => handleToggle("syncWorkoutsToCalendar", value)}
+          
+          {/* SECTION HEADER: BOLD, like Communication */}
+          <Text style={styles.sectionHeaderText}>Calendar Preferences</Text> 
+          
+          {/* Default Calendar View FIELD */}
+          <Text style={styles.subHeaderText}>Default Calendar Screen View</Text>
+          <SelectModal
+            // Add margin to the bottom to separate it from the next label/field
+            style={{ marginBottom: getSpacing.md }} 
+            title="Default Calendar View"
+            value={updatedPreferences.defaultCalendarView || "day"}
+            options={[
+              { label: "Day View", value: "day" },
+              { label: "Month View", value: "month" },
+            ]}
+            getLabel={(option) => option.label}
+            getValue={(option) => option.value}
+            onSelect={handleCalendarViewChange}
+          />
+          
+          {/* Default Calendar FIELD */}
+          <Text style={styles.subHeaderText}>Default Calendar</Text>
+          <SelectModal
+            // This modal is the last element in the section, no extra margin needed here
+            title="Default Calendar"
+            value={updatedPreferences.defaultCalendarId || ""}
+            options={defaultCalendarOptions}
+            getLabel={(option) => option.label}
+            getValue={(option) => option.value}
+            onSelect={handleDefaultCalendarIdChange}
+            placeholder="None"
           />
 
-          {updatedPreferences.workoutPreferences?.syncWorkoutsToCalendar && (
-            <>
-              {/* 👇 REPLACED: Another clean ToggleRow */}
-              <ToggleRow
-                title="Add Checklist To Workout"
-                value={updatedPreferences.workoutPreferences?.addChecklistToWorkout || false}
-                onValueChange={(value) => handleToggle("addChecklistToWorkout", value)}
-              />
-
-              {updatedPreferences.workoutPreferences?.addChecklistToWorkout && (
-                <View style={{ width: "100%", marginTop: 0 }}>
-                  <Text style={styles.subHeaderText}>Select Checklist</Text>
-
-                  {user?.savedChecklists?.length > 0 ? (
-                    <>
-                      {/* 👇 CLEAN: Self-contained SelectModal - no state management needed! */}
-                      <SelectModal
-                        title="Select Checklist"
-                        placeholder="— Pick a checklist —"
-                        value={selectedChecklistId}
-                        options={user?.savedChecklists || []}
-                        onSelect={handleChecklistSelect}
-                        getLabel={(item) => item.name}
-                        getValue={(item) => String(item.id)}
-                      />
-                      {!selectedChecklistId && (
-                        <Text style={styles.warningText}>
-                          ⚠️ Please select a checklist to save
-                        </Text>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <TouchableOpacity
-                        style={styles.createChecklistButton}
-                        onPress={() => setShowEditChecklist(true)}
-                      >
-                        <Text style={styles.createChecklistButtonText}>
-                          Create A Checklist
-                        </Text>
-                      </TouchableOpacity>
-                      <Text style={styles.warningText}>
-                        ⚠️ You must create a checklist to save
-                      </Text>
-                    </>
-                  )}
-                </View>
-              )}
-            </>
-          )}
-
-          {/* 👇 REPLACED: Third ToggleRow with optional subtitle */}
-          <ToggleRow
-            title="Track Rep Goals"
-            subtitle="Keep track of your target reps for each exercise"
-            value={updatedPreferences.workoutPreferences?.trackRepGoals || false}
-            onValueChange={(value) => handleToggle("trackRepGoals", value)}
-            containerStyle={{ marginTop: getSpacing.xl }}
-          />
         </View>
 
-        {hasChanges && (
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, styles.cancelButton]}
-              onPress={handleCancel}
-              disabled={!hasChanges}
-            >
-              <Text style={[styles.buttonText, styles.cancelButtonText]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.button, 
-                styles.saveButton,
-                { opacity: saveButtonDisabled ? 0.5 : 1 }
-              ]}
-              onPress={handleSave}
-              disabled={saveButtonDisabled}
-            >
-              <Text style={styles.buttonText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* 🔔 Communication Preferences
+        <View style={styles.settingContainer}>
+          <CommunicationPreferences
+            preferences={updatedPreferences.communicationPreferences}
+            onUpdate={handleCommunicationUpdate}
+            categories={categories}
+            itemTypes={itemTypes}
+            isMemberInAnyGroup={isMemberInAnyGroup}
+          />
+        </View>
+        */}
+
+        {/* Add bottom padding when buttons are showing */}
+        {hasChanges && <View style={{ height: 100 }} />}
       </ScrollView>
 
-      {/* Edit Checklist Modal */}
-      <EditChecklist
-        isVisible={showEditChecklist}
-        onClose={() => setShowEditChecklist(false)}
-        checklist={null}
-        user={user}
-        onSave={handleChecklistSaved}
-      />
-    </View>
+      {/* Sticky Save/Cancel Footer */}
+      {hasChanges && (
+        <View style={styles.stickyFooter}>
+          <TouchableOpacity
+            style={[styles.button, styles.cancelButton]}
+            onPress={handleCancel}
+          >
+            <Text style={[styles.buttonText, styles.cancelButtonText]}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.saveButton]}
+            onPress={handleSave}
+            disabled={!hasChanges}
+          >
+            <Text style={styles.buttonText}>Save</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </SafeAreaView>
   );
 };
 

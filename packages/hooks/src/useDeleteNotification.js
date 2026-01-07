@@ -4,17 +4,25 @@ import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore
 export const useDeleteNotification = () => {
     const { user: authUser, db } = useAuth();
 
-    const deleteNotification = async (eventId) => {
+    const deleteNotification = async (identifier) => {
         try {
-            console.log(`🗑️ Searching for notifications with eventId:`, eventId);
+            console.log(`🗑️ Searching for notifications with identifier:`, identifier);
             
-            // Query the collection for documents where eventId matches
             const notificationsRef = collection(db, 'pendingNotifications');
-            const q = query(notificationsRef, where('eventId', '==', eventId));
-            const querySnapshot = await getDocs(q);
+            
+            // First try searching by notificationId (for checklists/activities)
+            let q = query(notificationsRef, where('notificationId', '==', identifier));
+            let querySnapshot = await getDocs(q);
+
+            // If not found, try searching by eventId (for events)
+            if (querySnapshot.empty) {
+                console.log(`ℹ️ No notifications found by notificationId, trying eventId`);
+                q = query(notificationsRef, where('eventId', '==', identifier));
+                querySnapshot = await getDocs(q);
+            }
 
             if (querySnapshot.empty) {
-                console.log(`ℹ️ No pending notifications found for eventId:`, eventId);
+                console.log(`ℹ️ No pending notifications found for:`, identifier);
                 return { success: true, deletedCount: 0 };
             }
 
@@ -22,14 +30,13 @@ export const useDeleteNotification = () => {
 
             let deletedCount = 0;
 
-            // Delete each matching document
             for (const docSnap of querySnapshot.docs) {
                 await deleteDoc(docSnap.ref);
                 console.log(`✅ Deleted notification:`, docSnap.id);
                 deletedCount++;
             }
 
-            console.log(`✅ Deleted ${deletedCount} notification(s) for eventId:`, eventId);
+            console.log(`✅ Deleted ${deletedCount} notification(s) for:`, identifier);
 
             return { success: true, deletedCount };
         } catch (err) {

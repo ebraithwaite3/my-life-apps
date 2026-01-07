@@ -27,6 +27,16 @@ const DayView = ({
   const scrollViewRef = useRef(null);
   console.log("Events in DayView:", events);
 
+  // Sort Events by start time (earlier first)
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => {
+      const aStart = new Date(a.startTime).getTime();
+      const bStart = new Date(b.startTime).getTime();
+      return aStart - bStart;
+    });
+  }, [events]);
+  console.log("Sorted Events in DayView:", sortedEvents);
+
   // Swipe gesture handler
   const panResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (evt, gestureState) => {
@@ -67,7 +77,7 @@ const DayView = ({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {events.map((event, index) => (
+        {sortedEvents.map((event, index) => (
           <EventCard
             key={`${event.eventId}-${index}`}
             appName={appName}

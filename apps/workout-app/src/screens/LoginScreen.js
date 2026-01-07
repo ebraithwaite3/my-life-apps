@@ -1,3 +1,4 @@
+// LoginScreen.js
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -12,8 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "@my-apps/contexts";
 import { Ionicons } from "@expo/vector-icons";
+import { setupPushNotifications } from '../services/notificationService';
 
 const LoginScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -52,9 +54,33 @@ const LoginScreen = () => {
       if (isLogin) {
         await login(email, password);
         console.log("User signed in successfully");
+        
+        // Set up push notifications after login
+        const notifSuccess = await setupPushNotifications(
+          auth.currentUser.uid, 
+          'workout-app'
+        );
+        if (notifSuccess) {
+          console.log("✅ Push notifications setup complete!");
+        } else {
+          console.warn("⚠️ Push notifications setup failed");
+        }
+        console.log("✅ Push notifications setup complete!");
       } else {
         await signup(email, password, username, notifications);
         console.log("User created successfully");
+        
+        // Set up push notifications after signup
+        const notifSuccess = await setupPushNotifications(
+          auth.currentUser.uid, 
+          'workout-app'
+        );
+        if (notifSuccess) {
+          console.log("✅ Push notifications setup complete!");
+        } else {
+          console.warn("⚠️ Push notifications setup failed");
+        }
+        console.log("✅ Push notifications setup complete!");
       }
     } catch (error) {
       console.error("Auth error:", error);
@@ -141,11 +167,10 @@ const LoginScreen = () => {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.content}>
-            <Text style={styles.title}>Calendar ConnectionV2</Text>
+            <Text style={styles.title}>MyWorkouts</Text>
             <Text style={styles.subtitle}>
               {isLogin ? "Welcome back!" : "Create your account"}
             </Text>
-
             <View style={styles.form}>
               <TextInput
                 ref={emailRef}
@@ -167,7 +192,7 @@ const LoginScreen = () => {
                 <TextInput
                   ref={usernameRef}
                   style={styles.input}
-                  placeholder="Username"
+                  placeholder="Name"
                   value={username}
                   onChangeText={setUsername}
                   autoCapitalize="none"

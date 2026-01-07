@@ -2,21 +2,20 @@
   "expo": {
     "name": "MyWorkouts",
     "slug": "my-workouts",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/MyWorkoutsIcon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "scheme": "calendarconnectionv2",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/MyWorkoutsIcon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ebraithwaite3.CalendarConnectionV2",
-      "buildNumber": "3",
+      "bundleIdentifier": "com.ebraithwaite3.myworkout",
+      "buildNumber": "1.0.0",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,15 +25,23 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.ebraithwaite3.myworkout"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "scheme": "myworkout",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/MyWorkoutsIcon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
-        "projectId": "e7f5f3db-cf61-439b-97c4-7595a8b68403"
+        "projectId": "3e8b9d7c-b983-4e3f-9743-72312fd124ee"
       }
-    }
+    },
+    "owner": "ebraithwaite3"
   }
 }

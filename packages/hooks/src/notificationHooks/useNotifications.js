@@ -1,4 +1,4 @@
-import { useAuth } from '@my-apps/contexts';
+import { useAuth, useData } from '@my-apps/contexts';
 import { 
   sendNotification, 
   sendBatchNotification, 
@@ -9,7 +9,8 @@ import { collection, query, where, getDocs, deleteDoc, doc, getDoc } from 'fireb
 import { DateTime } from 'luxon';
 
 export const useNotifications = () => {
-  const { user, db } = useAuth();
+  const { db } = useAuth();
+  const { user } = useData();
   const userId = user?.userId;
 
   /**
@@ -258,12 +259,21 @@ export const useNotifications = () => {
       activityId: activity.id,
       ...customData,
     };
+    console.log("Scheduling activity reminder:", {
+      userId,
+      title,
+      body,
+      eventId: eventId,
+      activityId: activity.id,
+      reminderTime: reminderTime.toJSDate(),
+      data
+    }); 
 
     return await scheduleNotification(
       userId,
       title,
       body,
-      activity.id,
+      eventId || activity.id,
       reminderTime.toJSDate(),
       data
     );
