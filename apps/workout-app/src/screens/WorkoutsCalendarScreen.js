@@ -20,10 +20,9 @@ import WorkoutSelector from "../components/modals/WorkoutSelector";
 import EditWorkoutTemplate from "../components/modals/EditWorkoutTemplate";
 import WorkoutModal from "../components/modals/WorkoutModal";
 import { useWorkoutTemplates } from "../hooks/useWorkoutTemplates";
-import { useWorkoutData } from "../contexts/WorkoutDataContext"; // ← ADD THIS
+import { useWorkoutData } from "../contexts/WorkoutDataContext";
 import { useAuth } from "@my-apps/contexts";
 import { updateWorkoutHistory } from "../utils/workoutHistory";
-import { doc, updateDoc } from "firebase/firestore";
 
 /**
  * WorkoutsCalendarScreen - Calendar for workout app
@@ -37,6 +36,7 @@ import { doc, updateDoc } from "firebase/firestore";
  * ✅ Filters for "workout" activities
  * ✅ Workout completion modal
  * ✅ Checklist functionality (workouts can have checklists)
+ * ✅ Add workout to existing event
  */
 const WorkoutsCalendarScreen = ({ navigation, route }) => {
   const {
@@ -59,7 +59,7 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
   } = useData();
 
   const { db } = useAuth();
-  const { allExercises } = useWorkoutData(); // ← ADD THIS
+  const { allExercises } = useWorkoutData();
 
   // Helper to determine calendar type
   const getCalendarType = (event) => {
@@ -129,10 +129,13 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
 
-  // Workout modal state
+  // Workout modal state - for viewing/completing existing workouts
   const [workoutModalVisible, setWorkoutModalVisible] = useState(false);
   const [selectedWorkoutActivity, setSelectedWorkoutActivity] = useState(null);
   const [selectedWorkoutEvent, setSelectedWorkoutEvent] = useState(null);
+
+  // Add workout modal state - for adding new workouts to events
+  const [addWorkoutModalVisible, setAddWorkoutModalVisible] = useState(false);
 
   // Handle navigation params for deep links (notifications, etc.)
   useEffect(() => {
@@ -153,6 +156,71 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
       navigation.setParams({ date: undefined, view: undefined });
     }
   }, [route.params, navigateToDate, navigation, calendarState]);
+
+  // Handle adding a new workout to an existing event
+  const handleAddWorkout = (event) => {
+    console.log("🏋️ Add workout to event:", event);
+    calendarState.setSelectedEvent(event);
+    setAddWorkoutModalVisible(true);
+  };
+
+  // Handle saving a new workout to the event
+  const handleSaveWorkout = async (workoutData) => {
+    if (!calendarState.selectedEvent || !user) return;
+
+    try {
+      const newActivity = {
+        id: workoutData.id,
+        activityType: "workout",
+        name: workoutData.name,
+        exercises: workoutData.exercises,
+        createdAt: workoutData.createdAt,
+        startedAt: workoutData.startedAt,
+        completedAt: workoutData.completedAt,
+      };
+
+      const updatedActivities = [
+        ...(calendarState.selectedEvent.activities || []),
+        newActivity,
+      ];
+
+      const { isInternal, isGroup, groupId } = getCalendarType(
+        calendarState.selectedEvent
+      );
+
+      let result;
+      if (isInternal || isGroup) {
+        console.log(
+          `📝 Adding ${isGroup ? "GROUP" : "USER"} workout (groupId: ${groupId})`
+        );
+        result = await updateInternalActivities(
+          calendarState.selectedEvent.eventId,
+          calendarState.selectedEvent.startTime,
+          updatedActivities,
+          groupId
+        );
+      } else {
+        console.log("📝 Adding EXTERNAL workout");
+        result = await updateExternalActivities(
+          calendarState.selectedEvent.eventId,
+          calendarState.selectedEvent.calendarId,
+          calendarState.selectedEvent.startTime,
+          updatedActivities
+        );
+      }
+
+      if (result.success) {
+        Alert.alert("Success", "Workout added to event");
+        setAddWorkoutModalVisible(false);
+        calendarState.setSelectedEvent(null);
+      } else {
+        Alert.alert("Error", `Failed to add workout: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("❌ Error adding workout:", error);
+      Alert.alert("Error", "Failed to add workout. Please try again.");
+    }
+  };
 
   // Handle updating a workout activity in the calendar event
   const handleUpdateWorkout = async (updatedWorkout) => {
@@ -198,11 +266,7 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
 
       if (result.success) {
         // Update workout history
-        await updateWorkoutHistory(
-          updatedWorkout,
-          user.id,
-          db
-        );
+        await updateWorkoutHistory(updatedWorkout, user.id, db);
 
         Alert.alert("Success", "Workout updated successfully");
         setWorkoutModalVisible(false);
@@ -319,7 +383,7 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         // HANDLERS: Distinguish between workout and checklist activities
         onDeleteEvent={calendarHandlers.handleDeleteEvent}
         onEditEvent={calendarHandlers.handleEditEvent}
-        onAddActivity={calendarHandlers.handleAddChecklist}
+        onAddActivity={handleAddWorkout} // ← Changed from handleAddChecklist
         onActivityPress={(activity, event) => {
           console.log("🎯 Activity pressed!");
           console.log("Activity:", activity);
@@ -400,24 +464,29 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
               id: `workout_${Date.now()}`,
               name: template.name,
               exercises: template.exercises.map((exercise, index) => {
-                const ex = allExercises.find(e => e.id === exercise.exerciseId);
+                const ex = allExercises.find(
+                  (e) => e.id === exercise.exerciseId
+                );
                 const setCount = exercise.setCount || 3; // Get from template
-                
+
                 return {
                   ...exercise,
-                  sets: Array(setCount).fill(null).map((_, setIndex) => {
-                    const emptySet = {
-                      id: `set-${Date.now()}-${index}-${setIndex}`,
-                      completed: false,
-                    };
-                    
-                    if (ex?.tracking?.includes('reps')) emptySet.reps = 0;
-                    if (ex?.tracking?.includes('weight')) emptySet.weight = 0;
-                    if (ex?.tracking?.includes('distance')) emptySet.distance = 0;
-                    if (ex?.tracking?.includes('time')) emptySet.time = 0;
-                    
-                    return emptySet;
-                  }),
+                  sets: Array(setCount)
+                    .fill(null)
+                    .map((_, setIndex) => {
+                      const emptySet = {
+                        id: `set-${Date.now()}-${index}-${setIndex}`,
+                        completed: false,
+                      };
+
+                      if (ex?.tracking?.includes("reps")) emptySet.reps = 0;
+                      if (ex?.tracking?.includes("weight")) emptySet.weight = 0;
+                      if (ex?.tracking?.includes("distance"))
+                        emptySet.distance = 0;
+                      if (ex?.tracking?.includes("time")) emptySet.time = 0;
+
+                      return emptySet;
+                    }),
                 };
               }),
               createdAt: Date.now(),
@@ -440,7 +509,7 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         getSpacing={getSpacing}
       />
 
-      {/* Workout Modal - For viewing/completing workouts */}
+      {/* Workout Modal - For viewing/completing existing workouts */}
       <WorkoutModal
         visible={workoutModalVisible}
         onClose={() => {
@@ -452,6 +521,19 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         workout={selectedWorkoutActivity}
         event={selectedWorkoutEvent}
         onUpdateWorkout={handleUpdateWorkout}
+      />
+
+      {/* Add Workout Modal - For adding new workouts to existing events */}
+      <WorkoutModal
+        visible={addWorkoutModalVisible}
+        onClose={() => {
+          setAddWorkoutModalVisible(false);
+          calendarState.setSelectedEvent(null);
+        }}
+        mode="workout"
+        workout={null} // null = creating new workout
+        event={calendarState.selectedEvent}
+        onSaveWorkout={handleSaveWorkout}
       />
     </>
   );

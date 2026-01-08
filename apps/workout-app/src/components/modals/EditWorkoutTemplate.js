@@ -223,35 +223,33 @@ const EditWorkoutTemplate = forwardRef(({
           </View>
         </TouchableOpacity>
   
-        {/* Set counter - separate from toggle area */}
-        {isSelected && (
-          <View style={styles.setCounterContainer}>
-            <Text style={styles.setsLabel}>Sets</Text>
-            <View style={styles.setCounter}>
-              <TouchableOpacity
-                style={styles.setButton}
-                onPress={() => {
-                  setSetCounts(c => ({ ...c, [exercise.id]: Math.max(1, setCount - 1) }));
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="remove-circle-outline" size={24} color={theme.primary} />
-              </TouchableOpacity>
-              
-              <Text style={styles.setCount}>{setCount}</Text>
-              
-              <TouchableOpacity
-                style={styles.setButton}
-                onPress={() => {
-                  setSetCounts(c => ({ ...c, [exercise.id]: Math.min(10, setCount + 1) }));
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="add-circle-outline" size={24} color={theme.primary} />
-              </TouchableOpacity>
-            </View>
+        {/* Set counter - ALWAYS SHOW (removed isSelected condition) */}
+        <View style={styles.setCounterContainer}>
+          <Text style={styles.setsLabel}>Sets</Text>
+          <View style={styles.setCounter}>
+            <TouchableOpacity
+              style={styles.setButton}
+              onPress={() => {
+                setSetCounts(c => ({ ...c, [exercise.id]: Math.max(1, setCount - 1) }));
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="remove-circle-outline" size={24} color={theme.primary} />
+            </TouchableOpacity>
+            
+            <Text style={styles.setCount}>{setCount}</Text>
+            
+            <TouchableOpacity
+              style={styles.setButton}
+              onPress={() => {
+                setSetCounts(c => ({ ...c, [exercise.id]: Math.min(10, setCount + 1) }));
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="add-circle-outline" size={24} color={theme.primary} />
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
       </View>
     );
   };

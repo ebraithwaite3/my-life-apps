@@ -80,7 +80,7 @@ const WorkoutModal = ({
   };
 
   const getSubtitle = () => {
-    if (mode === 'workout' && workoutMode === 'complete' && updatedExercises.length > 0) {
+    if (mode === 'workout' && workoutMode === 'complete' && workout && updatedExercises.length > 0) {
       const completed = updatedExercises.filter(ex => 
         ex.sets?.every(set => set.completed)
       ).length;
@@ -91,7 +91,7 @@ const WorkoutModal = ({
       return `${selectedCount} exercise${selectedCount !== 1 ? 's' : ''} selected`;
     }
     
-    return undefined;
+    return undefined; // ← Make sure this stays undefined, not empty string
   };
 
   const getDoneText = () => {
@@ -105,7 +105,7 @@ const WorkoutModal = ({
   };
 
   const handleDone = () => {
-    if (mode === 'workout' && workoutMode === 'complete') {
+    if (mode === 'workout' && workoutMode === 'complete' && workout) {
       handleUpdateFromCompleteMode();
     } else {
       editContentRef.current?.save();
@@ -135,6 +135,7 @@ const WorkoutModal = ({
 
   const showPillSelection = mode === 'workout' && workout;
 
+  console.log('Subtitle value:', getSubtitle(), 'Type:', typeof getSubtitle());
   return (
     <ModalWrapper visible={visible} onClose={handleClose}>
       <View
@@ -164,7 +165,7 @@ const WorkoutModal = ({
             onCancel={handleClose}
             onDone={handleDone}
             doneText={getDoneText()}
-            doneDisabled={mode === 'workout' && workoutMode === 'complete' && !isDirty}
+            doneDisabled={mode === 'workout' && workoutMode === 'complete' && workout && !isDirty}
           />
 
           {showPillSelection && (
@@ -194,33 +195,33 @@ const WorkoutModal = ({
             </View>
           )}
 
-          {mode === 'workout' && workoutMode === 'complete' ? (
-            <WorkoutContent
-              workout={{ ...workout, exercises: updatedExercises }}
-              onExerciseUpdate={setUpdatedExercises}
-            />
-          ) : (
-            <EditWorkoutTemplate
-              ref={editContentRef}
-              template={mode === 'template' ? template : null}
-              workout={mode === 'workout' ? workout : null}
-              event={event}
-              onSave={(data) => {
-                if (mode === 'template') {
-                  onSaveTemplate?.(data, templateContext);
-                } else {
-                  if (workout) {
-                    onUpdateWorkout?.(data);
-                  } else {
-                    onSaveWorkout?.(data);
-                  }
-                }
-                handleClose();
-              }}
-              onSelectedCountChange={setSelectedCount}
-              isTemplate={mode === 'template'}
-            />
-          )}
+{mode === 'workout' && workoutMode === 'complete' && workout ? (
+  <WorkoutContent
+    workout={{ ...workout, exercises: updatedExercises }}
+    onExerciseUpdate={setUpdatedExercises}
+  />
+) : (
+  <EditWorkoutTemplate
+    ref={editContentRef}
+    template={mode === 'template' ? template : null}
+    workout={mode === 'workout' ? workout : null}
+    event={event}
+    onSave={(data) => {
+      if (mode === 'template') {
+        onSaveTemplate?.(data, templateContext);
+      } else {
+        if (workout) {
+          onUpdateWorkout?.(data);
+        } else {
+          onSaveWorkout?.(data);
+        }
+      }
+      handleClose();
+    }}
+    onSelectedCountChange={setSelectedCount}
+    isTemplate={mode === 'template'}
+  />
+)}
         </View>
       </View>
     </ModalWrapper>
