@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Swipeable from "react-native-gesture-handler/Swipeable";
@@ -234,10 +236,16 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
   }
 
   return (
+    <KeyboardAvoidingView 
+    style={styles.container}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    keyboardVerticalOffset={80}
+  >
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
       {workout.exercises.map((workoutEx, exerciseIndex) => {
         const exercise = allExercises.find((ex) => ex.id === workoutEx.exerciseId);
@@ -349,6 +357,7 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
         );
       })}
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
