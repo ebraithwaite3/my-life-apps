@@ -273,7 +273,13 @@ const MainNavigator = ({ onLogout }) => {
           screens: {
             Calendar: {
               screens: {
-                CalendarHome: "calendar",
+                CalendarHome: {
+                  path: "calendar",
+                  parse: {
+                    date: (date) => date,
+                    view: (view) => view,
+                  }
+                },
               },
             },
             Pinned: {
@@ -302,27 +308,27 @@ const MainNavigator = ({ onLogout }) => {
         NotFound: "*",
       },
     },
-
+  
     subscribe(listener) {
       const onReceiveURL = ({ url }) => {
         console.log("🔗 Deep link received:", url);
-
+  
         const { queryParams } = Linking.parse(url);
-
+  
         if (queryParams?.date) {
           console.log("📅 Setting date from deep link:", queryParams.date);
           const dt = DateTime.fromISO(queryParams.date);
-
+  
           setSelectedDate(queryParams.date);
           setSelectedMonth(dt.monthLong);
           setSelectedYear(dt.year);
         }
-
+  
         listener(url);
       };
-
+  
       const subscription = Linking.addEventListener("url", onReceiveURL);
-
+  
       return () => subscription?.remove();
     },
   };

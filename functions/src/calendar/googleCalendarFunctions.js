@@ -210,13 +210,17 @@ exports.deleteCalendarEvent = onRequest(
       console.log("Request body:", JSON.stringify(req.body, null, 2));
 
       try {
-        const {eventId, calendarId = "primary"} = req.body.data || req.body;
-
-        if (!eventId) {
-          throw new Error("Missing required parameter: eventId");
-        }
+        const {
+          eventId,
+          calendarId = "primary",
+        } = req.body.data || req.body;
 
         console.log(`🗑️ Deleting event ${eventId} from calendar ${calendarId}`);
+
+        // Validate required fields
+        if (!eventId || !calendarId) {
+          throw new Error("Missing required fields: eventId and calendarId");
+        }
 
         const oauth2Client = new google.auth.OAuth2(
             googleClientId.value(),
@@ -230,24 +234,36 @@ exports.deleteCalendarEvent = onRequest(
 
         const calendar = google.calendar({version: "v3", auth: oauth2Client});
 
+        // Try to delete from Google Calendar
         await calendar.events.delete({
-          calendarId: calendarId, // ← Use the parameter, "primary"
+          calendarId: calendarId,
           eventId: eventId,
         });
 
-        console.log(`✅ Deleted event ${eventId} from calendar ${calendarId}`);
+        console.log("✅ Event deleted from Google Calendar");
 
         res.json({
           data: {
             success: true,
-            eventId,
             deleted: new Date().toISOString(),
           },
         });
       } catch (error) {
-        console.error("❌ Error deleting calendar event:", error.message);
-        console.error("Error stack:", error.stack);
+      // If resource is already deleted, treat as success
+        if (
+          error.message?.includes("Resource has been deleted") ||
+        error.code === 410
+        ) {
+          console.log("ℹ️ Event already deleted from Google Calendar");
+          return res.json({
+            data: {
+              success: true,
+              message: "Event was already deleted",
+            },
+          });
+        }
 
+        console.error("❌ Error deleting calendar event:", error.message);
         res.status(500).json({
           data: {
             success: false,

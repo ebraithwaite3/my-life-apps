@@ -268,6 +268,7 @@ export const useCalendarHandlers = ({
                 checklistId: checklist.id,
                 activityModalOpen: true,
                 app: "checklist-app",
+                date: selectedEvent.startTime,
               }
             );
             console.log("✅ Subscribers notified");
@@ -310,6 +311,7 @@ export const useCalendarHandlers = ({
                     checklistId: checklist.id,
                     activityModalOpen: true,
                     app: "checklist-app",
+                    date: selectedEvent.startTime,
                   }
                 );
                 console.log("✅ Batch reminders scheduled");
@@ -330,6 +332,7 @@ export const useCalendarHandlers = ({
                     checklistId: checklist.id,
                     activityModalOpen: true,
                     app: "checklist-app",
+                    date: selectedEvent.startTime,
                   }
                 );
                 console.log("✅ Personal reminder scheduled");
@@ -455,6 +458,7 @@ export const useCalendarHandlers = ({
                 checklistId: updatedChecklist.id,
                 activityModalOpen: true,
                 app: "checklist-app",
+                date: eventRef.startTime,
               }
             );
           } catch (error) {
@@ -519,6 +523,7 @@ export const useCalendarHandlers = ({
                     checklistId: updatedChecklist.id,
                     activityModalOpen: true,
                     app: "checklist-app",
+                    date: eventRef.startTime,
                   }
                 );
                 console.log("✅ Batch reminders rescheduled");
@@ -539,6 +544,7 @@ export const useCalendarHandlers = ({
                     checklistId: updatedChecklist.id,
                     activityModalOpen: true,
                     app: "checklist-app",
+                    date: eventRef.startTime,
                   }
                 );
                 console.log("✅ Personal reminder rescheduled");
