@@ -8,12 +8,6 @@ import ChecklistContent from "../../content/checklists/ChecklistContent";
 import EditChecklistContent from "../../content/checklists/EditChecklistContent";
 import PillSelectionButton from "../../../buttons/PillSelectionButton";
 
-/**
- * ChecklistModal - Reusable checklist modal component
- *
- * Used by ALL apps (checklist, workout, golf)
- * Renders both Add and View/Edit checklist modals
- */
 const ChecklistModal = ({
   // From calendarState
   addChecklistModalVisible,
@@ -37,32 +31,26 @@ const ChecklistModal = ({
 
   // From context
   user,
+
+  // Templates and save function for saving a template
+  templates,
+  onSaveTemplate,
+  promptForContext,
 }) => {
   const { theme, getSpacing } = useTheme();
   const editContentRef = useRef(null);
 
-  // Calculate progress directly (no memo needed - it's fast)
   const progress =
     checklistMode === "complete" && updatedItems.length > 0
       ? calculateChecklistProgress(updatedItems)
       : { completed: 0, total: 0 };
 
-  // Detect changes in complete mode
   useEffect(() => {
     if (checklistMode !== "complete" || !selectedChecklist) return;
 
     const originalItems = selectedChecklist.items || [];
-
-    // Deep compare using JSON.stringify to catch sub-item changes
     const hasChanges =
       JSON.stringify(updatedItems) !== JSON.stringify(originalItems);
-
-    console.log("🔍 Dirty check:", {
-      checklistMode,
-      originalItemsCount: originalItems.length,
-      updatedItemsCount: updatedItems.length,
-      hasChanges,
-    });
 
     setIsDirtyComplete(hasChanges);
   }, [updatedItems, selectedChecklist, checklistMode, setIsDirtyComplete]);
@@ -115,15 +103,27 @@ const ChecklistModal = ({
                   : null
               }
               checklist={null}
-              onSave={(checklist, shouldSaveAsTemplate) => {
-                // Ignore shouldSaveAsTemplate - calendar events don't use templates
+              onSave={async (checklist, shouldSaveAsTemplate) => {
+                // If saving as template, prompt FIRST before any other actions
+                if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
+                  await new Promise((resolve) => {
+                    promptForContext(async (context) => {
+                      await onSaveTemplate(checklist, context);
+                      resolve();
+                    });
+                  });
+                }
+                
+                // Now save to event (this will show success alert)
                 handleSaveChecklist(checklist, closeChecklistModal);
               }}
               prefilledTitle={
                 selectedEvent ? `${selectedEvent.title} Checklist` : ""
               }
               isUserAdmin={user?.admin === true}
-              templates={[]} // Empty array - calendar checklists don't use templates
+              templates={templates || []}
+              onSaveTemplate={onSaveTemplate}
+              promptForContext={promptForContext}
             />
           </View>
         </View>
@@ -206,8 +206,18 @@ const ChecklistModal = ({
               <EditChecklistContent
                 ref={editContentRef}
                 checklist={selectedChecklist}
-                onSave={(checklist, shouldSaveAsTemplate) => {
-                  // Ignore shouldSaveAsTemplate - calendar events don't use templates
+                onSave={async (checklist, shouldSaveAsTemplate) => {
+                  // If saving as template, prompt FIRST before any other actions
+                  if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
+                    await new Promise((resolve) => {
+                      promptForContext(async (context) => {
+                        await onSaveTemplate(checklist, context);
+                        resolve();
+                      });
+                    });
+                  }
+                  
+                  // Now update event (this will show success alert)
                   handleUpdateChecklist(checklist, closeViewChecklistModal);
                 }}
                 isUserAdmin={user?.admin === true}
@@ -217,7 +227,9 @@ const ChecklistModal = ({
                     ? new Date(selectedChecklistEvent.startTime)
                     : null
                 }
-                templates={[]} // Empty array - calendar checklists don't use templates
+                templates={templates || []}
+                onSaveTemplate={onSaveTemplate}
+                promptForContext={promptForContext}
               />
             )}
           </View>

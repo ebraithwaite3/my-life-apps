@@ -207,6 +207,9 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         {...calendarHandlers}
         user={user}
         getSpacing={getSpacing}
+        templates={allTemplates}
+  onSaveTemplate={saveTemplate}
+  promptForContext={promptForContext}
       />
     </>
   );

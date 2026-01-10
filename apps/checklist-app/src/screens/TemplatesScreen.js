@@ -78,25 +78,13 @@ const TemplatesScreen = () => {
   };
 
   // SIMPLIFIED: Uses hook's deleteTemplate
-  const handleDeleteTemplate = async (template) => {
-    Alert.alert(
-      "Delete Template",
-      `Are you sure you want to delete "${template.name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const success = await deleteTemplate(template);
-            if (success) {
-              Alert.alert("Success", "Template deleted successfully");
-            }
-          },
-        },
-      ]
-    );
-  };
+const handleDeleteTemplate = async (template) => {
+  // Remove the Alert.alert wrapper - TemplateCard already confirms
+  const success = await deleteTemplate(template);
+  if (success) {
+    Alert.alert("Success", "Template deleted successfully");
+  }
+};
 
   // SIMPLIFIED: Uses hook's moveTemplate
   const handleMoveTemplate = async (template, target) => {

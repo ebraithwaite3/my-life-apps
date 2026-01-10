@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
@@ -16,8 +16,26 @@ const WorkoutRow = ({ set, setNumber, tracking, onUpdate, onDelete }) => {
   const [weightInput, setWeightInput] = useState(set.weight?.toString() || '0');
   const [repsInput, setRepsInput] = useState(set.reps?.toString() || '0');
   const [distanceInput, setDistanceInput] = useState(set.distance?.toString() || '0');
+  const [timeInput, setTimeInput] = useState('');
 
-  // Format time in MM:SS or HH:MM:SS
+  // Sync inputs when set prop changes
+  useEffect(() => {
+    setWeightInput(set.weight?.toString() || '0');
+  }, [set.weight]);
+
+  useEffect(() => {
+    setRepsInput(set.reps?.toString() || '0');
+  }, [set.reps]);
+
+  useEffect(() => {
+    setDistanceInput(set.distance?.toString() || '0');
+  }, [set.distance]);
+
+  useEffect(() => {
+    setTimeInput(formatTime(set.time || 0));
+  }, [set.time]);
+
+  // Format time in MM:SS or HH:MM:SS for display
   const formatTime = (seconds) => {
     if (!seconds) return '00:00';
     const hrs = Math.floor(seconds / 3600);
@@ -30,27 +48,93 @@ const WorkoutRow = ({ set, setNumber, tracking, onUpdate, onDelete }) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Handle weight blur (round to nearest 5)
+  // Format time input as user types (auto-insert colons)
+  const formatTimeInput = (text) => {
+    const digits = text.replace(/\D/g, '');
+    
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) {
+      return `${digits.slice(0, -2)}:${digits.slice(-2)}`;
+    }
+    return `${digits.slice(0, -4)}:${digits.slice(-4, -2)}:${digits.slice(-2)}`;
+  };
+
+  // Parse formatted time back to total seconds
+  const parseTimeToSeconds = (formattedTime) => {
+    const parts = formattedTime.split(':').map(p => parseInt(p) || 0);
+    
+    if (parts.length === 1) {
+      return parts[0];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    } else {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+  };
+
+  // Handle weight change (update immediately)
+  const handleWeightChange = (text) => {
+    setWeightInput(text);
+    const num = parseFloat(text) || 0;
+    onUpdate({ weight: num });
+  };
+
+  // Handle weight blur (round to nearest 0.5)
   const handleWeightBlur = () => {
     const num = parseFloat(weightInput) || 0;
-    const rounded = Math.round(num / 5) * 5;
+    const rounded = Math.round(num * 2) / 2;
     setWeightInput(rounded.toString());
     onUpdate({ weight: rounded });
   };
 
-  // Handle distance blur (0.1 increments)
-  const handleDistanceBlur = () => {
-    const num = parseFloat(distanceInput) || 0;
-    const rounded = Math.round(num * 10) / 10;
-    setDistanceInput(rounded.toString());
-    onUpdate({ distance: rounded });
+  // Handle reps change (update immediately)
+  const handleRepsChange = (text) => {
+    setRepsInput(text);
+    const num = parseInt(text) || 0;
+    onUpdate({ reps: num });
   };
 
-  // Handle reps blur
+  // Handle reps blur (format)
   const handleRepsBlur = () => {
     const num = parseInt(repsInput) || 0;
     setRepsInput(num.toString());
     onUpdate({ reps: num });
+  };
+
+  // Handle distance change (update immediately)
+  const handleDistanceChange = (text) => {
+    setDistanceInput(text);
+    const num = parseFloat(text) || 0;
+    onUpdate({ distance: num });
+  };
+
+  // Handle distance blur (round to 2 decimals)
+  const handleDistanceBlur = () => {
+    const num = parseFloat(distanceInput) || 0;
+    const rounded = Math.round(num * 100) / 100;
+    setDistanceInput(rounded.toString());
+    onUpdate({ distance: rounded });
+  };
+
+  // Handle time input change
+  const handleTimeChange = (text) => {
+    const formatted = formatTimeInput(text);
+    setTimeInput(formatted);
+  };
+
+  // Handle time blur
+  const handleTimeBlur = () => {
+    if (!timeInput) {
+      setTimeInput('00:00');
+      onUpdate({ time: 0 });
+      return;
+    }
+    
+    const totalSeconds = parseTimeToSeconds(timeInput);
+    const formatted = formatTime(totalSeconds);
+    setTimeInput(formatted);
+    onUpdate({ time: totalSeconds });
   };
 
   // Render right swipe action (delete)
@@ -98,18 +182,9 @@ const WorkoutRow = ({ set, setNumber, tracking, onUpdate, onDelete }) => {
       borderWidth: 1,
       borderColor: theme.border,
     },
-    timeInput: {
-      width: 70,
-      height: 40,
-      backgroundColor: theme.background,
-      borderRadius: 8,
-      paddingHorizontal: getSpacing.sm,
+    inputSmallFont: {
       fontSize: getTypography.bodySmall.fontSize,
-      color: theme.text.primary,
-      textAlign: 'center',
-      borderWidth: 1,
-      borderColor: theme.border,
-      justifyContent: 'center',
+      paddingHorizontal: 4,
     },
     checkButton: {
       width: 44,
@@ -144,9 +219,12 @@ const WorkoutRow = ({ set, setNumber, tracking, onUpdate, onDelete }) => {
           <TextInput
             style={styles.input}
             value={weightInput}
-            onChangeText={setWeightInput}
+            onChangeText={handleWeightChange}
             onBlur={handleWeightBlur}
-            keyboardType="number-pad"
+            onFocus={() => {
+              if (weightInput === '0') setWeightInput('');
+            }}
+            keyboardType="decimal-pad"
             selectTextOnFocus
           />
         )}
@@ -156,8 +234,11 @@ const WorkoutRow = ({ set, setNumber, tracking, onUpdate, onDelete }) => {
           <TextInput
             style={styles.input}
             value={repsInput}
-            onChangeText={setRepsInput}
+            onChangeText={handleRepsChange}
             onBlur={handleRepsBlur}
+            onFocus={() => {
+              if (repsInput === '0') setRepsInput('');
+            }}
             keyboardType="number-pad"
             selectTextOnFocus
           />
@@ -168,24 +249,33 @@ const WorkoutRow = ({ set, setNumber, tracking, onUpdate, onDelete }) => {
           <TextInput
             style={styles.input}
             value={distanceInput}
-            onChangeText={setDistanceInput}
+            onChangeText={handleDistanceChange}
             onBlur={handleDistanceBlur}
+            onFocus={() => {
+              if (distanceInput === '0') setDistanceInput('');
+            }}
             keyboardType="decimal-pad"
             selectTextOnFocus
           />
         )}
 
-        {/* Time Input (Simple for now - can expand later) */}
+        {/* Time Input - Auto-formatting with dynamic font size */}
         {hasTime && (
-          <TouchableOpacity 
-            style={styles.timeInput} 
-            onPress={() => {
-              // TODO: Open time picker modal
-              alert('Time picker coming soon!');
+          <TextInput
+            style={[
+              styles.input,
+              timeInput.length > 5 && styles.inputSmallFont,
+            ]}
+            value={timeInput}
+            onChangeText={handleTimeChange}
+            onBlur={handleTimeBlur}
+            onFocus={() => {
+              if (timeInput === '00:00') setTimeInput('');
             }}
-          >
-            <Text style={styles.prevText}>{formatTime(set.time || 0)}</Text>
-          </TouchableOpacity>
+            keyboardType="number-pad"
+            placeholder="MM:SS"
+            selectTextOnFocus
+          />
         )}
 
         {/* Completion Checkbox */}

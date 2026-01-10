@@ -228,6 +228,7 @@ const SharedCalendarScreen = ({
           onActivityDelete={onActivityDelete}
           onSwipeLeft={navigateToNextDay}
           onSwipeRight={navigateToPreviousDay}
+          navigation={navigation}
         />
       )}
 

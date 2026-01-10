@@ -15,6 +15,7 @@ const EventCard = ({
   onAddActivity,
   onActivityPress,
   onActivityDelete,
+  navigation,
 }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
 
@@ -204,6 +205,7 @@ const EventCard = ({
             event={event}
             onActivityPress={onActivityPress}
             onActivityDelete={onActivityDelete}
+            navigation={navigation}
           />
         </View>
       )}

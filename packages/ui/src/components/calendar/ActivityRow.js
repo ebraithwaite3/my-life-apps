@@ -1,10 +1,10 @@
 // components/calendar/ActivityRow.js
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useTheme } from '@my-apps/contexts';
 import { Ionicons } from '@expo/vector-icons';
 
-const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDelete }) => {
+const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDelete, navigation }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
 
   const handlePress = (activity) => {
@@ -16,7 +16,7 @@ const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDe
       }
       return;
     }
-
+  
     // Check if this is an internal activity (same as current app)
     if (activity.activityType === appName) {
       // Internal activity - handle in current app
@@ -25,17 +25,23 @@ const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDe
         onActivityPress(activity, event);
       }
     } else {
-      // External activity - should navigate to other app
-      console.log(`🔗 External activity: Should navigate to ${activity.activityType} app`);
-      console.log('Activity:', activity);
-      console.log('Event:', event);
-      // TODO: Implement navigation to other app
-      // navigation.navigate(`${activity.activityType}-app`, { 
-      //   activityId: activity.id,
-      //   eventId: event.eventId 
-      // });
+      // External activity - open via deep link
+      console.log(`🔗 Opening ${activity.activityType} app via deep link`);
+      
+      // Build deep link URL (use "myworkout" not "myworkoutapp")
+const deepLinkUrl = `myworkout://activity/${activity.id}?eventId=${event.eventId}`;
+      
+      Linking.openURL(deepLinkUrl).catch(err => {
+        console.error('Failed to open deep link:', err);
+        Alert.alert(
+          'Unable to Open',
+          `Please open the ${activity.activityType} app manually to view this activity.`
+        );
+      });
     }
   };
+  
+
 
   const handleLongPress = (activity) => {
     if (onActivityDelete) {

@@ -62,14 +62,18 @@ export const useChecklistTemplates = () => {
    * @returns {Promise<boolean>} - Success status
    */
   const saveTemplate = async (template, context) => {
+    console.log('🔵 saveTemplate called');
+    console.log('  Template:', template);
+    console.log('  Context:', context);
+    
     if (!context || !context.type) {
       console.error('❌ saveTemplate: context is required');
       Alert.alert('Error', 'Template context is required');
       return false;
     }
-
+  
     setIsLoading(true);
-
+  
     try {
       // Clean template (ensure completed is boolean, add timestamps)
       const cleanedTemplate = {
@@ -80,57 +84,85 @@ export const useChecklistTemplates = () => {
         })),
         updatedAt: new Date().toISOString(),
       };
-
+  
+      console.log('🧹 Cleaned template:', cleanedTemplate);
+  
       if (context.type === 'personal') {
+        console.log('💾 Saving to PERSONAL templates');
+        console.log('  User ID:', user?.userId);
+        console.log('  Current templates:', user?.checklistTemplates?.length || 0);
+        
         const currentTemplates = user?.checklistTemplates || [];
         const existingIndex = currentTemplates.findIndex(
           t => t.id === cleanedTemplate.id
         );
-
+  
+        console.log('  Existing index:', existingIndex);
+  
         const updatedTemplates =
           existingIndex !== -1
             ? currentTemplates.map(t =>
                 t.id === cleanedTemplate.id ? cleanedTemplate : t
               )
             : [...currentTemplates, cleanedTemplate];
-
+  
+        console.log('  Updated templates count:', updatedTemplates.length);
+        console.log('  Updating Firestore...');
+  
         await updateDoc(doc(db, 'users', user.userId), {
           checklistTemplates: updatedTemplates,
         });
+  
+        console.log('✅ Firestore update completed');
       } else if (context.type === 'group') {
+        console.log('💾 Saving to GROUP templates');
+        console.log('  Group ID:', context.groupId);
+        
         if (!context.groupId) {
           throw new Error('groupId is required for group templates');
         }
-
+  
         const group = groups.find(
           g => (g.groupId || g.id) === context.groupId
         );
-
+  
+        console.log('  Found group:', group?.name);
+        console.log('  Current templates:', group?.checklistTemplates?.length || 0);
+  
         const currentTemplates = group?.checklistTemplates || [];
         const existingIndex = currentTemplates.findIndex(
           t => t.id === cleanedTemplate.id
         );
-
+  
+        console.log('  Existing index:', existingIndex);
+  
         const updatedTemplates =
           existingIndex !== -1
             ? currentTemplates.map(t =>
                 t.id === cleanedTemplate.id ? cleanedTemplate : t
               )
             : [...currentTemplates, cleanedTemplate];
-
+  
+        console.log('  Updated templates count:', updatedTemplates.length);
+        console.log('  Updating Firestore...');
+  
         await updateDoc(doc(db, 'groups', context.groupId), {
           checklistTemplates: updatedTemplates,
         });
+  
+        console.log('✅ Firestore update completed');
       }
-
+  
       console.log('✅ Template saved successfully:', cleanedTemplate.name);
       return true;
     } catch (error) {
       console.error('❌ Error saving template:', error);
+      console.error('  Error details:', error.message);
       Alert.alert('Error', 'Failed to save template. Please try again.');
       return false;
     } finally {
       setIsLoading(false);
+      console.log('🔵 saveTemplate finished');
     }
   };
 

@@ -22,6 +22,7 @@ const DayView = ({
   // Navigation handlers for swipe gestures
   onSwipeLeft,  // ← Next day
   onSwipeRight, // ← Previous day
+  navigation,
 }) => {
   const { theme, getSpacing } = useTheme();
   const scrollViewRef = useRef(null);
@@ -88,6 +89,7 @@ const DayView = ({
             onAddActivity={onAddActivity}
             onActivityPress={onActivityPress}
             onActivityDelete={onActivityDelete}
+            navigation={navigation}
           />
         ))}
       </ScrollView>

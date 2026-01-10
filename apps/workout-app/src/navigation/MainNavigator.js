@@ -1,6 +1,6 @@
 // src/navigation/MainNavigator.js
 import React from "react";
-import { Text, View, ActivityIndicator, Linking } from "react-native";
+import { Text, View, Linking } from "react-native";
 import { NavigationContainer, useNavigation } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
@@ -275,7 +275,15 @@ const MainNavigator = ({ onLogout }) => {
           screens: {
             Calendar: {
               screens: {
-                CalendarHome: "calendar",
+                CalendarHome: {
+                  path: "calendar",
+                  parse: {
+                    activityId: (activityId) => activityId,
+                    eventId: (eventId) => eventId,
+                    openWorkout: (openWorkout) => openWorkout === 'true',
+                    date: (date) => date,
+                  }
+                },
               },
             },
             WorkoutTemplates: {
@@ -314,8 +322,19 @@ const MainNavigator = ({ onLogout }) => {
       const onReceiveURL = ({ url }) => {
         console.log("🔗 Deep link received:", url);
 
-        const { queryParams } = Linking.parse(url);
+        const { path, queryParams } = Linking.parse(url);
 
+        // Handle activity deep links: myworkout://activity/workout-123?eventId=xyz
+        if (path?.startsWith('activity/')) {
+          const activityId = path.replace('activity/', '');
+          console.log('📱 Activity deep link:', activityId, queryParams);
+          
+          // Navigate to calendar with params to open workout
+          listener(`myworkout://calendar?activityId=${activityId}&eventId=${queryParams?.eventId || ''}&openWorkout=true`);
+          return;
+        }
+
+        // Handle date deep links
         if (queryParams?.date) {
           console.log("📅 Setting date from deep link:", queryParams.date);
           const dt = DateTime.fromISO(queryParams.date);
