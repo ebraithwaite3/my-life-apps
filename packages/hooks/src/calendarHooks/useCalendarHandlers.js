@@ -256,6 +256,13 @@ export const useCalendarHandlers = ({
           console.log(
             `📢 Notifying ${subscribers.length} subscriber(s) about new checklist`
           );
+          console.log("Sending Notification data:", {
+            screen: "Calendar",
+            eventId: selectedEvent.eventId,
+            checklistId: checklist.id,
+            app: "checklist-app",
+            date: selectedEvent.startTime,
+          });
           try {
             await notifyActivityCreated(
               checklist,
@@ -266,7 +273,6 @@ export const useCalendarHandlers = ({
                 screen: "Calendar",
                 eventId: selectedEvent.eventId,
                 checklistId: checklist.id,
-                activityModalOpen: true,
                 app: "checklist-app",
                 date: selectedEvent.startTime,
               }
@@ -309,7 +315,6 @@ export const useCalendarHandlers = ({
                     screen: "Calendar",
                     eventId: selectedEvent.eventId,
                     checklistId: checklist.id,
-                    activityModalOpen: true,
                     app: "checklist-app",
                     date: selectedEvent.startTime,
                   }
@@ -330,7 +335,6 @@ export const useCalendarHandlers = ({
                     screen: "Calendar",
                     eventId: selectedEvent.eventId,
                     checklistId: checklist.id,
-                    activityModalOpen: true,
                     app: "checklist-app",
                     date: selectedEvent.startTime,
                   }
@@ -456,7 +460,6 @@ export const useCalendarHandlers = ({
                 screen: "Calendar",
                 eventId: eventRef.eventId,
                 checklistId: updatedChecklist.id,
-                activityModalOpen: true,
                 app: "checklist-app",
                 date: eventRef.startTime,
               }
@@ -521,7 +524,6 @@ export const useCalendarHandlers = ({
                     screen: "Calendar",
                     eventId: eventRef.eventId,
                     checklistId: updatedChecklist.id,
-                    activityModalOpen: true,
                     app: "checklist-app",
                     date: eventRef.startTime,
                   }
@@ -542,7 +544,6 @@ export const useCalendarHandlers = ({
                     screen: "Calendar",
                     eventId: eventRef.eventId,
                     checklistId: updatedChecklist.id,
-                    activityModalOpen: true,
                     app: "checklist-app",
                     date: eventRef.startTime,
                   }

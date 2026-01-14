@@ -207,9 +207,13 @@ export const DataProvider = ({ children }) => {
   }, [selectedDate]);
 
 
-const navigateToDate = useCallback((dateISO) => {
-  setSelectedDate(dateISO);
-}, []);
+  const navigateToDate = useCallback((dateISO) => {
+    console.log("📅 Navigating to date:", dateISO);
+    const dt = DateTime.fromISO(dateISO);
+    setSelectedDate(dt.toISODate());
+    setSelectedMonth(dt.monthLong);
+    setSelectedYear(dt.year);
+  }, []);
 console.log("All Calendars:", allCalendars);
 
   // ===== CONTEXT VALUE =====

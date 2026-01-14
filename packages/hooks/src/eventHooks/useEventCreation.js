@@ -18,6 +18,26 @@ const cleanUndefined = (obj) => {
 };
 
 /**
+ * Extract activity IDs by type for notification data
+ * Returns object with checklistId, workoutId, golfId etc.
+ */
+const getActivityData = (activities) => {
+  const data = {};
+  
+  activities.forEach(activity => {
+    if (activity.activityType === 'checklist') {
+      data.checklistId = activity.id;
+    } else if (activity.activityType === 'workout') {
+      data.workoutId = activity.id;
+    } else if (activity.activityType === 'golf') {
+      data.golfId = activity.id;
+    }
+  });
+  
+  return data;
+};
+
+/**
  * useEventCreation - Shared event creation/save logic
  *
  * Handles saving events to internal, group, and Google calendars
@@ -63,6 +83,10 @@ export const useEventCreation = ({ user, db }) => {
       appName,
       membersToNotify,
     });
+
+    // Extract activity data for notifications
+    const activityData = getActivityData(activities);
+    console.log("Activity data for notifications:", activityData);
 
     // Build event data
     const eventData = {
@@ -137,6 +161,8 @@ export const useEventCreation = ({ user, db }) => {
                   screen: "Calendar",
                   eventId: result.eventId,
                   app: `${appName}-app`,
+                  date: startDate.toISOString(),
+                  ...activityData,
                 }
               );
               console.log("✅ Group members notified");
@@ -167,6 +193,8 @@ export const useEventCreation = ({ user, db }) => {
                       screen: "Calendar",
                       eventId: result.eventId,
                       app: `${appName}-app`,
+                      date: startDate.toISOString(),
+                      ...activityData,
                     }
                   );
                   console.log("✅ Group reminder scheduled");
@@ -192,6 +220,8 @@ export const useEventCreation = ({ user, db }) => {
                       screen: "Calendar",
                       eventId: result.eventId,
                       app: `${appName}-app`,
+                      date: startDate.toISOString(),
+                      ...activityData,
                     }
                   );
                   console.log("✅ Personal reminder scheduled");
@@ -253,6 +283,8 @@ export const useEventCreation = ({ user, db }) => {
                     screen: "Calendar",
                     eventId: result.eventId,
                     app: `${appName}-app`,
+                    date: startDate.toISOString(),
+                    ...activityData,
                   }
                 );
                 console.log(`✅ Notified ${recipients.length} subscribers`);
@@ -287,6 +319,8 @@ export const useEventCreation = ({ user, db }) => {
                       screen: "Calendar",
                       eventId: result.eventId,
                       app: `${appName}-app`,
+                      date: startDate.toISOString(),
+                      ...activityData,
                     }
                   );
                   console.log("✅ Batch reminders scheduled");
@@ -310,6 +344,8 @@ export const useEventCreation = ({ user, db }) => {
                       screen: "Calendar",
                       eventId: result.eventId,
                       app: `${appName}-app`,
+                      date: startDate.toISOString(),
+                      ...activityData,
                     }
                   );
                   console.log("✅ Personal reminder scheduled");

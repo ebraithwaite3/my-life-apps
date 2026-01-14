@@ -37,6 +37,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     preferences,
     groups,
   } = useData();
+  console.log("Route params:", route.params);
 
   // Get the joinedApps count from the user
   const joinedAppsCount = useMemo(() => {
@@ -72,24 +73,32 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   const [selectedChecklist, setSelectedChecklist] = useState(null);
 
   // Handle navigation params for deep links (notifications, etc.)
-  useEffect(() => {
-    const { date, view } = route.params || {};
+useEffect(() => {
+  const { date, view, checklistId, eventId, activityId } = route.params || {};
 
-    if (date) {
-      console.log("📅 Nav param date detected:", date, "View:", view);
-      navigateToDate(date);
+  if (date) {
+    console.log("📅 Nav param date detected:", date, "View:", view);
+    navigateToDate(date);
 
-      if (view === "day") {
-        console.log("🔄 Switching to day view");
-        calendarState.setSelectedView("day");
-      } else if (view === "month") {
-        calendarState.setSelectedView("month");
-      }
-
-      // Clear params after handling
-      navigation.setParams({ date: undefined, view: undefined });
+    if (view === "day") {
+      console.log("🔄 Switching to day view");
+      calendarState.setSelectedView("day");
+    } else if (view === "month") {
+      calendarState.setSelectedView("month");
     }
-  }, [route.params, navigateToDate, navigation, calendarState]);
+
+    // TODO: Handle checklistId to auto-open the checklist modal
+
+    // Clear ALL params after handling
+    navigation.setParams({ 
+      date: undefined, 
+      view: undefined,
+      checklistId: undefined,
+      eventId: undefined,
+      activityId: undefined
+    });
+  }
+}, [route.params, navigateToDate, navigation, calendarState]);
 
   console.log("What modal is shown?", {
     eventModalVisible: calendarState.eventModalVisible,

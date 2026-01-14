@@ -72,19 +72,35 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   /**
-   * Handle notification tap - navigate to the right screen
-   */
-  const handleNotificationTap = (data) => {
-    console.log("Handling notification tap with data:", data);
+ * Handle notification tap - navigate to the right screen
+ */
+const handleNotificationTap = (data) => {
+  console.log("Handling notification tap with data:", data);
 
-    if (data?.screen) {
-      navigation.navigate(data.screen, data.params || {});
-    } else {
-      // Fallback if somehow a notification doesn't have screen data
-      console.warn("Notification missing screen data, navigating to Calendar");
-      navigation.navigate("Calendar");
-    }
-  };
+  if (data?.screen) {
+    // Extract screen and pass everything else as params
+    const { screen, app, ...params } = data;
+    
+    console.log("📍 Navigating to:", screen, "with params:", params);
+    
+    // Navigate through nested stack: Main -> Tab -> Screen
+    navigation.navigate("Main", {
+      screen: screen,
+      params: {
+        screen: `${screen}Home`,
+        params: params
+      }
+    });
+  } else {
+    console.warn("Notification missing screen data, navigating to Calendar");
+    navigation.navigate("Main", {
+      screen: "Calendar",
+      params: {
+        screen: "CalendarHome"
+      }
+    });
+  }
+};
 
   /**
    * Dismiss the banner
