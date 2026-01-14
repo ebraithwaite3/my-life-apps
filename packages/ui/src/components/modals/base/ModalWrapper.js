@@ -1,13 +1,13 @@
 import React from 'react';
-import { Modal, View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { Modal } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 /**
  * ModalWrapper - A simple modal container that can display different screens
  * 
  * Usage:
- * <ModalWrapper visible={isVisible} onClose={handleClose} currentScreen={screenName}>
- *   {currentScreen === 'main' && <MainContent />}
- *   {currentScreen === 'nested' && <NestedContent />}
+ * <ModalWrapper visible={isVisible} onClose={handleClose}>
+ *   {children}
  * </ModalWrapper>
  */
 
@@ -26,6 +26,8 @@ const ModalWrapper = ({
       onRequestClose={onClose}
     >
       {children}
+      {/* Toast MUST be inside Modal to appear above modal content */}
+      <Toast />
     </Modal>
   );
 };

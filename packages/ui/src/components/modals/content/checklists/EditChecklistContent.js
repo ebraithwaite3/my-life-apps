@@ -20,7 +20,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import * as Crypto from "expo-crypto";
-import DoneButton from "../../../buttons/DoneButton";
 import ReminderSelector from "../../../forms/ReminderSelector";
 import TimePickerModal from "../../composed/modals/TimePickerModal";
 import FilterChips from "../../../general/FilterChips";
@@ -384,7 +383,19 @@ const EditChecklistContent = forwardRef(
       currentChecklist,
     ]);
 
-    useImperativeHandle(ref, () => ({ save: handleSave }));
+    // Expose both save and getCurrentState methods
+    useImperativeHandle(ref, () => ({ 
+      save: handleSave,
+      getCurrentState: () => ({
+        name: checklistName,
+        items: items,
+        reminderMinutes: reminderMinutes,
+        reminderTime: reminderTime,
+        notifyAdmin: notifyAdminOnCompletion,
+        defaultNotifyAdmin: defaultNotifyAdmin,
+        defaultReminderTime: defaultReminderTime,
+      })
+    }));
 
     /* ---------------- Build filter chips ---------------- */
     const buildFilters = () => {
@@ -430,7 +441,6 @@ const EditChecklistContent = forwardRef(
 
     /* ---------------- Add button visibility ---------------- */
     const hasEmptyInput = items.some((item) => !item.name.trim());
-    const showAddButton = !hasEmptyInput;
 
     /* ---------------- Styles ---------------- */
 
@@ -462,7 +472,6 @@ const EditChecklistContent = forwardRef(
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: getSpacing.md,
-        marginTop: getSpacing.sm,
         backgroundColor: theme.primary + "15",
         borderRadius: getBorderRadius.sm,
       },
@@ -472,6 +481,26 @@ const EditChecklistContent = forwardRef(
         color: theme.primary,
         marginLeft: getSpacing.xs,
         fontWeight: "600",
+      },
+
+      doneButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: getSpacing.md,
+        backgroundColor: theme.primary + "15",
+        borderRadius: getBorderRadius.sm,
+      },
+
+      doneButtonText: {
+        fontSize: getTypography.body.fontSize,
+        color: theme.primary,
+        fontWeight: "600",
+      },
+
+      buttonRow: {
+        flexDirection: "row",
+        marginTop: getSpacing.sm,
       },
 
       templateTimeRow: {
@@ -503,15 +532,6 @@ const EditChecklistContent = forwardRef(
 
     return (
       <View style={styles.container}>
-        {keyboardVisible && (
-          <DoneButton
-            onPress={Keyboard.dismiss}
-            theme={theme}
-            getSpacing={getSpacing}
-            getTypography={getTypography}
-          />
-        )}
-
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
@@ -547,6 +567,31 @@ const EditChecklistContent = forwardRef(
               chipMarginBottom={4}
             />
 
+            {/* Conditional Add Item / Add Item + Done Row */}
+            {!keyboardVisible ? (
+              <TouchableOpacity onPress={addItem} style={[styles.addButton, { marginTop: getSpacing.sm }]}>
+                <Ionicons name="add" size={20} color={theme.primary} />
+                <Text style={styles.addButtonText}>Add Item</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  onPress={addItem}
+                  style={[styles.addButton, { flex: 1, marginRight: getSpacing.xs }]}
+                >
+                  <Ionicons name="add" size={20} color={theme.primary} />
+                  <Text style={styles.addButtonText}>Add Item</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={Keyboard.dismiss}
+                  style={[styles.doneButton, { flex: 1 }]}
+                >
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
+                  <Text style={styles.doneButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <Text style={styles.sectionHeader}>Items</Text>
 
             {items.map((item, index) => (
@@ -575,13 +620,6 @@ const EditChecklistContent = forwardRef(
                 registerInput={registerInput}
               />
             ))}
-
-            {showAddButton && (
-              <TouchableOpacity onPress={addItem} style={styles.addButton}>
-                <Ionicons name="add" size={20} color={theme.primary} />
-                <Text style={styles.addButtonText}>Add Item</Text>
-              </TouchableOpacity>
-            )}
 
             {/* TEMPLATE MODE: Default Reminder Time */}
             {isTemplate && addReminder && (

@@ -49,6 +49,33 @@ const EditWorkoutTemplate = forwardRef(({
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
+    getCurrentState: () => ({
+      name: name,
+      exercises: selectedExercises.map((exerciseId, index) => {
+        const exercise = allExercises.find(ex => ex.id === exerciseId);
+        const setCount = setCounts[exerciseId] || 3;
+
+        return {
+          id: `exercise-${Date.now()}-${index}`,
+          exerciseId,
+          order: index,
+          sets: Array(setCount).fill(null).map((_, setIndex) => {
+            const set = {
+              id: `set-${Date.now()}-${index}-${setIndex}`,
+              completed: false,
+            };
+            
+            // Add tracking fields
+            if (exercise?.tracking?.includes('reps')) set.reps = 0;
+            if (exercise?.tracking?.includes('weight')) set.weight = 0;
+            if (exercise?.tracking?.includes('distance')) set.distance = 0;
+            if (exercise?.tracking?.includes('time')) set.time = 0;
+            
+            return set;
+          }),
+        };
+      }),
+    })
   }));
 
   const exercisesByCategory = useMemo(() => {
@@ -89,8 +116,11 @@ const EditWorkoutTemplate = forwardRef(({
         });
         return prev.filter(id => id !== exerciseId);
       } else {
-        // Add - initialize with 3 sets
-        setSetCounts(current => ({ ...current, [exerciseId]: 3 }));
+        // Add - preserve existing count or default to 3
+        setSetCounts(current => ({ 
+          ...current, 
+          [exerciseId]: current[exerciseId] || 3 
+        }));
         return [...prev, exerciseId];
       }
     });
@@ -105,7 +135,10 @@ const EditWorkoutTemplate = forwardRef(({
         });
         return prev.filter(id => id !== exerciseId);
       } else {
-        setSetCounts(current => ({ ...current, [exerciseId]: 3 }));
+        setSetCounts(current => ({ 
+          ...current, 
+          [exerciseId]: current[exerciseId] || 3 
+        }));
         return [...prev, exerciseId];
       }
     });

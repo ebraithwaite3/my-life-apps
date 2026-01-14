@@ -268,10 +268,8 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         // Update workout history
         await updateWorkoutHistory(updatedWorkout, user.id, db);
 
-        Alert.alert("Success", "Workout updated successfully");
-        setWorkoutModalVisible(false);
-        setSelectedWorkoutActivity(null);
-        setSelectedWorkoutEvent(null);
+        // Don't close modal or show alert - WorkoutModal handles this with toast
+        // Just let the update succeed silently
       } else {
         Alert.alert("Error", `Failed to update workout: ${result.error}`);
       }
@@ -507,6 +505,9 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         {...calendarHandlers}
         user={user}
         getSpacing={getSpacing}
+        templates={allTemplates}
+        onSaveTemplate={saveTemplate}
+        promptForContext={promptForChecklistContext}
       />
 
       {/* Workout Modal - For viewing/completing existing workouts */}

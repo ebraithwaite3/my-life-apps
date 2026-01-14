@@ -382,7 +382,8 @@ export const useCalendarHandlers = ({
   const handleUpdateChecklist = async (
     updatedChecklist,
     onClose,
-    wasJustCompleted = false
+    wasJustCompleted = false,
+    silent,
   ) => {
     const eventRef = selectedChecklistEvent;
 
@@ -447,7 +448,9 @@ export const useCalendarHandlers = ({
       }
 
       if (result.success) {
-        Alert.alert("Success", `Checklist "${updatedChecklist.name}" updated`);
+        if (!silent) {  // ← Only show Alert if not silent
+          Alert.alert("Success", `Checklist "${updatedChecklist.name}" updated`);
+        }
 
         if (wasJustCompleted && updatedChecklist.notifyAdmin) {
           try {

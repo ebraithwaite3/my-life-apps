@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from "react";
-import { View } from "react-native";
+import React, { useRef, useEffect, useState } from "react";
+import { View, Alert, Keyboard } from "react-native";
 import { useTheme } from "@my-apps/contexts";
 import { calculateChecklistProgress } from "@my-apps/utils";
+import { showSuccessToast } from "@my-apps/utils";
 import ModalWrapper from "../../base/ModalWrapper";
 import ModalHeader from "../../../headers/ModalHeader";
 import ChecklistContent from "../../content/checklists/ChecklistContent";
@@ -40,6 +41,18 @@ const ChecklistModal = ({
   const { theme, getSpacing } = useTheme();
   const editContentRef = useRef(null);
 
+  // Unified working state for the checklist
+  const [workingChecklist, setWorkingChecklist] = useState(null);
+
+  // Initialize working checklist when modal opens
+  useEffect(() => {
+    if (showChecklistModal && selectedChecklist) {
+      setWorkingChecklist(selectedChecklist);
+      setUpdatedItems(selectedChecklist.items || []);
+      setIsDirtyComplete(false);
+    }
+  }, [showChecklistModal, selectedChecklist]);
+
   const progress =
     checklistMode === "complete" && updatedItems.length > 0
       ? calculateChecklistProgress(updatedItems)
@@ -54,6 +67,92 @@ const ChecklistModal = ({
 
     setIsDirtyComplete(hasChanges);
   }, [updatedItems, selectedChecklist, checklistMode, setIsDirtyComplete]);
+
+  // Internal handler for updating from Complete mode
+  const handleInternalUpdateFromCompleteMode = async () => {
+    // Build the updated checklist
+    const updatedChecklist = {
+      ...selectedChecklist,
+      items: updatedItems,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const wasJustCompleted =
+      !selectedChecklist.completedAt &&
+      updatedItems.every((item) => item.completed);
+
+    if (wasJustCompleted) {
+      updatedChecklist.completedAt = new Date().toISOString();
+    }
+    
+    // Call external handler WITHOUT close callback - it will show Alert
+    await handleUpdateChecklist(updatedChecklist, null, wasJustCompleted, true);
+    
+    // Dismiss keyboard and show toast on top of Alert
+    Keyboard.dismiss();
+    setTimeout(() => {
+      showSuccessToast("Checklist saved", "", 2000, "top");
+    }, 100);
+    
+    // Reset dirty state so button shows "Close"
+    setIsDirtyComplete(false);
+    
+    // Don't close - stay in the checklist!
+  };
+
+  // Internal handler for updating from Edit mode
+  const handleInternalUpdateChecklist = async (checklist, shouldSaveAsTemplate) => {
+    // If saving as template, prompt FIRST before any other actions
+    if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
+      await new Promise((resolve) => {
+        promptForContext(async (context) => {
+          await onSaveTemplate(checklist, context);
+          resolve();
+        });
+      });
+    }
+    
+    // Call external handler WITHOUT close callback - it will show Alert
+    await handleUpdateChecklist(checklist, null);
+    
+    // Dismiss keyboard and show toast on top of Alert
+    Keyboard.dismiss();
+    setTimeout(() => {
+      showSuccessToast("Checklist saved", "", 2000, "top");
+    }, 100);
+    
+    // Update working state to reflect saved changes
+    setWorkingChecklist(checklist);
+    setUpdatedItems(checklist.items);
+    setIsDirtyComplete(false);
+    
+    // Don't close - stay in the checklist!
+  };
+
+  // Internal handler for closing with confirmation if dirty
+  const handleInternalClose = () => {
+    if (isDirtyComplete && selectedChecklist) {
+      Alert.alert(
+        "Unsaved Changes",
+        "You have unsaved changes. Are you sure you want to close?",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: closeViewChecklistModal,
+          },
+        ]
+      );
+    } else {
+      closeViewChecklistModal();
+    }
+  };
+
+  // Get cancel button text based on dirty state
+  const getCancelText = () => {
+    return isDirtyComplete ? "Cancel" : "Close";
+  };
 
   return (
     <>
@@ -162,10 +261,11 @@ const ChecklistModal = ({
                   ? `${progress.completed}/${progress.total} Complete`
                   : undefined
               }
-              onCancel={closeViewChecklistModal}
+              onCancel={handleInternalClose}
+              cancelText={getCancelText()}
               onDone={
                 checklistMode === "complete"
-                  ? handleUpdateFromCompleteMode
+                  ? handleInternalUpdateFromCompleteMode
                   : () => editContentRef.current?.save()
               }
               doneText="Update"
@@ -188,37 +288,37 @@ const ChecklistModal = ({
                 ]}
                 selectedValue={checklistMode}
                 onSelect={(value) => {
-                  setChecklistMode(value);
-                  if (value === "complete") {
-                    setUpdatedItems(selectedChecklist?.items || []);
+                  // Sync state when switching modes
+                  if (checklistMode === 'edit' && editContentRef.current) {
+                    // Switching FROM edit TO complete - get current state from edit
+                    const currentState = editContentRef.current.getCurrentState();
+                    const updatedChecklist = { ...workingChecklist, ...currentState };
+                    setWorkingChecklist(updatedChecklist);
+                    setUpdatedItems(currentState.items);
                     setIsDirtyComplete(false);
+                  } else if (checklistMode === 'complete') {
+                    // Switching FROM complete TO edit - update working checklist with items
+                    setWorkingChecklist(prev => ({ ...prev, items: updatedItems }));
                   }
+                  setChecklistMode(value);
                 }}
               />
             </View>
 
             {checklistMode === "complete" ? (
               <ChecklistContent
-                checklist={{ ...selectedChecklist, items: updatedItems }}
-                onItemToggle={setUpdatedItems}
+                checklist={{ ...workingChecklist, items: updatedItems }}
+                onItemToggle={(newItems) => {
+                  setUpdatedItems(newItems);
+                  setWorkingChecklist(prev => ({ ...prev, items: newItems }));
+                }}
               />
             ) : (
               <EditChecklistContent
                 ref={editContentRef}
-                checklist={selectedChecklist}
-                onSave={async (checklist, shouldSaveAsTemplate) => {
-                  // If saving as template, prompt FIRST before any other actions
-                  if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
-                    await new Promise((resolve) => {
-                      promptForContext(async (context) => {
-                        await onSaveTemplate(checklist, context);
-                        resolve();
-                      });
-                    });
-                  }
-                  
-                  // Now update event (this will show success alert)
-                  handleUpdateChecklist(checklist, closeViewChecklistModal);
+                checklist={workingChecklist}
+                onSave={(checklist, shouldSaveAsTemplate) => {
+                  handleInternalUpdateChecklist(checklist, shouldSaveAsTemplate);
                 }}
                 isUserAdmin={user?.admin === true}
                 addReminder={true}

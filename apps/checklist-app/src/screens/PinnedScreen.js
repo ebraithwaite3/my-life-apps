@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, FlatList, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useTheme,
@@ -21,7 +21,7 @@ import { scheduleNotification } from "@my-apps/services";
 import { useDeleteNotification, useChecklistTemplates } from "@my-apps/hooks";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { calculateChecklistProgress } from "@my-apps/utils";
+import { calculateChecklistProgress, showSuccessToast } from "@my-apps/utils";
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -42,6 +42,18 @@ const PinnedScreen = () => {
   const [isDirtyComplete, setIsDirtyComplete] = useState(false); // Track if changes made in complete mode
   const [checklistContext, setChecklistContext] = useState(null); // { type: 'personal' | 'group', groupId?: string, groupName?: string }
 
+  // Unified working state for the checklist
+  const [workingChecklist, setWorkingChecklist] = useState(null);
+
+  // Initialize working checklist when modal opens
+  useEffect(() => {
+    if (showChecklistModal && selectedChecklist) {
+      setWorkingChecklist(selectedChecklist);
+      setUpdatedItems(selectedChecklist.items || []);
+      setIsDirtyComplete(false);
+    }
+  }, [showChecklistModal, selectedChecklist]);
+
   // Detect changes in complete mode
   useEffect(() => {
     if (checklistMode !== "complete" || !selectedChecklist) return;
@@ -60,12 +72,42 @@ const PinnedScreen = () => {
   }, [updatedItems, selectedChecklist, checklistMode]);
 
   const closeChecklistModal = () => {
-    setShowChecklistModal(false);
-    setSelectedChecklist(null);
-    setChecklistContext(null);
-    setChecklistMode("complete");
-    setUpdatedItems([]);
-    setIsDirtyComplete(false);
+    // Check for unsaved changes before closing
+    if (isDirtyComplete && selectedChecklist) {
+      Alert.alert(
+        "Unsaved Changes",
+        "You have unsaved changes. Are you sure you want to close?",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              setShowChecklistModal(false);
+              setSelectedChecklist(null);
+              setChecklistContext(null);
+              setChecklistMode("complete");
+              setUpdatedItems([]);
+              setIsDirtyComplete(false);
+              setWorkingChecklist(null);
+            },
+          },
+        ]
+      );
+    } else {
+      setShowChecklistModal(false);
+      setSelectedChecklist(null);
+      setChecklistContext(null);
+      setChecklistMode("complete");
+      setUpdatedItems([]);
+      setIsDirtyComplete(false);
+      setWorkingChecklist(null);
+    }
+  };
+
+  // Get cancel button text based on dirty state
+  const getCancelText = () => {
+    return isDirtyComplete ? "Cancel" : "Close";
   };
 
   const handleCreateChecklist = () => {
@@ -137,7 +179,18 @@ const PinnedScreen = () => {
       items: updatedItems,
       updatedAt: new Date().toISOString(),
     };
-    await handleSaveChecklist(updatedChecklist, closeChecklistModal);
+    await handleSaveChecklist(updatedChecklist);
+    
+    // Dismiss keyboard and show toast
+    Keyboard.dismiss();
+    setTimeout(() => {
+      showSuccessToast("Checklist saved", "", 2000, "top");
+    }, 100);
+    
+    // Reset dirty state so button shows "Close"
+    setIsDirtyComplete(false);
+    
+    // Don't close - stay in the checklist!
   };
 
   const handleEditReminder = (checklist) => {
@@ -594,6 +647,7 @@ const PinnedScreen = () => {
                   : undefined
               }
               onCancel={closeChecklistModal}
+              cancelText={getCancelText()}
               onDone={
                 checklistMode === "complete"
                   ? handleUpdateFromCompleteMode
@@ -618,11 +672,19 @@ const PinnedScreen = () => {
                 ]}
                 selectedValue={checklistMode}
                 onSelect={(value) => {
-                  setChecklistMode(value);
-                  if (value === "complete") {
-                    setUpdatedItems(selectedChecklist?.items || []);
+                  // Sync state when switching modes
+                  if (checklistMode === 'edit' && editContentRef.current) {
+                    // Switching FROM edit TO complete - get current state from edit
+                    const currentState = editContentRef.current.getCurrentState();
+                    const updatedChecklist = { ...workingChecklist, ...currentState };
+                    setWorkingChecklist(updatedChecklist);
+                    setUpdatedItems(currentState.items);
                     setIsDirtyComplete(false);
+                  } else if (checklistMode === 'complete') {
+                    // Switching FROM complete TO edit - update working checklist with items
+                    setWorkingChecklist(prev => ({ ...prev, items: updatedItems }));
                   }
+                  setChecklistMode(value);
                 }}
               />
             </View>
@@ -630,16 +692,30 @@ const PinnedScreen = () => {
             {/* Conditional Content */}
             {checklistMode === "complete" ? (
               <ChecklistContent
-                checklist={{ ...selectedChecklist, items: updatedItems }}
-                onItemToggle={setUpdatedItems}
+                checklist={{ ...workingChecklist, items: updatedItems }}
+                onItemToggle={(newItems) => {
+                  setUpdatedItems(newItems);
+                  setWorkingChecklist(prev => ({ ...prev, items: newItems }));
+                }}
               />
             ) : (
               <EditChecklistContent
                 ref={editContentRef}
-                checklist={selectedChecklist}
-                onSave={(checklist, shouldSaveAsTemplate) => {
-                  // First save the pinned checklist
-                  handleSaveChecklist(checklist, closeChecklistModal);
+                checklist={workingChecklist}
+                onSave={async (checklist, shouldSaveAsTemplate) => {
+                  // First save the pinned checklist (don't close modal)
+                  await handleSaveChecklist(checklist);
+                  
+                  // Dismiss keyboard and show toast
+                  Keyboard.dismiss();
+                  setTimeout(() => {
+                    showSuccessToast("Checklist saved", "", 2000, "top");
+                  }, 100);
+                  
+                  // Update working state to reflect saved changes
+                  setWorkingChecklist(checklist);
+                  setUpdatedItems(checklist.items);
+                  setIsDirtyComplete(false);
 
                   // Then if "Save as Template" was enabled, save as template too
                   if (shouldSaveAsTemplate) {
