@@ -1,3 +1,5 @@
+// ChecklistItemConfigModal.js - UPDATED VERSION
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -16,24 +18,21 @@ import * as Crypto from 'expo-crypto';
 
 const ChecklistItemConfigModal = ({
   visible,
-  item, // Current item being configured
-  onSave, // (updatedItem) => void
+  item,
+  onSave,
   onCancel,
   isUserAdmin,
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
-  // Local state for editing
   const [itemType, setItemType] = useState('checkbox');
   const [requiredForScreenTime, setRequiredForScreenTime] = useState(false);
   const [requiresParentApproval, setRequiresParentApproval] = useState(false);
   const [yesNoType, setYesNoType] = useState('simple');
   const [options, setOptions] = useState([]);
-  const [subItems, setSubItems] = useState([]);
   
   const inputRefs = useRef({});
 
-  // Initialize from item prop
   useEffect(() => {
     if (item) {
       setItemType(item.itemType || 'checkbox');
@@ -52,8 +51,6 @@ const ChecklistItemConfigModal = ({
         setYesNoType('simple');
         setOptions([]);
       }
-      
-      setSubItems(item.subItems || []);
     }
   }, [item, visible]);
 
@@ -61,12 +58,10 @@ const ChecklistItemConfigModal = ({
     const updatedItem = {
       ...item,
       itemType,
-      // Explicitly set to false if unchecked (for sparse storage cleanup)
       requiredForScreenTime: requiredForScreenTime || undefined,
       requiresParentApproval: requiresParentApproval || undefined,
     };
 
-    // Add yesNoConfig if itemType is yesNo
     if (itemType === 'yesNo') {
       updatedItem.yesNoConfig = {
         type: yesNoType,
@@ -75,40 +70,26 @@ const ChecklistItemConfigModal = ({
         }),
       };
     } else {
-      // Clear yesNoConfig if not a yesNo item
       updatedItem.yesNoConfig = undefined;
     }
 
-    // Add subItems if itemType is group
-    if (itemType === 'group') {
-      updatedItem.subItems = subItems
-        .filter(sub => sub.name.trim() !== '')
-        .map(sub => ({
-          id: sub.id,
-          name: sub.name,
-          itemType: 'checkbox',
-          parentId: item.id,
-        }));
-    } else {
-      // Clear subItems if not a group
-      updatedItem.subItems = undefined;
+    // Preserve subItems if they exist (managed in EditChecklistContent now)
+    if (item.subItems) {
+      updatedItem.subItems = item.subItems;
     }
 
     onSave(updatedItem);
   };
 
   const handleCancel = () => {
-    // Reset to original state
     setItemType(item?.itemType || 'checkbox');
     setRequiredForScreenTime(item?.requiredForScreenTime || false);
     setRequiresParentApproval(item?.requiresParentApproval || false);
     setYesNoType(item?.yesNoConfig?.type || 'simple');
     setOptions([]);
-    setSubItems([]);
     onCancel();
   };
 
-  // Options management (for multiChoice)
   const addOption = () => {
     const newOption = {
       id: Crypto.randomUUID(),
@@ -125,43 +106,19 @@ const ChecklistItemConfigModal = ({
     setOptions(options.filter(opt => opt.id !== id));
   };
 
-  // SubItems management (for group)
-  const addSubItem = () => {
-    const newSubItem = {
-      id: Crypto.randomUUID(),
-      name: '',
-    };
-    setSubItems([...subItems, newSubItem]);
-  };
-
-  const updateSubItem = (id, name) => {
-    setSubItems(subItems.map(sub => sub.id === id ? { ...sub, name } : sub));
-  };
-
-  const removeSubItem = (id) => {
-    setSubItems(subItems.filter(sub => sub.id !== id));
-  };
-
   const registerInput = (id, ref) => {
     inputRefs.current[id] = ref;
   };
 
   const focusNextInput = (currentId) => {
-    const allIds = itemType === 'yesNo' 
-      ? options.map(opt => opt.id)
-      : subItems.map(sub => sub.id);
+    const allIds = options.map(opt => opt.id);
     const currentIndex = allIds.indexOf(currentId);
     const nextId = allIds[currentIndex + 1];
     
     if (nextId && inputRefs.current[nextId]) {
       inputRefs.current[nextId].focus();
     } else {
-      // At the end - add new item
-      if (itemType === 'yesNo') {
-        addOption();
-      } else {
-        addSubItem();
-      }
+      addOption();
     }
   };
 
@@ -305,252 +262,200 @@ const ChecklistItemConfigModal = ({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
-        {/* ITEM TYPE */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Item Type</Text>
-          
-          <View style={styles.radioGroup}>
-            {/* Simple Checkbox */}
-            <TouchableOpacity
-              style={[
-                styles.radioOption,
-                itemType === 'checkbox' && styles.radioOptionSelected,
-              ]}
-              onPress={() => setItemType('checkbox')}
-            >
-              <View style={[
-                styles.radioCircle,
-                itemType === 'checkbox' && styles.radioCircleSelected,
-              ]}>
-                {itemType === 'checkbox' && <View style={styles.radioCircleInner} />}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.radioLabel}>Simple Checkbox</Text>
-                <Text style={styles.radioDescription}>
-                  Basic checkable item
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Yes/No Question */}
-            <TouchableOpacity
-              style={[
-                styles.radioOption,
-                itemType === 'yesNo' && styles.radioOptionSelected,
-              ]}
-              onPress={() => setItemType('yesNo')}
-            >
-              <View style={[
-                styles.radioCircle,
-                itemType === 'yesNo' && styles.radioCircleSelected,
-              ]}>
-                {itemType === 'yesNo' && <View style={styles.radioCircleInner} />}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.radioLabel}>Yes/No Question</Text>
-                <Text style={styles.radioDescription}>
-                  Interactive question with answers
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Pre-filled Group */}
-            <TouchableOpacity
-              style={[
-                styles.radioOption,
-                itemType === 'group' && styles.radioOptionSelected,
-              ]}
-              onPress={() => setItemType('group')}
-            >
-              <View style={[
-                styles.radioCircle,
-                itemType === 'group' && styles.radioCircleSelected,
-              ]}>
-                {itemType === 'group' && <View style={styles.radioCircleInner} />}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.radioLabel}>Pre-filled Group</Text>
-                <Text style={styles.radioDescription}>
-                  Contains multiple sub-tasks
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* YES/NO TYPE (only if itemType is yesNo) */}
-        {itemType === 'yesNo' && (
-          <View style={styles.subSection}>
-            <Text style={styles.subSectionTitle}>Yes/No Type</Text>
-            
-            <View style={styles.radioGroup}>
-              {/* Simple */}
-              <TouchableOpacity
-                style={[
-                  styles.radioOption,
-                  yesNoType === 'simple' && styles.radioOptionSelected,
-                ]}
-                onPress={() => setYesNoType('simple')}
-              >
-                <View style={[
-                  styles.radioCircle,
-                  yesNoType === 'simple' && styles.radioCircleSelected,
-                ]}>
-                  {yesNoType === 'simple' && <View style={styles.radioCircleInner} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.radioLabel}>Simple</Text>
-                  <Text style={styles.radioDescription}>
-                    Just yes or no
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Multiple Choice */}
-              <TouchableOpacity
-                style={[
-                  styles.radioOption,
-                  yesNoType === 'multiChoice' && styles.radioOptionSelected,
-                ]}
-                onPress={() => setYesNoType('multiChoice')}
-              >
-                <View style={[
-                  styles.radioCircle,
-                  yesNoType === 'multiChoice' && styles.radioCircleSelected,
-                ]}>
-                  {yesNoType === 'multiChoice' && <View style={styles.radioCircleInner} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.radioLabel}>Multiple Choice</Text>
-                  <Text style={styles.radioDescription}>
-                    Pick from pre-filled options
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Fill in Blank */}
-              <TouchableOpacity
-                style={[
-                  styles.radioOption,
-                  yesNoType === 'fillIn' && styles.radioOptionSelected,
-                ]}
-                onPress={() => setYesNoType('fillIn')}
-              >
-                <View style={[
-                  styles.radioCircle,
-                  yesNoType === 'fillIn' && styles.radioCircleSelected,
-                ]}>
-                  {yesNoType === 'fillIn' && <View style={styles.radioCircleInner} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.radioLabel}>Fill in Blank</Text>
-                  <Text style={styles.radioDescription}>
-                    User adds items at runtime
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {/* OPTIONS EDITOR (only for multiChoice) */}
-            {yesNoType === 'multiChoice' && (
-              <View style={{ marginTop: getSpacing.lg }}>
-                <Text style={styles.subSectionTitle}>Options</Text>
-                {options.map((option, index) => (
-                  <View key={option.id} style={styles.indentedRow}>
-                    <ChecklistEditingRow
-                      item={option}
-                      index={index}
-                      theme={theme}
-                      getSpacing={getSpacing}
-                      getTypography={getTypography}
-                      getBorderRadius={getBorderRadius}
-                      isUserAdmin={false}
-                      onUpdateItem={updateOption}
-                      onRemoveItem={removeOption}
-                      onToggleConfig={() => {}}
-                      onFocus={() => {}}
-                      onBlur={() => {}}
-                      onSubmitEditing={focusNextInput}
-                      registerInput={registerInput}
-                    />
+            {/* ITEM TYPE */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Item Type</Text>
+              
+              <View style={styles.radioGroup}>
+                {/* Simple Checkbox */}
+                <TouchableOpacity
+                  style={[
+                    styles.radioOption,
+                    itemType === 'checkbox' && styles.radioOptionSelected,
+                  ]}
+                  onPress={() => setItemType('checkbox')}
+                >
+                  <View style={[
+                    styles.radioCircle,
+                    itemType === 'checkbox' && styles.radioCircleSelected,
+                  ]}>
+                    {itemType === 'checkbox' && <View style={styles.radioCircleInner} />}
                   </View>
-                ))}
-                <TouchableOpacity style={styles.addButton} onPress={addOption}>
-                  <Text style={styles.addButtonText}>+ Add Option</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.radioLabel}>Simple Checkbox</Text>
+                    <Text style={styles.radioDescription}>
+                      Basic checkable item
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Yes/No Question */}
+                <TouchableOpacity
+                  style={[
+                    styles.radioOption,
+                    itemType === 'yesNo' && styles.radioOptionSelected,
+                  ]}
+                  onPress={() => setItemType('yesNo')}
+                >
+                  <View style={[
+                    styles.radioCircle,
+                    itemType === 'yesNo' && styles.radioCircleSelected,
+                  ]}>
+                    {itemType === 'yesNo' && <View style={styles.radioCircleInner} />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.radioLabel}>Yes/No Question</Text>
+                    <Text style={styles.radioDescription}>
+                      Interactive question with answers
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
-        )}
+            </View>
 
-        {/* SUBTASKS EDITOR (only for group) */}
-        {itemType === 'group' && (
-          <View style={styles.subSection}>
-            <Text style={styles.subSectionTitle}>Subtasks</Text>
-            {subItems.map((subItem, index) => (
-              <View key={subItem.id} style={styles.indentedRow}>
-                <ChecklistEditingRow
-                  item={subItem}
-                  index={index}
-                  theme={theme}
-                  getSpacing={getSpacing}
-                  getTypography={getTypography}
-                  getBorderRadius={getBorderRadius}
-                  isUserAdmin={false}
-                  onUpdateItem={updateSubItem}
-                  onRemoveItem={removeSubItem}
-                  onToggleConfig={() => {}}
-                  onFocus={() => {}}
-                  onBlur={() => {}}
-                  onSubmitEditing={focusNextInput}
-                  registerInput={registerInput}
-                />
+            {/* YES/NO TYPE (only if itemType is yesNo) */}
+            {itemType === 'yesNo' && (
+              <View style={styles.subSection}>
+                <Text style={styles.subSectionTitle}>Yes/No Type</Text>
+                
+                <View style={styles.radioGroup}>
+                  {/* Simple */}
+                  <TouchableOpacity
+                    style={[
+                      styles.radioOption,
+                      yesNoType === 'simple' && styles.radioOptionSelected,
+                    ]}
+                    onPress={() => setYesNoType('simple')}
+                  >
+                    <View style={[
+                      styles.radioCircle,
+                      yesNoType === 'simple' && styles.radioCircleSelected,
+                    ]}>
+                      {yesNoType === 'simple' && <View style={styles.radioCircleInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.radioLabel}>Simple</Text>
+                      <Text style={styles.radioDescription}>
+                        Just yes or no
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Multiple Choice */}
+                  <TouchableOpacity
+                    style={[
+                      styles.radioOption,
+                      yesNoType === 'multiChoice' && styles.radioOptionSelected,
+                    ]}
+                    onPress={() => setYesNoType('multiChoice')}
+                  >
+                    <View style={[
+                      styles.radioCircle,
+                      yesNoType === 'multiChoice' && styles.radioCircleSelected,
+                    ]}>
+                      {yesNoType === 'multiChoice' && <View style={styles.radioCircleInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.radioLabel}>Multiple Choice</Text>
+                      <Text style={styles.radioDescription}>
+                        Pick from pre-filled options
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Fill in Blank */}
+                  <TouchableOpacity
+                    style={[
+                      styles.radioOption,
+                      yesNoType === 'fillIn' && styles.radioOptionSelected,
+                    ]}
+                    onPress={() => setYesNoType('fillIn')}
+                  >
+                    <View style={[
+                      styles.radioCircle,
+                      yesNoType === 'fillIn' && styles.radioCircleSelected,
+                    ]}>
+                      {yesNoType === 'fillIn' && <View style={styles.radioCircleInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.radioLabel}>Fill in Blank</Text>
+                      <Text style={styles.radioDescription}>
+                        User adds items at runtime
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                {/* OPTIONS EDITOR (only for multiChoice) */}
+                {yesNoType === 'multiChoice' && (
+                  <View style={{ marginTop: getSpacing.lg }}>
+                    <Text style={styles.subSectionTitle}>Options</Text>
+                    {options.map((option, index) => (
+                      <View key={option.id} style={styles.indentedRow}>
+                        <ChecklistEditingRow
+                          item={option}
+                          index={index}
+                          theme={theme}
+                          getSpacing={getSpacing}
+                          getTypography={getTypography}
+                          getBorderRadius={getBorderRadius}
+                          isUserAdmin={false}
+                          onUpdateItem={updateOption}
+                          onRemoveItem={removeOption}
+                          onToggleConfig={() => {}}
+                          onFocus={() => {}}
+                          onBlur={() => {}}
+                          onSubmitEditing={focusNextInput}
+                          registerInput={registerInput}
+                        />
+                      </View>
+                    ))}
+                    <TouchableOpacity style={styles.addButton} onPress={addOption}>
+                      <Text style={styles.addButtonText}>+ Add Option</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            ))}
-            <TouchableOpacity style={styles.addButton} onPress={addSubItem}>
-              <Text style={styles.addButtonText}>+ Add Subtask</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+            )}
 
-        {/* REQUIREMENTS */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Requirements</Text>
-          
-          {/* Screen Time */}
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() => setRequiredForScreenTime(!requiredForScreenTime)}
-          >
-            <View style={[
-              styles.checkbox,
-              requiredForScreenTime && styles.checkboxChecked,
-            ]}>
-              {requiredForScreenTime && (
-                <Text style={{ color: '#fff', fontSize: 16 }}>✓</Text>
-              )}
-            </View>
-            <Text style={styles.checkboxLabel}>Required for screen time</Text>
-          </TouchableOpacity>
+            {/* REQUIREMENTS */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Requirements</Text>
+              
+              {/* Screen Time */}
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setRequiredForScreenTime(!requiredForScreenTime)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  requiredForScreenTime && styles.checkboxChecked,
+                ]}>
+                  {requiredForScreenTime && (
+                    <Text style={{ color: '#fff', fontSize: 16 }}>✓</Text>
+                  )}
+                </View>
+                <Text style={styles.checkboxLabel}>Required for screen time</Text>
+              </TouchableOpacity>
 
-          {/* Parent Approval */}
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() => setRequiresParentApproval(!requiresParentApproval)}
-          >
-            <View style={[
-              styles.checkbox,
-              requiresParentApproval && styles.checkboxChecked,
-            ]}>
-              {requiresParentApproval && (
-                <Text style={{ color: '#fff', fontSize: 16 }}>✓</Text>
-              )}
+              {/* Parent Approval */}
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setRequiresParentApproval(!requiresParentApproval)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  requiresParentApproval && styles.checkboxChecked,
+                ]}>
+                  {requiresParentApproval && (
+                    <Text style={{ color: '#fff', fontSize: 16 }}>✓</Text>
+                  )}
+                </View>
+                <Text style={styles.checkboxLabel}>Parent approval needed</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.checkboxLabel}>Parent approval needed</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </PopUpModalWrapper>
   );

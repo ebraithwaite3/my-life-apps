@@ -1,17 +1,23 @@
-import React, { useMemo, useEffect, useState } from 'react';
-import { SharedCalendarScreen } from '@my-apps/screens';
-import { ChecklistModal, SharedEventModal, ChecklistSelector, EditChecklistContent } from '@my-apps/ui';
-import { useData } from '@my-apps/contexts';
-import { 
+import React, { useMemo, useEffect, useState } from "react";
+import { SharedCalendarScreen } from "@my-apps/screens";
+import {
+  ChecklistModal,
+  SharedEventModal,
+  ChecklistSelector,
+  EditChecklistContent,
+} from "@my-apps/ui";
+import { useData, useChecklistData } from "@my-apps/contexts";
+import {
   useCalendarState,
   useCalendarEvents,
   useCalendarHandlers,
   useChecklistTemplates,
+  usePinnedChecklists,
 } from "@my-apps/hooks";
 
 /**
  * ChecklistCalendarScreen - Complete with all features
- * 
+ *
  * ✅ Navigation params handling (deep links)
  * ✅ Deleted events filter
  * ✅ Today button
@@ -19,8 +25,8 @@ import {
  * ✅ MonthView
  */
 const ChecklistCalendarScreen = ({ navigation, route }) => {
-  const { 
-    user, 
+  const {
+    user,
     getSpacing,
     selectedDate,
     selectedMonth,
@@ -69,36 +75,42 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     updatedItems: calendarState.updatedItems,
   });
 
-  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
+  const { allTemplates, saveTemplate, promptForContext } =
+    useChecklistTemplates();
+  const { createPinnedChecklist, updatePinnedChecklist } =
+    usePinnedChecklists();
+const { allPinned } = useChecklistData();
+    console.log('🔍 Calendar screen allPinned:', allPinned);
+console.log('🔍 Calendar screen allPinned length:', allPinned?.length);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
 
   // Handle navigation params for deep links (notifications, etc.)
-useEffect(() => {
-  const { date, view, checklistId, eventId, activityId } = route.params || {};
+  useEffect(() => {
+    const { date, view, checklistId, eventId, activityId } = route.params || {};
 
-  if (date) {
-    console.log("📅 Nav param date detected:", date, "View:", view);
-    navigateToDate(date);
+    if (date) {
+      console.log("📅 Nav param date detected:", date, "View:", view);
+      navigateToDate(date);
 
-    if (view === "day") {
-      console.log("🔄 Switching to day view");
-      calendarState.setSelectedView("day");
-    } else if (view === "month") {
-      calendarState.setSelectedView("month");
+      if (view === "day") {
+        console.log("🔄 Switching to day view");
+        calendarState.setSelectedView("day");
+      } else if (view === "month") {
+        calendarState.setSelectedView("month");
+      }
+
+      // TODO: Handle checklistId to auto-open the checklist modal
+
+      // Clear ALL params after handling
+      navigation.setParams({
+        date: undefined,
+        view: undefined,
+        checklistId: undefined,
+        eventId: undefined,
+        activityId: undefined,
+      });
     }
-
-    // TODO: Handle checklistId to auto-open the checklist modal
-
-    // Clear ALL params after handling
-    navigation.setParams({ 
-      date: undefined, 
-      view: undefined,
-      checklistId: undefined,
-      eventId: undefined,
-      activityId: undefined
-    });
-  }
-}, [route.params, navigateToDate, navigation, calendarState]);
+  }, [route.params, navigateToDate, navigation, calendarState]);
 
   console.log("What modal is shown?", {
     eventModalVisible: calendarState.eventModalVisible,
@@ -113,17 +125,17 @@ useEffect(() => {
         filterActivitiesFor="checklist"
         navigation={navigation}
         route={route}
-        
         // STATE: Pass from calendarState
         selectedView={calendarState.selectedView}
         setSelectedView={calendarState.setSelectedView}
         eventModalVisible={calendarState.eventModalVisible}
         setEventModalVisible={calendarState.setEventModalVisible}
         showOnlyFilteredActivities={calendarState.showOnlyFilteredActivities}
-        setShowOnlyFilteredActivities={calendarState.setShowOnlyFilteredActivities}
+        setShowOnlyFilteredActivities={
+          calendarState.setShowOnlyFilteredActivities
+        }
         showDeletedEvents={calendarState.showDeletedEvents}
         setShowDeletedEvents={calendarState.setShowDeletedEvents}
-        
         // DATA: Pass from useData and calendarEvents
         selectedDate={selectedDate}
         selectedMonth={selectedMonth}
@@ -140,11 +152,9 @@ useEffect(() => {
         allEventsForMonth={calendarEvents.allEventsForMonth}
         joinedAppsCount={joinedAppsCount}
         user={user}
-        
         // MODAL STATE: For hiding Today button when modals open
         addChecklistModalVisible={calendarState.addChecklistModalVisible}
         showChecklistModal={calendarState.showChecklistModal}
-        
         // HANDLERS: Pass from calendarHandlers
         onDeleteEvent={calendarHandlers.handleDeleteEvent}
         onEditEvent={calendarHandlers.handleEditEvent}
@@ -171,12 +181,10 @@ useEffect(() => {
         groups={groups || []}
         initialDate={selectedDate}
         user={user}
-        
         // App-specific config
         appName="checklist"
         eventTitles={{ new: "New List", edit: "Edit List" }}
         defaultTitle="Checklist"
-        
         // Activity configuration
         activities={[
           {
@@ -217,8 +225,11 @@ useEffect(() => {
         user={user}
         getSpacing={getSpacing}
         templates={allTemplates}
-  onSaveTemplate={saveTemplate}
-  promptForContext={promptForContext}
+        onSaveTemplate={saveTemplate}
+        promptForContext={promptForContext}
+        pinnedChecklists={allPinned}
+        onCreatePinnedChecklist={createPinnedChecklist}
+        onUpdatePinnedChecklist={updatePinnedChecklist}
       />
     </>
   );

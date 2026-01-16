@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import { useData } from './DataContext';
-import { useChecklistDoc, useGroupChecklistDocs } from '../../hooks/src/checklistHooks';
+// CHANGED: Direct imports instead of barrel export to avoid circular dependency
+import { useChecklistDoc } from '../../hooks/src/checklistHooks/useChecklistDoc';
+import { useGroupChecklistDocs } from '../../hooks/src/checklistHooks/useGroupChecklistDocs';
 
 const ChecklistDataContext = createContext();
 

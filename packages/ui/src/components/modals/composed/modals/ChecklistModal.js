@@ -8,6 +8,7 @@ import ModalHeader from "../../../headers/ModalHeader";
 import ChecklistContent from "../../content/checklists/ChecklistContent";
 import EditChecklistContent from "../../content/checklists/EditChecklistContent";
 import PillSelectionButton from "../../../buttons/PillSelectionButton";
+import { generateUUID } from "@my-apps/utils";
 
 const ChecklistModal = ({
   // From calendarState
@@ -37,18 +38,29 @@ const ChecklistModal = ({
   templates,
   onSaveTemplate,
   promptForContext,
+  
+  // NEW: Pinned checklists for move functionality
+  pinnedChecklists = [],
+  onUpdatePinnedChecklist, // Function to update a pinned checklist
+  onCreatePinnedChecklist, // Function to create new pinned checklist
 }) => {
+  console.log('🔍 ChecklistModal received pinnedChecklists:', pinnedChecklists);
+
   const { theme, getSpacing } = useTheme();
   const editContentRef = useRef(null);
 
   // Unified working state for the checklist
   const [workingChecklist, setWorkingChecklist] = useState(null);
+  
+  // Track initial state for comparison
+  const [initialChecklist, setInitialChecklist] = useState(null);
 
-  // Initialize working checklist when modal opens
+  // Initialize working checklist AND initial snapshot when modal opens
   useEffect(() => {
     if (showChecklistModal && selectedChecklist) {
       setWorkingChecklist(selectedChecklist);
       setUpdatedItems(selectedChecklist.items || []);
+      setInitialChecklist(JSON.parse(JSON.stringify(selectedChecklist)));
       setIsDirtyComplete(false);
     }
   }, [showChecklistModal, selectedChecklist]);
@@ -58,19 +70,169 @@ const ChecklistModal = ({
       ? calculateChecklistProgress(updatedItems)
       : { completed: 0, total: 0 };
 
+  // Check if Complete mode has changes
   useEffect(() => {
-    if (checklistMode !== "complete" || !selectedChecklist) return;
+    if (checklistMode !== "complete" || !initialChecklist) return;
 
-    const originalItems = selectedChecklist.items || [];
     const hasChanges =
-      JSON.stringify(updatedItems) !== JSON.stringify(originalItems);
+      JSON.stringify(updatedItems) !== JSON.stringify(initialChecklist.items);
 
     setIsDirtyComplete(hasChanges);
-  }, [updatedItems, selectedChecklist, checklistMode, setIsDirtyComplete]);
+  }, [updatedItems, initialChecklist, checklistMode]);
+
+  // Check if Edit mode has changes
+  const hasEditChanges = () => {
+    if (checklistMode !== "edit" || !editContentRef.current || !initialChecklist) {
+      return false;
+    }
+    
+    const currentState = editContentRef.current.getCurrentState();
+    
+    const nameChanged = currentState.name !== initialChecklist.name;
+    const itemsChanged = JSON.stringify(currentState.items) !== JSON.stringify(initialChecklist.items);
+    const reminderChanged = currentState.reminderMinutes !== initialChecklist.reminderMinutes ||
+                           currentState.reminderTime !== initialChecklist.reminderTime;
+    const notifyChanged = currentState.notifyAdmin !== initialChecklist.notifyAdmin;
+    
+    return nameChanged || itemsChanged || reminderChanged || notifyChanged;
+  };
+
+  // NEW: Smart nesting - check if item should nest under existing group
+  const findMatchingGroup = (itemName, destinationItems) => {
+    // Look for groups with matching names (case insensitive, partial match)
+    return destinationItems.find(destItem => {
+      if (destItem.itemType !== 'group' || !destItem.subItems) return false;
+      
+      // Check if destination group name is contained in item name or vice versa
+      const destNameLower = destItem.name.toLowerCase();
+      const itemNameLower = itemName.toLowerCase();
+      
+      return destNameLower.includes(itemNameLower) || itemNameLower.includes(destNameLower);
+    });
+  };
+
+  // NEW: Handle move items
+  const handleMoveItems = async (itemsToMove, itemIdsToRemove, destination) => {
+    console.log('📦 Moving items:', itemsToMove);
+    console.log('📍 Destination:', destination);
+    
+    try {
+      if (destination.type === 'new-pinned') {
+        // Create new pinned checklist with moved items
+        const newPinned = {
+          id: generateUUID(),
+          name: destination.name,
+          items: itemsToMove.map(item => ({
+            ...item,
+            completed: false, // Reset completion for new checklist
+          })),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isPinned: true,
+        };
+        
+        if (onCreatePinnedChecklist) {
+          await onCreatePinnedChecklist(newPinned);
+        }
+        
+        showSuccessToast(`Moved to "${destination.name}"`, "", 2000, "top");
+      } else if (destination.type === 'pinned') {
+        // Add to existing pinned checklist
+        const targetPinned = destination.checklist;
+        const updatedItems = [...targetPinned.items];
+        
+        itemsToMove.forEach(movedItem => {
+          // If moving a single item, check for smart nesting
+          if (!movedItem.subItems || movedItem.subItems.length === 0) {
+            const matchingGroup = findMatchingGroup(movedItem.name, updatedItems);
+            
+            if (matchingGroup) {
+              // Nest under matching group
+              matchingGroup.subItems = matchingGroup.subItems || [];
+              matchingGroup.subItems.push({
+                ...movedItem,
+                id: generateUUID(), // New ID to avoid conflicts
+                parentId: matchingGroup.id,
+                completed: false,
+              });
+            } else {
+              // Add as new item
+              updatedItems.push({
+                ...movedItem,
+                id: generateUUID(),
+                completed: false,
+              });
+            }
+          } else {
+            // Moving a group - add as is
+            updatedItems.push({
+              ...movedItem,
+              id: generateUUID(),
+              subItems: movedItem.subItems.map(sub => ({
+                ...sub,
+                id: generateUUID(),
+                completed: false,
+              })),
+            });
+          }
+        });
+        
+        const updatedPinned = {
+          ...targetPinned,
+          items: updatedItems,
+          updatedAt: new Date().toISOString(),
+        };
+        
+        if (onUpdatePinnedChecklist) {
+          await onUpdatePinnedChecklist(updatedPinned);
+        }
+        
+        showSuccessToast(`Moved to "${targetPinned.name}"`, "", 2000, "top");
+      }
+      
+      // Remove items from source checklist
+      const remainingItems = updatedItems.filter(item => {
+        // Keep items that aren't in the remove list
+        if (itemIdsToRemove.has(item.id)) return false;
+        
+        // For groups, filter out removed sub-items
+        if (item.subItems && item.subItems.length > 0) {
+          const remainingSubs = item.subItems.filter(sub => !itemIdsToRemove.has(sub.id));
+          
+          if (remainingSubs.length === 0) {
+            // No subs left, remove the parent too
+            return false;
+          }
+          
+          // Update item with remaining subs
+          item.subItems = remainingSubs;
+        }
+        
+        return true;
+      });
+      
+      // Update source checklist
+      const updatedSourceChecklist = {
+        ...selectedChecklist,
+        items: remainingItems,
+        updatedAt: new Date().toISOString(),
+      };
+      
+      await handleUpdateChecklist(updatedSourceChecklist, null);
+      
+      // Update local state
+      setUpdatedItems(remainingItems);
+      setWorkingChecklist(updatedSourceChecklist);
+      setInitialChecklist(JSON.parse(JSON.stringify(updatedSourceChecklist)));
+      
+    } catch (error) {
+      console.error('❌ Error moving items:', error);
+      Alert.alert('Error', 'Failed to move items. Please try again.');
+    }
+  };
 
   // Internal handler for updating from Complete mode
   const handleInternalUpdateFromCompleteMode = async () => {
-    // Build the updated checklist
     const updatedChecklist = {
       ...selectedChecklist,
       items: updatedItems,
@@ -85,24 +247,19 @@ const ChecklistModal = ({
       updatedChecklist.completedAt = new Date().toISOString();
     }
     
-    // Call external handler WITHOUT close callback - it will show Alert
     await handleUpdateChecklist(updatedChecklist, null, wasJustCompleted, true);
     
-    // Dismiss keyboard and show toast on top of Alert
     Keyboard.dismiss();
     setTimeout(() => {
       showSuccessToast("Checklist saved", "", 2000, "top");
     }, 100);
     
-    // Reset dirty state so button shows "Close"
+    setInitialChecklist(JSON.parse(JSON.stringify(updatedChecklist)));
     setIsDirtyComplete(false);
-    
-    // Don't close - stay in the checklist!
   };
 
   // Internal handler for updating from Edit mode
   const handleInternalUpdateChecklist = async (checklist, shouldSaveAsTemplate) => {
-    // If saving as template, prompt FIRST before any other actions
     if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
       await new Promise((resolve) => {
         promptForContext(async (context) => {
@@ -112,26 +269,26 @@ const ChecklistModal = ({
       });
     }
     
-    // Call external handler WITHOUT close callback - it will show Alert
     await handleUpdateChecklist(checklist, null);
     
-    // Dismiss keyboard and show toast on top of Alert
     Keyboard.dismiss();
     setTimeout(() => {
       showSuccessToast("Checklist saved", "", 2000, "top");
     }, 100);
     
-    // Update working state to reflect saved changes
     setWorkingChecklist(checklist);
     setUpdatedItems(checklist.items);
+    setInitialChecklist(JSON.parse(JSON.stringify(checklist)));
     setIsDirtyComplete(false);
-    
-    // Don't close - stay in the checklist!
   };
 
   // Internal handler for closing with confirmation if dirty
   const handleInternalClose = () => {
-    if (isDirtyComplete && selectedChecklist) {
+    const hasChanges = checklistMode === "complete" 
+      ? isDirtyComplete 
+      : hasEditChanges();
+    
+    if (hasChanges) {
       Alert.alert(
         "Unsaved Changes",
         "You have unsaved changes. Are you sure you want to close?",
@@ -151,7 +308,10 @@ const ChecklistModal = ({
 
   // Get cancel button text based on dirty state
   const getCancelText = () => {
-    return isDirtyComplete ? "Cancel" : "Close";
+    const hasChanges = checklistMode === "complete" 
+      ? isDirtyComplete 
+      : hasEditChanges();
+    return hasChanges ? "Cancel" : "Close";
   };
 
   return (
@@ -203,7 +363,6 @@ const ChecklistModal = ({
               }
               checklist={null}
               onSave={async (checklist, shouldSaveAsTemplate) => {
-                // If saving as template, prompt FIRST before any other actions
                 if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
                   await new Promise((resolve) => {
                     promptForContext(async (context) => {
@@ -213,7 +372,6 @@ const ChecklistModal = ({
                   });
                 }
                 
-                // Now save to event (this will show success alert)
                 handleSaveChecklist(checklist, closeChecklistModal);
               }}
               prefilledTitle={
@@ -270,7 +428,9 @@ const ChecklistModal = ({
               }
               doneText="Update"
               doneDisabled={
-                checklistMode === "complete" ? !isDirtyComplete : false
+                checklistMode === "complete" 
+                  ? !isDirtyComplete 
+                  : !hasEditChanges()
               }
             />
 
@@ -288,16 +448,12 @@ const ChecklistModal = ({
                 ]}
                 selectedValue={checklistMode}
                 onSelect={(value) => {
-                  // Sync state when switching modes
                   if (checklistMode === 'edit' && editContentRef.current) {
-                    // Switching FROM edit TO complete - get current state from edit
                     const currentState = editContentRef.current.getCurrentState();
                     const updatedChecklist = { ...workingChecklist, ...currentState };
                     setWorkingChecklist(updatedChecklist);
                     setUpdatedItems(currentState.items);
-                    setIsDirtyComplete(false);
                   } else if (checklistMode === 'complete') {
-                    // Switching FROM complete TO edit - update working checklist with items
                     setWorkingChecklist(prev => ({ ...prev, items: updatedItems }));
                   }
                   setChecklistMode(value);
@@ -312,6 +468,8 @@ const ChecklistModal = ({
                   setUpdatedItems(newItems);
                   setWorkingChecklist(prev => ({ ...prev, items: newItems }));
                 }}
+                onMoveItems={handleMoveItems}
+                pinnedChecklists={pinnedChecklists}
               />
             ) : (
               <EditChecklistContent

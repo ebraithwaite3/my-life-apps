@@ -55,6 +55,7 @@ const EditChecklistContent = forwardRef(
     const [reminderTime, setReminderTime] = useState(null);
     const [showReminderPicker, setShowReminderPicker] = useState(false);
     const [notifyAdminOnCompletion, setNotifyAdminOnCompletion] = useState(false);
+    const [focusedItemId, setFocusedItemId] = useState(null); // NEW: Track focused item
 
     // Config modal state
     const [showConfigModal, setShowConfigModal] = useState(false);
@@ -90,6 +91,21 @@ const EditChecklistContent = forwardRef(
     const { scrollViewRef, registerInput, scrollToInput, focusInput } =
       useAutoScrollOnFocus({ offset: 80 });
 
+    /* ---------------- Helper: Flatten items for rendering ---------------- */
+    const flattenItemsForRendering = useCallback(() => {
+      const flattened = [];
+      items.forEach((item) => {
+        flattened.push({ ...item, isSubItem: false });
+        
+        if (item.subItems && item.subItems.length > 0) {
+          item.subItems.forEach((subItem) => {
+            flattened.push({ ...subItem, isSubItem: true, parentId: item.id });
+          });
+        }
+      });
+      return flattened;
+    }, [items]);
+
     /* ---------------- Keyboard visibility ---------------- */
     useEffect(() => {
       const show = Keyboard.addListener("keyboardDidShow", () =>
@@ -111,7 +127,6 @@ const EditChecklistContent = forwardRef(
         console.log("🎉 Checklist just completed!");
         const stats = getChecklistStats(currentChecklist.items);
         console.log("📊 Checklist stats:", stats);
-        // TODO: Add celebration animation, toast, confetti, etc.
       }
     }, [wasJustCompleted]);
 
@@ -143,6 +158,7 @@ const EditChecklistContent = forwardRef(
               name: "",
               completed: false,
               itemType: "checkbox",
+              subItems: [],
             },
           ]
         );
@@ -159,84 +175,195 @@ const EditChecklistContent = forwardRef(
             name: "",
             completed: false,
             itemType: "checkbox",
+            subItems: [],
           },
         ]);
       }
 
       setErrors([]);
-      setSaveAsTemplateEnabled(false); // Reset toggle on new checklist
+      setSaveAsTemplateEnabled(false);
     }, [checklist, isEditing, isTemplate, prefilledTitle]);
 
     /* ---------------- Item handlers ---------------- */
 
-    const updateItem = useCallback((id, name) => {
-      setItems((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, name } : item))
-      );
+    const updateItem = useCallback((id, name, isSubItem = false, parentId = null) => {
+      if (isSubItem && parentId) {
+        setItems((prev) =>
+          prev.map((item) => {
+            if (item.id === parentId) {
+              return {
+                ...item,
+                subItems: item.subItems.map((sub) =>
+                  sub.id === id ? { ...sub, name } : sub
+                ),
+              };
+            }
+            return item;
+          })
+        );
+      } else {
+        setItems((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, name } : item))
+        );
+      }
     }, []);
 
-    const addItem = useCallback(() => {
+    // NEW: Add item at a specific position (defaults to end)
+    const addItemAtPosition = useCallback((afterItemId = null) => {
       const id = uuidv4();
-      setItems((prev) => [
-        { id, name: "", completed: false, itemType: "checkbox" },
-        ...prev,
-      ]);
+      const newItem = { 
+        id, 
+        name: "", 
+        completed: false, 
+        itemType: "checkbox", 
+        subItems: [] 
+      };
+
+      setItems((prev) => {
+        if (afterItemId === null) {
+          // Add at end
+          return [...prev, newItem];
+        }
+        
+        const index = prev.findIndex((item) => item.id === afterItemId);
+        if (index === -1) {
+          return [...prev, newItem];
+        }
+        
+        // Add after the specified item
+        const newItems = [...prev];
+        newItems.splice(index + 1, 0, newItem);
+        return newItems;
+      });
 
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
         focusInput(id);
       }, 100);
+
+      return id;
     }, [focusInput]);
 
+    const addItem = useCallback(() => {
+      addItemAtPosition(null); // Add at end by default
+    }, [addItemAtPosition]);
+
     const removeItem = useCallback(
-      (id) => {
-        if (items.length <= 1) {
-          updateItem(id, "");
-          return;
+      (id, isSubItem = false, parentId = null) => {
+        if (isSubItem && parentId) {
+          setItems((prev) =>
+            prev.map((item) => {
+              if (item.id === parentId) {
+                const updatedSubItems = item.subItems.filter((sub) => sub.id !== id);
+                return { ...item, subItems: updatedSubItems };
+              }
+              return item;
+            })
+          );
+        } else {
+          if (items.length <= 1) {
+            updateItem(id, "");
+            return;
+          }
+          setItems((prev) => prev.filter((item) => item.id !== id));
         }
-        setItems((prev) => prev.filter((item) => item.id !== id));
       },
       [items.length, updateItem]
     );
 
     const handleBlur = useCallback(
-      (id) => {
-        const item = items.find((i) => i.id === id);
-        if (item && !item.name.trim() && items.length > 1) {
-          removeItem(id);
+      (id, isSubItem = false, parentId = null) => {
+        // Clear focused item
+        setFocusedItemId(null);
+        
+        const flattened = flattenItemsForRendering();
+        const item = flattened.find((i) => i.id === id);
+        
+        if (item && !item.name.trim()) {
+          if (isSubItem) {
+            return;
+          } else if (items.length > 1) {
+            removeItem(id);
+          }
         }
       },
-      [items, removeItem]
+      [items, flattenItemsForRendering, removeItem]
     );
+
+    const addSubItem = useCallback((parentId) => {
+      const subItemId = uuidv4();
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.id === parentId) {
+            return {
+              ...item,
+              subItems: [
+                ...(item.subItems || []),
+                {
+                  id: subItemId,
+                  name: "",
+                  itemType: "checkbox",
+                  parentId: parentId,
+                },
+              ],
+            };
+          }
+          return item;
+        })
+      );
+
+      setTimeout(() => {
+        focusInput(subItemId);
+      }, 100);
+    }, [focusInput]);
 
     const handleSubmitEditing = useCallback(
-      (currentId) => {
-        const index = items.findIndex((i) => i.id === currentId);
-        const item = items[index];
+      (currentId, isSubItem = false, parentId = null) => {
+        const flattened = flattenItemsForRendering();
+        const index = flattened.findIndex((i) => i.id === currentId);
+        const item = flattened[index];
 
-        if (!item.name.trim()) {
-          const next = items[index + 1];
-          if (next) {
-            focusInput(next.id);
+        if (isSubItem) {
+          // Sub-item logic
+          if (!item.name.trim()) {
+            // Empty sub-item + next = Exit to parent level, add new parent BELOW current parent
+            removeItem(currentId, true, parentId);
+            
+            // Add new item AFTER the parent
+            addItemAtPosition(parentId);
           } else {
-            addItem();
+            // Non-empty sub-item + next = Add another sub-item
+            addSubItem(parentId);
           }
-          return;
-        }
-
-        if (index === 0) {
-          addItem();
         } else {
-          const next = items[index + 1];
+          // Parent item logic
+          const next = flattened[index + 1];
+          
+          if (!item.name.trim()) {
+            // Empty parent item - move to next or add new
+            if (next) {
+              focusInput(next.id);
+            } else {
+              addItemAtPosition(currentId);
+            }
+            return;
+          }
+
+          // Non-empty parent item
           if (next) {
             focusInput(next.id);
           } else {
-            addItem();
+            // At the end - add new item BELOW current
+            addItemAtPosition(currentId);
           }
         }
       },
-      [items, addItem, focusInput]
+      [items, flattenItemsForRendering, addItemAtPosition, addSubItem, removeItem, focusInput]
     );
+
+    const handleFocus = useCallback((id) => {
+      setFocusedItemId(id);
+      scrollToInput(id);
+    }, [scrollToInput]);
 
     /* ---------------- Config Modal Handlers ---------------- */
 
@@ -263,24 +390,36 @@ const EditChecklistContent = forwardRef(
 
     const validateForm = () => {
       const errs = [];
-
+    
       if (!checklistName.trim()) {
         errs.push("Checklist name is required.");
       }
-
+    
       if (items.filter((i) => i.name.trim()).length === 0) {
         errs.push("At least one checklist item is required.");
       }
-
+    
       setErrors(errs);
+      
+      // Show alert if there are errors
+      if (errs.length > 0) {
+        Alert.alert(
+          "Cannot Save",
+          errs.join("\n"),
+          [{ text: "OK" }]
+        );
+      }
+      
       return errs.length === 0;
     };
 
     const handleSave = useCallback(() => {
-      // Regular validation (name + items)
-      if (!validateForm()) return;
-
-      // Additional validation ONLY if "Save as Template" is enabled
+      
+      if (!validateForm()) {
+        console.log("❌ Validation failed");
+        return;
+      }
+    
       if (saveAsTemplateEnabled) {
         const validation = canSaveAsTemplate(currentChecklist);
         if (!validation.valid) {
@@ -289,82 +428,102 @@ const EditChecklistContent = forwardRef(
             validation.errors.join("\n") +
               "\n\nPlease fix these issues before saving with 'Save as Template' enabled."
           );
+          console.log("❌ Template validation failed");
           return;
         }
       }
-
-      const validItems = items
-        .filter((i) => i.name.trim())
-        .map((item) => {
-          const baseItem = {
-            id: item.id,
-            name: item.name.trim(),
-            completed: isTemplate ? undefined : item.completed ?? false,
-          };
-
-          // Only include non-default values (sparse storage)
-          if (item.itemType && item.itemType !== "checkbox") {
-            baseItem.itemType = item.itemType;
-          }
-          if (item.requiredForScreenTime) {
-            baseItem.requiredForScreenTime = true;
-          }
-          if (item.requiresParentApproval) {
-            baseItem.requiresParentApproval = true;
-          }
-          if (item.yesNoConfig) {
-            baseItem.yesNoConfig = item.yesNoConfig;
-          }
-          if (item.subItems && item.subItems.length > 0) {
-            baseItem.subItems = item.subItems;
-          }
-          if (item.parentId) {
-            baseItem.parentId = item.parentId;
-          }
-
-          return baseItem;
-        });
-
-      const newChecklist = {
-        id: isEditing ? checklist.id : uuidv4(),
-        name: checklistName.trim(),
-        items: validItems,
-        createdAt: isEditing ? checklist.createdAt : new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (isTemplate) {
-        if (defaultNotifyAdmin) {
-          newChecklist.defaultNotifyAdmin = true;
-        }
-        if (defaultReminderTime) {
-          newChecklist.defaultReminderTime = defaultReminderTime;
-        }
-      } else {
-        if (notifyAdminOnCompletion) {
-          newChecklist.notifyAdmin = true;
-        }
-
-        if (hasEventTime && addReminder) {
-          if (reminderMinutes !== null) {
-            console.log("Storing reminderMinutes:", reminderMinutes);
-            // Convert ISO string back to minutes before event start
-            const eventTime = DateTime.fromISO(eventStartTime.toISOString());
-            const reminderTimeObj = DateTime.fromISO(reminderMinutes);
-            const minutesBefore = Math.round(eventTime.diff(reminderTimeObj, 'minutes').minutes);
+    
+      try {
+        const validItems = items
+          .filter((i) => i.name.trim())
+          .map((item) => {
+            const baseItem = {
+              id: item.id,
+              name: item.name.trim(),
+              completed: isTemplate ? undefined : item.completed ?? false,
+            };
+    
+            // Check if this item has sub-items
+            const hasSubItems = item.subItems && item.subItems.length > 0 && 
+                                item.subItems.some(sub => sub.name.trim());
+    
+    
+            // Set itemType to 'group' if it has sub-items
+            if (hasSubItems) {
+              baseItem.itemType = 'group';
+            } else if (item.itemType && item.itemType !== "checkbox") {
+              baseItem.itemType = item.itemType;
+            }
+    
+            if (item.requiredForScreenTime) {
+              baseItem.requiredForScreenTime = true;
+            }
+            if (item.requiresParentApproval) {
+              baseItem.requiresParentApproval = true;
+            }
+            if (item.yesNoConfig) {
+              baseItem.yesNoConfig = item.yesNoConfig;
+            }
             
-            newChecklist.reminderMinutes = minutesBefore; // Store as number
+            // Properly structure sub-items with full data
+            if (hasSubItems) {
+              baseItem.subItems = item.subItems
+                .filter(sub => sub.name.trim())
+                .map(sub => ({
+                  id: sub.id,
+                  name: sub.name.trim(),
+                  itemType: 'checkbox',
+                  parentId: item.id,
+                  completed: isTemplate ? undefined : sub.completed ?? false,
+                }));
+              
+              console.log(`🔍 Mapped sub-items for "${item.name}":`, baseItem.subItems);
+            }
+    
+            return baseItem;
+          });
+    
+    
+        const newChecklist = {
+          id: isEditing ? checklist.id : uuidv4(),
+          name: checklistName.trim(),
+          items: validItems,
+          createdAt: isEditing ? checklist.createdAt : new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+    
+        if (isTemplate) {
+          if (defaultNotifyAdmin) {
+            newChecklist.defaultNotifyAdmin = true;
           }
-        } else if (!hasEventTime && reminderTime) {
-          console.log("Storing reminderTime:", reminderTime);
-          newChecklist.reminderTime = reminderTime; // Store as ISO string
+          if (defaultReminderTime) {
+            newChecklist.defaultReminderTime = defaultReminderTime;
+          }
+        } else {
+          if (notifyAdminOnCompletion) {
+            newChecklist.notifyAdmin = true;
+          }
+    
+          if (hasEventTime && addReminder) {
+            if (reminderMinutes !== null) {
+              const eventTime = DateTime.fromISO(eventStartTime.toISOString());
+              const reminderTimeObj = DateTime.fromISO(reminderMinutes);
+              const minutesBefore = Math.round(eventTime.diff(reminderTimeObj, 'minutes').minutes);
+              
+              newChecklist.reminderMinutes = minutesBefore;
+            }
+          } else if (!hasEventTime && reminderTime) {
+            newChecklist.reminderTime = reminderTime;
+          }
         }
+        
+        onSave?.(newChecklist, saveAsTemplateEnabled);
+        
+        console.log("✅ onSave completed");
+      } catch (error) {
+        console.error("❌ Error in handleSave:", error);
+        Alert.alert("Error", "Failed to save checklist: " + error.message);
       }
-
-      console.log("✅ EditChecklistContent - newChecklist:", newChecklist);
-
-      // Pass the toggle state to parent
-      onSave?.(newChecklist, saveAsTemplateEnabled);
     }, [
       checklistName,
       items,
@@ -381,9 +540,9 @@ const EditChecklistContent = forwardRef(
       onSave,
       saveAsTemplateEnabled,
       currentChecklist,
+      eventStartTime,
     ]);
 
-    // Expose both save and getCurrentState methods
     useImperativeHandle(ref, () => ({ 
       save: handleSave,
       getCurrentState: () => ({
@@ -401,7 +560,6 @@ const EditChecklistContent = forwardRef(
     const buildFilters = () => {
       const filters = [];
 
-      // Admin notification filter (always show if admin)
       if (isUserAdmin) {
         filters.push({
           label: isTemplate ? "Default: Notify Admin" : "Notify Me",
@@ -413,8 +571,6 @@ const EditChecklistContent = forwardRef(
         });
       }
 
-      // Save as Template - ALWAYS clickable, just a toggle
-      // Validation happens when user hits Create/Update
       if (!isTemplate && !isAlreadyTemplate) {
         filters.push({
           label: "Save as Template",
@@ -438,9 +594,6 @@ const EditChecklistContent = forwardRef(
       const displayHour = hour % 12 || 12;
       return `${displayHour}:${minutes} ${ampm}`;
     };
-
-    /* ---------------- Add button visibility ---------------- */
-    const hasEmptyInput = items.some((item) => !item.name.trim());
 
     /* ---------------- Styles ---------------- */
 
@@ -526,179 +679,208 @@ const EditChecklistContent = forwardRef(
         fontStyle: "italic",
         marginTop: getSpacing.xs,
       },
+
+      addSubItemButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: getSpacing.sm,
+        paddingLeft: 24,
+        marginBottom: getSpacing.sm,
+      },
+
+      addSubItemText: {
+        fontSize: getTypography.caption.fontSize,
+        color: theme.text.secondary,
+        marginLeft: getSpacing.xs,
+      },
     });
 
     /* ---------------- Render ---------------- */
 
-    return (
-      <View style={styles.container}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
-          style={{ flex: 1 }}
-        >
-          <ScrollView
-            ref={scrollViewRef}
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={styles.sectionHeader}>
-              {isTemplate ? "Template Name" : "Checklist Name"}
-            </Text>
+return (
+  <View style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+      style={{ flex: 1 }}
+    >
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.sectionHeader}>
+          {isTemplate ? "Template Name" : "Checklist Name"}
+        </Text>
 
-            <TextInput
-              style={styles.nameInput}
-              placeholder={`Enter ${
-                isTemplate ? "template" : "checklist"
-              } name...`}
-              placeholderTextColor={theme.text.tertiary}
-              value={checklistName}
-              onChangeText={setChecklistName}
-              autoCapitalize="words"
-              onFocus={() =>
-                scrollViewRef.current?.scrollTo({ y: 0, animated: true })
-              }
+        <TextInput
+          style={styles.nameInput}
+          placeholder={`Enter ${
+            isTemplate ? "template" : "checklist"
+          } name...`}
+          placeholderTextColor={theme.text.tertiary}
+          value={checklistName}
+          onChangeText={setChecklistName}
+          autoCapitalize="words"
+          onFocus={() =>
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true })
+          }
+        />
+
+        <FilterChips
+          filters={filterChips}
+          marginTop={-20}
+          chipMarginBottom={4}
+        />
+
+        <Text style={styles.sectionHeader}>Items</Text>
+
+        {/* Add Item Button - MOVED TO TOP */}
+        <TouchableOpacity onPress={addItem} style={[styles.addButton, { marginBottom: getSpacing.md }]}>
+          <Ionicons name="add" size={20} color={theme.primary} />
+          <Text style={styles.addButtonText}>Add Item</Text>
+        </TouchableOpacity>
+
+        {items.map((item, parentIndex) => (
+          <View key={item.id}>
+            {/* Parent Item */}
+            <ChecklistEditingRow
+              item={item}
+              index={parentIndex}
+              theme={theme}
+              getSpacing={getSpacing}
+              getTypography={getTypography}
+              getBorderRadius={getBorderRadius}
+              isUserAdmin={isUserAdmin}
+              onUpdateItem={(id, name) => updateItem(id, name, false)}
+              onRemoveItem={(id) => removeItem(id, false)}
+              onToggleConfig={handleToggleConfig}
+              onFocus={(id) => handleFocus(id)}
+              onBlur={(id) => handleBlur(id, false)}
+              onSubmitEditing={(id) => handleSubmitEditing(id, false)}
+              registerInput={registerInput}
             />
 
-            {/* Filter Chips - Admin notification + Save as Template */}
-            <FilterChips
-              filters={filterChips}
-              marginTop={-20}
-              chipMarginBottom={4}
-            />
-
-            {/* Conditional Add Item / Add Item + Done Row */}
-            {!keyboardVisible ? (
-              <TouchableOpacity onPress={addItem} style={[styles.addButton, { marginTop: getSpacing.sm }]}>
-                <Ionicons name="add" size={20} color={theme.primary} />
-                <Text style={styles.addButtonText}>Add Item</Text>
+            {/* Add Sub-Item Button (only when THIS parent is focused and has text) */}
+            {focusedItemId === item.id && item.name.trim() && (
+              <TouchableOpacity
+                style={styles.addSubItemButton}
+                onPress={() => addSubItem(item.id)}
+              >
+                <Ionicons name="add-circle-outline" size={16} color={theme.text.secondary} />
+                <Text style={styles.addSubItemText}>Add sub-item</Text>
               </TouchableOpacity>
-            ) : (
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  onPress={addItem}
-                  style={[styles.addButton, { flex: 1, marginRight: getSpacing.xs }]}
-                >
-                  <Ionicons name="add" size={20} color={theme.primary} />
-                  <Text style={styles.addButtonText}>Add Item</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={Keyboard.dismiss}
-                  style={[styles.doneButton, { flex: 1 }]}
-                >
-                  <Ionicons name="checkmark" size={20} color={theme.primary} />
-                  <Text style={styles.doneButtonText}>Done</Text>
-                </TouchableOpacity>
-              </View>
             )}
 
-            <Text style={styles.sectionHeader}>Items</Text>
-
-            {items.map((item, index) => (
+            {/* Sub-Items */}
+            {item.subItems && item.subItems.map((subItem, subIndex) => (
               <ChecklistEditingRow
-                key={item.id}
-                item={item}
-                index={index}
+                key={subItem.id}
+                item={subItem}
+                index={subIndex}
                 theme={theme}
                 getSpacing={getSpacing}
                 getTypography={getTypography}
                 getBorderRadius={getBorderRadius}
-                isUserAdmin={isUserAdmin}
-                onUpdateItem={updateItem}
-                onRemoveItem={removeItem}
-                onToggleConfig={handleToggleConfig}
-                onFocus={(id) => {
-                  scrollToInput(id);
-                  if (index === items.length - 1) {
-                    setTimeout(() => {
-                      scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 150);
-                  }
-                }}
-                onBlur={handleBlur}
-                onSubmitEditing={handleSubmitEditing}
+                isUserAdmin={false}
+                isSubItem={true}
+                onUpdateItem={(id, name) => updateItem(id, name, true, item.id)}
+                onRemoveItem={(id) => removeItem(id, true, item.id)}
+                onToggleConfig={() => {}}
+                onFocus={(id) => handleFocus(id)}
+                onBlur={(id) => handleBlur(id, true, item.id)}
+                onSubmitEditing={(id) => handleSubmitEditing(id, true, item.id)}
                 registerInput={registerInput}
               />
             ))}
+          </View>
+        ))}
 
-            {/* TEMPLATE MODE: Default Reminder Time */}
-            {isTemplate && addReminder && (
-              <View style={{ marginTop: getSpacing.lg }}>
-                <Text style={styles.sectionHeader}>Default Reminder Time</Text>
-                <TouchableOpacity
-                  style={styles.templateTimeRow}
-                  onPress={() => setShowReminderPicker(true)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <Ionicons
-                      name="time-outline"
-                      size={20}
-                      color={theme.text.secondary}
-                      style={{ marginRight: getSpacing.sm }}
-                    />
-                    <Text style={styles.templateTimeText}>
-                      {defaultReminderTime ? formatTemplateTime(defaultReminderTime) : "Set default time"}
-                    </Text>
-                  </View>
-                  {defaultReminderTime && (
-                    <TouchableOpacity
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        setDefaultReminderTime(null);
-                      }}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons name="close-circle" size={20} color={theme.error} />
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-                <Text style={styles.templateHint}>
-                  Default time for reminders when applying this template
+        {/* Done Button - ONLY AT BOTTOM when keyboard visible */}
+        {keyboardVisible && (
+          <TouchableOpacity
+            onPress={Keyboard.dismiss}
+            style={[styles.doneButton, { marginTop: getSpacing.lg }]}
+          >
+            <Ionicons name="checkmark" size={20} color={theme.primary} />
+            <Text style={styles.doneButtonText}>Done</Text>
+          </TouchableOpacity>
+        )}
+
+        {isTemplate && addReminder && (
+          <View style={{ marginTop: getSpacing.lg }}>
+            <Text style={styles.sectionHeader}>Default Reminder Time</Text>
+            <TouchableOpacity
+              style={styles.templateTimeRow}
+              onPress={() => setShowReminderPicker(true)}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Ionicons
+                  name="time-outline"
+                  size={20}
+                  color={theme.text.secondary}
+                  style={{ marginRight: getSpacing.sm }}
+                />
+                <Text style={styles.templateTimeText}>
+                  {defaultReminderTime ? formatTemplateTime(defaultReminderTime) : "Set default time"}
                 </Text>
               </View>
-            )}
+              {defaultReminderTime && (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setDefaultReminderTime(null);
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close-circle" size={20} color={theme.error} />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.templateHint}>
+              Default time for reminders when applying this template
+            </Text>
+          </View>
+        )}
 
-            {/* REGULAR MODE: Event Reminder */}
-            {addReminder && !isTemplate && (
-              <ReminderSelector
-                reminder={hasEventTime ? reminderMinutes : reminderTime}
-                onReminderChange={(value) => {
-                  if (hasEventTime) {
-                    setReminderMinutes(value);
-                  } else {
-                    setReminderTime(value);
-                  }
-                }}
-                eventStartDate={eventStartTime || new Date()}
-                isAllDay={!hasEventTime}
-              />
-            )}
-          </ScrollView>
+        {addReminder && !isTemplate && (
+          <ReminderSelector
+            reminder={hasEventTime ? reminderMinutes : reminderTime}
+            onReminderChange={(value) => {
+              if (hasEventTime) {
+                setReminderMinutes(value);
+              } else {
+                setReminderTime(value);
+              }
+            }}
+            eventStartDate={eventStartTime || new Date()}
+            isAllDay={!hasEventTime}
+          />
+        )}
+      </ScrollView>
 
-          {/* Template Time Picker - Direct time selection */}
-          {addReminder && isTemplate && (
-            <TimePickerModal
-              visible={showReminderPicker}
-              onClose={() => setShowReminderPicker(false)}
-              initialTime={defaultReminderTime}
-              onConfirm={(timeString) => {
-                setDefaultReminderTime(timeString);
-                setShowReminderPicker(false);
-              }}
-            />
-          )}
-        </KeyboardAvoidingView>
-
-        {/* Item Config Modal */}
-        <ChecklistItemConfigModal
-          visible={showConfigModal}
-          item={selectedItemForConfig}
-          onSave={handleSaveConfig}
-          onCancel={handleCancelConfig}
-          isUserAdmin={isUserAdmin}
+      {addReminder && isTemplate && (
+        <TimePickerModal
+          visible={showReminderPicker}
+          onClose={() => setShowReminderPicker(false)}
+          initialTime={defaultReminderTime}
+          onConfirm={(timeString) => {
+            setDefaultReminderTime(timeString);
+            setShowReminderPicker(false);
+          }}
         />
-      </View>
-    );
+      )}
+    </KeyboardAvoidingView>
+
+    <ChecklistItemConfigModal
+      visible={showConfigModal}
+      item={selectedItemForConfig}
+      onSave={handleSaveConfig}
+      onCancel={handleCancelConfig}
+      isUserAdmin={isUserAdmin}
+    />
+  </View>
+);
   }
 );
 

@@ -18,10 +18,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { scheduleNotification } from "@my-apps/services";
-import { useDeleteNotification, useChecklistTemplates } from "@my-apps/hooks";
+import { useDeleteNotification, useChecklistTemplates, usePinnedChecklists } from "@my-apps/hooks";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { calculateChecklistProgress, showSuccessToast } from "@my-apps/utils";
+import { calculateChecklistProgress, showSuccessToast, generateUUID } from "@my-apps/utils";
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -31,6 +31,8 @@ const PinnedScreen = () => {
   const deleteNotification = useDeleteNotification();
   const { allTemplates, saveTemplate, promptForContext } =
     useChecklistTemplates();
+    const { createPinnedChecklist, updatePinnedChecklist } =
+    usePinnedChecklists();
   const editContentRef = useRef(null); // Ref for EditChecklistContent
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -457,6 +459,116 @@ const PinnedScreen = () => {
     return targets;
   };
 
+  const handleMoveItems = async (itemsToMove, itemIdsToRemove, destination) => {
+    console.log('📦 Moving items from pinned checklist:', itemsToMove);
+    console.log('📍 Destination:', destination);
+    
+    try {
+      if (destination.type === 'new-pinned') {
+        // Create new pinned checklist with moved items
+        const newPinned = {
+          id: generateUUID(),
+          name: destination.name,
+          items: itemsToMove.map(item => ({
+            ...item,
+            id: generateUUID(),
+            completed: false,
+            ...(item.subItems && {
+              subItems: item.subItems.map(sub => ({
+                ...sub,
+                id: generateUUID(),
+                completed: false,
+              })),
+            }),
+          })),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isPinned: true,
+        };
+        
+        const result = await createPinnedChecklist(newPinned);
+        
+        if (result.success) {
+          showSuccessToast(`Moved to "${destination.name}"`, "", 2000, "top");
+        }
+      } else if (destination.type === 'pinned') {
+        // Add to existing pinned checklist
+        const targetPinned = destination.checklist;
+        const updatedTargetItems = [...(targetPinned.items || [])];
+        
+        itemsToMove.forEach(movedItem => {
+          if (movedItem.subItems && movedItem.subItems.length > 0) {
+            updatedTargetItems.push({
+              ...movedItem,
+              id: generateUUID(),
+              subItems: movedItem.subItems.map(sub => ({
+                ...sub,
+                id: generateUUID(),
+                completed: false,
+              })),
+            });
+          } else {
+            updatedTargetItems.push({
+              ...movedItem,
+              id: generateUUID(),
+              completed: false,
+            });
+          }
+        });
+        
+        const updatedPinned = {
+          ...targetPinned,
+          items: updatedTargetItems,
+          updatedAt: new Date().toISOString(),
+        };
+        
+        const result = await updatePinnedChecklist(updatedPinned);
+        
+        if (result.success) {
+          showSuccessToast(`Moved to "${targetPinned.name}"`, "", 2000, "top");
+        }
+      }
+      
+      // IMPORTANT: Remove items from SOURCE checklist
+      // Use the current items from the modal state
+      const remainingItems = updatedItems.filter(item => {
+        if (itemIdsToRemove.has(item.id)) return false;
+        
+        if (item.subItems && item.subItems.length > 0) {
+          const remainingSubs = item.subItems.filter(sub => !itemIdsToRemove.has(sub.id));
+          if (remainingSubs.length === 0) return false;
+          item.subItems = remainingSubs;
+        }
+        
+        return true;
+      });
+      
+      // Update source checklist - PRESERVE ALL METADATA
+      const updatedSourceChecklist = {
+        ...selectedChecklist, // This has all the metadata (id, groupId, isGroupChecklist, etc.)
+        items: remainingItems,
+        updatedAt: new Date().toISOString(),
+      };
+      
+      console.log('📝 Updating source checklist:', updatedSourceChecklist);
+      
+      const result = await updatePinnedChecklist(updatedSourceChecklist);
+      
+      if (result.success) {
+        // Update local state to reflect changes
+        setUpdatedItems(remainingItems);
+        setWorkingChecklist(updatedSourceChecklist);
+        setSelectedChecklist(updatedSourceChecklist);
+      } else {
+        throw new Error(result.error || 'Failed to update source checklist');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error moving items:', error);
+      Alert.alert('Error', 'Failed to move items. Please try again.');
+    }
+  };
+  
   const handleCloseModal = () => {
     setShowEditModal(false);
     setSelectedChecklist(null);
@@ -697,6 +809,10 @@ const PinnedScreen = () => {
                   setUpdatedItems(newItems);
                   setWorkingChecklist(prev => ({ ...prev, items: newItems }));
                 }}
+                onMoveItems={handleMoveItems}
+                pinnedChecklists={allPinned}
+                onUpdatePinnedChecklist={updatePinnedChecklist}
+                onCreatePinnedChecklist={createPinnedChecklist}
               />
             ) : (
               <EditChecklistContent

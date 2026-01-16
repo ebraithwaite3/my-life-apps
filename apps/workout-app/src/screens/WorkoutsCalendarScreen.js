@@ -15,6 +15,7 @@ import {
   useChecklistTemplates,
   useUpdateInternalActivities,
   useUpdateExternalActivities,
+  usePinnedChecklists,
 } from "@my-apps/hooks";
 import WorkoutSelector from "../components/modals/WorkoutSelector";
 import EditWorkoutTemplate from "../components/modals/EditWorkoutTemplate";
@@ -124,6 +125,7 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
   } = useWorkoutTemplates();
   const updateInternalActivities = useUpdateInternalActivities();
   const updateExternalActivities = useUpdateExternalActivities();
+  const { allPinned, createPinnedChecklist, updatePinnedChecklist } = usePinnedChecklists();
 
   // Selected activities for modals
   const [selectedChecklist, setSelectedChecklist] = useState(null);
@@ -508,6 +510,9 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         templates={allTemplates}
         onSaveTemplate={saveTemplate}
         promptForContext={promptForChecklistContext}
+        pinnedChecklists={allPinned}
+        onUpdatePinnedChecklist={updatePinnedChecklist}
+        onCreatePinnedChecklist={createPinnedChecklist}
       />
 
       {/* Workout Modal - For viewing/completing existing workouts */}

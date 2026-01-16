@@ -3,7 +3,18 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 
-const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubItem = false }) => {
+const ChecklistItemRow = ({ 
+  item, 
+  onToggle, 
+  onYesNoAnswer, 
+  onResetYesNo, 
+  isSubItem = false,
+  // NEW: Selection mode props
+  selectionMode = false,
+  isSelected = false,
+  onSelect,
+  isMoveable = true,
+}) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
   // Check if this is a yes/no item
@@ -31,6 +42,29 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
     displayText = `${item.name} (${completedSubItems}/${subItems.length})`;
   }
 
+  // NEW: Handle press based on mode
+  const handlePress = () => {
+    if (selectionMode) {
+      if (isMoveable && onSelect) {
+        onSelect(item.id, shouldRenderAsGroup);
+      }
+    } else {
+      if (!isYesNo || isAnswered) {
+        onToggle(item.id);
+      }
+    }
+  };
+
+  const handleSubItemPress = (subItemId) => {
+    if (selectionMode) {
+      if (isMoveable && onSelect) {
+        onSelect(subItemId, false, item.id);
+      }
+    } else {
+      onToggle(subItemId);
+    }
+  };
+
   const styles = StyleSheet.create({
     itemRow: {
       paddingVertical: getSpacing.md,
@@ -56,6 +90,18 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
       width: 28,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    // NEW: Selection checkbox styles
+    selectionCheckbox: {
+      width: 28,
+      height: 28,
+      borderRadius: getBorderRadius.sm,
+      borderWidth: 2,
+      borderColor: theme.primary,
+      marginRight: getSpacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isSelected ? theme.primary : 'transparent',
     },
     itemTextContainer: {
       flex: 1,
@@ -124,7 +170,7 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
       marginBottom: getSpacing.sm,
     },
     disabledRow: {
-      opacity: 0.6,
+      opacity: 0.4,
     },
   });
 
@@ -132,40 +178,52 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
   if (shouldRenderAsGroup) {
     return (
       <View style={styles.groupContainer}>
-        {/* Parent Group/MultiChoice Item - NOT clickable, controlled by sub-items */}
-        <View
+        {/* Parent Group/MultiChoice Item */}
+        <TouchableOpacity
           style={[
             styles.itemRow,
-            item.completed && styles.itemRowCompleted,
+            item.completed && !selectionMode && styles.itemRowCompleted,
+            !isMoveable && selectionMode && styles.disabledRow,
           ]}
+          onPress={handlePress}
+          activeOpacity={selectionMode ? 0.6 : 1}
+          disabled={!isMoveable && selectionMode}
         >
           <View style={styles.rowContent}>
-            <View style={styles.checkbox}>
-              <Ionicons
-                name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
-                size={28}
-                color={item.completed ? theme.primary : theme.text.tertiary}
-              />
-            </View>
+            {selectionMode ? (
+              // Selection mode - show selection checkbox
+              <View style={styles.selectionCheckbox}>
+                {isSelected && <Ionicons name="checkmark" size={18} color="#fff" />}
+              </View>
+            ) : (
+              // Normal mode - show completion status
+              <View style={styles.checkbox}>
+                <Ionicons
+                  name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={28}
+                  color={item.completed ? theme.primary : theme.text.tertiary}
+                />
+              </View>
+            )}
 
             <View style={styles.itemTextContainer}>
               <Text
                 style={[
                   styles.itemText,
-                  item.completed && styles.itemTextCompleted,
+                  item.completed && !selectionMode && styles.itemTextCompleted,
                 ]}
               >
                 {displayText}
               </Text>
 
-              {item.requiredForScreenTime && (
+              {!selectionMode && item.requiredForScreenTime && (
                 <View style={styles.screenTimeIcon}>
                   <Ionicons name="phone-portrait" size={16} color={theme.primary} />
                 </View>
               )}
 
-              {/* Reset button for multiChoice/fillIn (allows re-selection) */}
-              {(isMultiChoice || isFillIn) && onResetYesNo && (
+              {/* Reset button for multiChoice/fillIn (hide in selection mode) */}
+              {!selectionMode && (isMultiChoice || isFillIn) && onResetYesNo && (
                 <TouchableOpacity
                   style={styles.resetButton}
                   onPress={(e) => {
@@ -183,15 +241,19 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
               )}
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Sub-items (indented) */}
         {subItems.map(subItem => (
           <View key={subItem.id} style={styles.indentedRow}>
             <ChecklistItemRow
               item={subItem}
-              onToggle={onToggle}
+              onToggle={handleSubItemPress}
               isSubItem={true}
+              selectionMode={selectionMode}
+              isSelected={isSelected} // Parent selection applies to all subs
+              onSelect={onSelect}
+              isMoveable={isMoveable}
             />
           </View>
         ))}
@@ -199,8 +261,22 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
     );
   }
 
-  // YES/NO UNANSWERED - Show buttons
+  // YES/NO UNANSWERED - Show buttons (hide in selection mode if not moveable)
   if (isYesNo && !isAnswered) {
+    if (selectionMode) {
+      // In selection mode, yesNo items are not moveable - show disabled
+      return (
+        <View style={[styles.itemRow, styles.disabledRow]}>
+          <View style={styles.rowContent}>
+            <View style={styles.selectionCheckbox} />
+            <View style={styles.itemTextContainer}>
+              <Text style={styles.itemText}>{item.name}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.itemRow}>
         <View style={styles.rowContent}>
@@ -245,31 +321,41 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
     <TouchableOpacity
       style={[
         styles.itemRow,
-        item.completed && styles.itemRowCompleted,
+        item.completed && !selectionMode && styles.itemRowCompleted,
+        !isMoveable && selectionMode && styles.disabledRow,
       ]}
-      onPress={() => onToggle(item.id)}
+      onPress={handlePress}
       activeOpacity={0.6}
+      disabled={!isMoveable && selectionMode}
     >
       <View style={styles.rowContent}>
-        <View style={styles.checkbox}>
-          <Ionicons
-            name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
-            size={28}
-            color={item.completed ? theme.primary : theme.text.tertiary}
-          />
-        </View>
+        {selectionMode ? (
+          // Selection mode - show selection checkbox
+          <View style={styles.selectionCheckbox}>
+            {isSelected && <Ionicons name="checkmark" size={18} color="#fff" />}
+          </View>
+        ) : (
+          // Normal mode - show completion checkbox
+          <View style={styles.checkbox}>
+            <Ionicons
+              name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
+              size={28}
+              color={item.completed ? theme.primary : theme.text.tertiary}
+            />
+          </View>
+        )}
 
         <View style={styles.itemTextContainer}>
           <Text
             style={[
               styles.itemText,
-              item.completed && styles.itemTextCompleted,
+              item.completed && !selectionMode && styles.itemTextCompleted,
             ]}
           >
             {displayText}
           </Text>
 
-          {item.requiredForScreenTime && (
+          {!selectionMode && item.requiredForScreenTime && (
             <View style={styles.screenTimeIcon}>
               <Ionicons
                 name="phone-portrait"
@@ -279,8 +365,8 @@ const ChecklistItemRow = ({ item, onToggle, onYesNoAnswer, onResetYesNo, isSubIt
             </View>
           )}
 
-          {/* Reset Yes/No Answer Button */}
-          {isYesNo && isAnswered && onResetYesNo && (
+          {/* Reset Yes/No Answer Button (hide in selection mode) */}
+          {!selectionMode && isYesNo && isAnswered && onResetYesNo && (
             <TouchableOpacity
               style={styles.resetButton}
               onPress={(e) => {
