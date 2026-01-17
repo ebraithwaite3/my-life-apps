@@ -433,81 +433,87 @@ const handleTemplateSelect = (option) => {
 
       {/* Activity Editors - Render based on currentScreen */}
       {activities.map((activityConfig) => {
-        if (formState.currentScreen !== activityConfig.type) return null;
+  if (formState.currentScreen !== activityConfig.type) return null;
 
-        const EditorComponent = activityConfig.EditorComponent;
-        if (!EditorComponent) return null;
+  const EditorComponent = activityConfig.EditorComponent;
+  if (!EditorComponent) return null;
 
-        return (
-          <View
-            key={activityConfig.type}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0, 0, 0, 0.5)",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: theme.surface,
-                borderRadius: 12,
-                width: "100%",
-                height: "90%",
-                overflow: "hidden",
-              }}
-            >
-              <ModalHeader
-                title={
-                  activityConfig.selectedActivity
-                    ? `Edit ${activityConfig.label}`
-                    : `New ${activityConfig.label}`
-                }
-                onCancel={() => formState.setCurrentScreen("event")}
-                onDone={() => editorRefs.current[activityConfig.type]?.save()}
-                doneText={activityConfig.selectedActivity ? "Update" : "Create"}
-              />
+  return (
+    <View
+      key={activityConfig.type}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      {/* ✅ ADD KeyboardAvoidingView HERE */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ width: "100%", height: "90%" }}
+      >
+        <View
+          style={{
+            backgroundColor: theme.surface,
+            borderRadius: 12,
+            width: "100%",
+            height: "100%",
+            overflow: "hidden",
+          }}
+        >
+          <ModalHeader
+            title={
+              activityConfig.selectedActivity
+                ? `Edit ${activityConfig.label}`
+                : `New ${activityConfig.label}`
+            }
+            onCancel={() => formState.setCurrentScreen("event")}
+            onDone={() => editorRefs.current[activityConfig.type]?.save()}
+            doneText={activityConfig.selectedActivity ? "Update" : "Create"}
+          />
 
-              <EditorComponent
-                ref={(ref) => (editorRefs.current[activityConfig.type] = ref)}
-                checklist={activityConfig.selectedActivity}
-                onSave={(activity, shouldSaveAsTemplate) => {
-                  // Save the activity
-                  activityConfig.onSelectActivity(activity);
+          <EditorComponent
+            ref={(ref) => (editorRefs.current[activityConfig.type] = ref)}
+            checklist={activityConfig.selectedActivity}
+            onSave={(activity, shouldSaveAsTemplate) => {
+              // Save the activity
+              activityConfig.onSelectActivity(activity);
 
-                  // If "Save as Template" toggle was ON, save as template
-                  if (
-                    shouldSaveAsTemplate &&
-                    activityConfig.editorProps?.onSaveTemplate
-                  ) {
-                    activityConfig.editorProps.promptForContext?.(
-                      async (context) => {
-                        const success =
-                          await activityConfig.editorProps.onSaveTemplate(
-                            activity,
-                            context
-                          );
-                        if (success) {
-                          Alert.alert(
-                            "Success",
-                            `Template "${activity.name}" saved successfully`
-                          );
-                        }
-                      }
-                    );
+              // If "Save as Template" toggle was ON, save as template
+              if (
+                shouldSaveAsTemplate &&
+                activityConfig.editorProps?.onSaveTemplate
+              ) {
+                activityConfig.editorProps.promptForContext?.(
+                  async (context) => {
+                    const success =
+                      await activityConfig.editorProps.onSaveTemplate(
+                        activity,
+                        context
+                      );
+                    if (success) {
+                      Alert.alert(
+                        "Success",
+                        `Template "${activity.name}" saved successfully`
+                      );
+                    }
                   }
+                );
+              }
 
-                  // Return to event screen
-                  formState.setCurrentScreen("event");
-                }}
-                {...activityConfig.editorProps}
-              />
-            </View>
-          </View>
+              // Return to event screen
+              formState.setCurrentScreen("event");
+            }}
+            {...activityConfig.editorProps}
+          />
+        </View>
+      </KeyboardAvoidingView>
+    </View>
         );
       })}
     </ModalWrapper>

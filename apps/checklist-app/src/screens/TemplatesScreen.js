@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, KeyboardAvoidingView, Platform } from "react-native"; // ✅ ADD IMPORTS
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useTheme, useData } from "@my-apps/contexts";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@my-apps/ui";
 import { Ionicons } from "@expo/vector-icons";
 import TemplateCard from "../components/cards/TemplateCard";
-import { useChecklistTemplates } from "@my-apps/hooks"; // NEW IMPORT
+import { useChecklistTemplates } from "@my-apps/hooks";
 
 const TemplatesScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -18,7 +18,6 @@ const TemplatesScreen = () => {
   const editContentRef = React.useRef(null);
   const tabBarHeight = useBottomTabBarHeight();
 
-  // NEW: Use the hook instead of inline logic
   const {
     allTemplates,
     saveTemplate,
@@ -38,7 +37,6 @@ const TemplatesScreen = () => {
     setTemplateContext(null);
   };
 
-  // SIMPLIFIED: Uses hook's promptForContext
   const handleCreateTemplate = () => {
     promptForContext((context) => {
       setTemplateContext(context);
@@ -62,9 +60,20 @@ const TemplatesScreen = () => {
     setShowEditModal(true);
   };
 
-  // SIMPLIFIED: Uses hook's saveTemplate
   const handleSaveTemplate = async (template) => {
-    const success = await saveTemplate(template, templateContext);
+    const templateToSave = selectedTemplate
+      ? {
+          ...selectedTemplate,
+          ...template,
+          updatedAt: new Date().toISOString(),
+        }
+      : {
+          ...template,
+          id: template.id || `template_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+        };
+
+    const success = await saveTemplate(templateToSave, templateContext);
     
     if (success) {
       Alert.alert(
@@ -77,16 +86,13 @@ const TemplatesScreen = () => {
     }
   };
 
-  // SIMPLIFIED: Uses hook's deleteTemplate
-const handleDeleteTemplate = async (template) => {
-  // Remove the Alert.alert wrapper - TemplateCard already confirms
-  const success = await deleteTemplate(template);
-  if (success) {
-    Alert.alert("Success", "Template deleted successfully");
-  }
-};
+  const handleDeleteTemplate = async (template) => {
+    const success = await deleteTemplate(template);
+    if (success) {
+      Alert.alert("Success", "Template deleted successfully");
+    }
+  };
 
-  // SIMPLIFIED: Uses hook's moveTemplate
   const handleMoveTemplate = async (template, target) => {
     const success = await moveTemplate(template, target);
     if (success) {
@@ -100,7 +106,7 @@ const handleDeleteTemplate = async (template) => {
       onPress={handleEditTemplate}
       onDelete={handleDeleteTemplate}
       onMove={handleMoveTemplate}
-      availableMoveTargets={getAvailableMoveTargets(item)} // Uses hook method
+      availableMoveTargets={getAvailableMoveTargets(item)}
     />
   );
 
@@ -174,32 +180,38 @@ const handleDeleteTemplate = async (template) => {
             alignItems: "center",
           }}
         >
-          <View
-            style={{
-              backgroundColor: theme.surface,
-              borderRadius: 12,
-              width: "100%",
-              height: "90%",
-              overflow: "hidden",
-            }}
+          {/* ✅ ADD KeyboardAvoidingView HERE */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ width: "100%", height: "90%" }}
           >
-            <ModalHeader
-              title={selectedTemplate ? "Edit Template" : "New Template"}
-              onCancel={closeTemplateModal}
-              onDone={() => editContentRef.current?.save()}
-              doneText={selectedTemplate ? "Update" : "Create"}
-            />
+            <View
+              style={{
+                backgroundColor: theme.surface,
+                borderRadius: 12,
+                width: "100%",
+                height: "100%",
+                overflow: "hidden",
+              }}
+            >
+              <ModalHeader
+                title={selectedTemplate ? "Edit Template" : "New Template"}
+                onCancel={closeTemplateModal}
+                onDone={() => editContentRef.current?.save()}
+                doneText={selectedTemplate ? "Update" : "Create"}
+              />
 
-            <EditChecklistContent
-              ref={editContentRef}
-              checklist={selectedTemplate}
-              onSave={handleSaveTemplate} // CHANGED: No more onClose callback
-              isUserAdmin={user?.admin === true}
-              isTemplate
-              addReminder
-              templates={allTemplates} // NEW: Pass templates for "Save as Template" detection
-            />
-          </View>
+              <EditChecklistContent
+                ref={editContentRef}
+                checklist={selectedTemplate}
+                onSave={handleSaveTemplate}
+                isUserAdmin={user?.admin === true}
+                isTemplate
+                addReminder
+                templates={allTemplates}
+              />
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </ModalWrapper>
     </View>

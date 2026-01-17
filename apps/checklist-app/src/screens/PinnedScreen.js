@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, FlatList, Alert, Keyboard } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useTheme,
@@ -46,21 +46,24 @@ const PinnedScreen = () => {
 
   // Unified working state for the checklist
   const [workingChecklist, setWorkingChecklist] = useState(null);
+  // Track initial state for comparison
+  const [initialChecklist, setInitialChecklist] = useState(null);
 
   // Initialize working checklist when modal opens
   useEffect(() => {
     if (showChecklistModal && selectedChecklist) {
       setWorkingChecklist(selectedChecklist);
       setUpdatedItems(selectedChecklist.items || []);
+      setInitialChecklist(JSON.parse(JSON.stringify(selectedChecklist))); // ADD THIS
       setIsDirtyComplete(false);
     }
   }, [showChecklistModal, selectedChecklist]);
 
-  // Detect changes in complete mode
+  // Detect changes in complete mode - COMPARE AGAINST initialChecklist
   useEffect(() => {
-    if (checklistMode !== "complete" || !selectedChecklist) return;
+    if (checklistMode !== "complete" || !initialChecklist) return; // CHANGED: use initialChecklist
 
-    const originalItems = selectedChecklist.items || [];
+    const originalItems = initialChecklist.items || []; // CHANGED: use initialChecklist
 
     // Deep compare using JSON.stringify to catch sub-item changes
     const hasChanges =
@@ -71,7 +74,7 @@ const PinnedScreen = () => {
     });
 
     setIsDirtyComplete(hasChanges);
-  }, [updatedItems, selectedChecklist, checklistMode]);
+  }, [updatedItems, initialChecklist, checklistMode]); // CHANGED: depend on initialChecklist
 
   const closeChecklistModal = () => {
     // Check for unsaved changes before closing
@@ -568,7 +571,7 @@ const PinnedScreen = () => {
       Alert.alert('Error', 'Failed to move items. Please try again.');
     }
   };
-  
+
   const handleCloseModal = () => {
     setShowEditModal(false);
     setSelectedChecklist(null);
@@ -670,191 +673,153 @@ const PinnedScreen = () => {
 
       {/* Edit/Create Checklist Modal */}
       <ModalWrapper visible={showEditModal} onClose={handleCloseModal}>
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: theme.surface,
-              borderRadius: 12,
-              width: "100%",
-              height: "90%",
-              overflow: "hidden",
-            }}
-          >
-            <ModalHeader
-              title={selectedChecklist ? "Edit Checklist" : "New Checklist"}
-              onCancel={handleCloseModal}
-              onDone={() => editContentRef.current?.save()}
-              doneText={selectedChecklist ? "Update" : "Create"}
-            />
+  <View style={{
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  }}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ width: "100%", height: "90%" }}
+    >
+      <View style={{
+        backgroundColor: theme.surface,
+        borderRadius: 12,
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+      }}>
+        <ModalHeader
+          title={selectedChecklist ? "Edit Checklist" : "New Checklist"}
+          onCancel={handleCloseModal}
+          onDone={() => editContentRef.current?.save()}
+          doneText={selectedChecklist ? "Update" : "Create"}
+        />
 
-            <EditChecklistContent
-              ref={editContentRef}
-              checklist={selectedChecklist}
-              onSave={(checklist, shouldSaveAsTemplate) => {
-                // First save the pinned checklist
-                handleSaveChecklist(checklist, handleCloseModal);
-
-                // Then if "Save as Template" was enabled, save as template too
-                if (shouldSaveAsTemplate) {
-                  promptForContext(async (context) => {
-                    const success = await saveTemplate(checklist, context);
-                    if (success) {
-                      Alert.alert(
-                        "Success",
-                        `Template "${checklist.name}" saved successfully`
-                      );
-                    }
-                  });
+        <EditChecklistContent
+          ref={editContentRef}
+          checklist={selectedChecklist}
+          onSave={(checklist, shouldSaveAsTemplate) => {
+            handleSaveChecklist(checklist, handleCloseModal);
+            if (shouldSaveAsTemplate) {
+              promptForContext(async (context) => {
+                const success = await saveTemplate(checklist, context);
+                if (success) {
+                  Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
                 }
-              }}
-              isUserAdmin={user?.admin === true}
-              addReminder={true}
-              eventStartTime={null}
-              templates={allTemplates}
-            />
-          </View>
-        </View>
-      </ModalWrapper>
+              });
+            }
+          }}
+          isUserAdmin={user?.admin === true}
+          addReminder={true}
+          eventStartTime={null}
+          templates={allTemplates}
+        />
+      </View>
+    </KeyboardAvoidingView>
+  </View>
+</ModalWrapper>
 
       {/* View/Complete Checklist Modal */}
       <ModalWrapper visible={showChecklistModal} onClose={closeChecklistModal}>
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: theme.surface,
-              borderRadius: 12,
-              width: "100%",
-              height: "90%",
-              overflow: "hidden",
+  <View style={{
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  }}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ width: "100%", height: "90%" }}
+    >
+      <View style={{
+        backgroundColor: theme.surface,
+        borderRadius: 12,
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+      }}>
+        <ModalHeader
+          title={selectedChecklist?.name || "Checklist"}
+          subtitle={checklistMode === "complete" ? `${progress.completed}/${progress.total} Complete` : undefined}
+          onCancel={closeChecklistModal}
+          cancelText={getCancelText()}
+          onDone={checklistMode === "complete" ? handleUpdateFromCompleteMode : () => editContentRef.current?.save()}
+          doneText="Update"
+          doneDisabled={getActionDisabled()}
+        />
+
+        <View style={{
+          paddingHorizontal: getSpacing.lg,
+          paddingVertical: getSpacing.md,
+          backgroundColor: theme.surface,
+        }}>
+          <PillSelectionButton
+            options={[
+              { label: "Complete", value: "complete" },
+              { label: "Edit", value: "edit" },
+            ]}
+            selectedValue={checklistMode}
+            onSelect={(value) => {
+              // ... your existing logic
+              setChecklistMode(value);
             }}
-          >
-            {/* Modal Header - Always visible */}
-            <ModalHeader
-              title={selectedChecklist?.name || "Checklist"}
-              subtitle={
-                checklistMode === "complete"
-                  ? `${progress.completed}/${progress.total} Complete`
-                  : undefined
-              }
-              onCancel={closeChecklistModal}
-              cancelText={getCancelText()}
-              onDone={
-                checklistMode === "complete"
-                  ? handleUpdateFromCompleteMode
-                  : () => editContentRef.current?.save()
-              }
-              doneText="Update"
-              doneDisabled={getActionDisabled()}
-            />
-
-            {/* Pill Toggle - Always visible */}
-            <View
-              style={{
-                paddingHorizontal: getSpacing.lg,
-                paddingVertical: getSpacing.md,
-                backgroundColor: theme.surface,
-              }}
-            >
-              <PillSelectionButton
-                options={[
-                  { label: "Complete", value: "complete" },
-                  { label: "Edit", value: "edit" },
-                ]}
-                selectedValue={checklistMode}
-                onSelect={(value) => {
-                  // Sync state when switching modes
-                  if (checklistMode === 'edit' && editContentRef.current) {
-                    // Switching FROM edit TO complete - get current state from edit
-                    const currentState = editContentRef.current.getCurrentState();
-                    const updatedChecklist = { ...workingChecklist, ...currentState };
-                    setWorkingChecklist(updatedChecklist);
-                    setUpdatedItems(currentState.items);
-                    setIsDirtyComplete(false);
-                  } else if (checklistMode === 'complete') {
-                    // Switching FROM complete TO edit - update working checklist with items
-                    setWorkingChecklist(prev => ({ ...prev, items: updatedItems }));
-                  }
-                  setChecklistMode(value);
-                }}
-              />
-            </View>
-
-            {/* Conditional Content */}
-            {checklistMode === "complete" ? (
-              <ChecklistContent
-                checklist={{ ...workingChecklist, items: updatedItems }}
-                onItemToggle={(newItems) => {
-                  setUpdatedItems(newItems);
-                  setWorkingChecklist(prev => ({ ...prev, items: newItems }));
-                }}
-                onMoveItems={handleMoveItems}
-                pinnedChecklists={allPinned}
-                onUpdatePinnedChecklist={updatePinnedChecklist}
-                onCreatePinnedChecklist={createPinnedChecklist}
-              />
-            ) : (
-              <EditChecklistContent
-                ref={editContentRef}
-                checklist={workingChecklist}
-                onSave={async (checklist, shouldSaveAsTemplate) => {
-                  // First save the pinned checklist (don't close modal)
-                  await handleSaveChecklist(checklist);
-                  
-                  // Dismiss keyboard and show toast
-                  Keyboard.dismiss();
-                  setTimeout(() => {
-                    showSuccessToast("Checklist saved", "", 2000, "top");
-                  }, 100);
-                  
-                  // Update working state to reflect saved changes
-                  setWorkingChecklist(checklist);
-                  setUpdatedItems(checklist.items);
-                  setIsDirtyComplete(false);
-
-                  // Then if "Save as Template" was enabled, save as template too
-                  if (shouldSaveAsTemplate) {
-                    promptForContext(async (context) => {
-                      const success = await saveTemplate(checklist, context);
-                      if (success) {
-                        Alert.alert(
-                          "Success",
-                          `Template "${checklist.name}" saved successfully`
-                        );
-                      }
-                    });
-                  }
-                }}
-                isUserAdmin={user?.admin === true}
-                addReminder={true}
-                eventStartTime={null}
-                templates={allTemplates}
-              />
-            )}
-          </View>
+          />
         </View>
-      </ModalWrapper>
+
+        {checklistMode === "complete" ? (
+          <ChecklistContent
+            checklist={{ ...workingChecklist, items: updatedItems }}
+            onItemToggle={(newItems) => {
+              setUpdatedItems(newItems);
+              setWorkingChecklist(prev => ({ ...prev, items: newItems }));
+            }}
+            onMoveItems={handleMoveItems}
+            pinnedChecklists={allPinned}
+            onUpdatePinnedChecklist={updatePinnedChecklist}
+            onCreatePinnedChecklist={createPinnedChecklist}
+          />
+        ) : (
+          <EditChecklistContent
+            ref={editContentRef}
+            checklist={workingChecklist}
+            onSave={async (checklist, shouldSaveAsTemplate) => {
+              await handleSaveChecklist(checklist);
+              Keyboard.dismiss();
+              setTimeout(() => {
+                showSuccessToast("Checklist saved", "", 2000, "top");
+              }, 100);
+              setWorkingChecklist(checklist);
+              setUpdatedItems(checklist.items);
+              setIsDirtyComplete(false);
+              if (shouldSaveAsTemplate) {
+                promptForContext(async (context) => {
+                  const success = await saveTemplate(checklist, context);
+                  if (success) {
+                    Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                  }
+                });
+              }
+            }}
+            isUserAdmin={user?.admin === true}
+            addReminder={true}
+            eventStartTime={null}
+            templates={allTemplates}
+          />
+        )}
+      </View>
+    </KeyboardAvoidingView>
+  </View>
+</ModalWrapper>
     </SafeAreaView>
   );
 };

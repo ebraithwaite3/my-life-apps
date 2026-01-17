@@ -11,3 +11,4 @@ export * from './messages';
 export * from './modals';
 export * from './buttons';
 export * from './general';
+export * from './keyboard';

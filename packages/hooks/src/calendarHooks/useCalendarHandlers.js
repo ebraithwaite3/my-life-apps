@@ -453,6 +453,7 @@ export const useCalendarHandlers = ({
         }
 
         if (wasJustCompleted && updatedChecklist.notifyAdmin) {
+          console.log("📢 Notifying admin of checklist completion");
           try {
             const { sendNotification } = await import("@my-apps/services");
             await sendNotification(

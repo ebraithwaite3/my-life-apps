@@ -1,8 +1,9 @@
 import React, { useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import { ModalDropdown } from "@my-apps/ui";
+import { Swipeable } from "react-native-gesture-handler";
 
 const TemplateCard = ({ 
   template, 
@@ -12,40 +13,46 @@ const TemplateCard = ({
   availableMoveTargets = []
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
   const [anchorPosition, setAnchorPosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const ellipsisRef = useRef(null);
+  const moveButtonRef = useRef(null);
+  const swipeableRef = useRef(null);
 
-  const handleEllipsisPress = () => {
-    if (ellipsisRef.current) {
-      ellipsisRef.current.measureInWindow((x, y, width, height) => {
+  const handleMovePress = () => {
+    if (availableMoveTargets.length === 0) return;
+    
+    if (moveButtonRef.current) {
+      moveButtonRef.current.measureInWindow((x, y, width, height) => {
         setAnchorPosition({ x, y, width, height });
-        setShowDropdown(true);
+        setShowMoveModal(true);
       });
     }
   };
 
   const handleDelete = () => {
-    setShowDropdown(false);
     Alert.alert(
       "Delete Template",
       `Are you sure you want to delete "${template.name}"?`,
       [
         {
           text: "Cancel",
-          style: "cancel"
+          style: "cancel",
+          onPress: () => swipeableRef.current?.close()
         },
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => onDelete(template)
+          onPress: () => {
+            swipeableRef.current?.close();
+            onDelete(template);
+          }
         }
       ]
     );
   };
 
   const handleMove = (target) => {
-    setShowDropdown(false);
+    setShowMoveModal(false);
     const targetName = target.type === 'personal' ? 'Personal' : target.groupName;
     Alert.alert(
       "Move Template",
@@ -63,17 +70,11 @@ const TemplateCard = ({
     );
   };
 
-  // Build dropdown options
-  const dropdownOptions = [
-    ...availableMoveTargets.map(target => ({
-      label: target.type === 'personal' ? 'Move to Personal' : `Move to ${target.groupName}`,
-      action: () => handleMove(target)
-    })),
-    {
-      label: 'Delete Template',
-      action: handleDelete
-    }
-  ];
+  // Build move options for dropdown
+  const moveOptions = availableMoveTargets.map(target => ({
+    label: target.type === 'personal' ? 'Move to Personal' : `Move to ${target.groupName}`,
+    action: () => handleMove(target)
+  }));
 
   // Format time display (convert HH:mm to 12-hour format)
   const formatTimeDisplay = (timeString) => {
@@ -87,169 +88,240 @@ const TemplateCard = ({
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
-  const hasDefaults = template.defaultReminderTime || template.defaultNotifyAdmin;
+  const hasScreenTime = template.items?.some(i => i.requiredForScreenTime);
+  const showThirdLine = hasScreenTime || template.isGroupTemplate;
+
+  // Render swipe actions (delete button)
+  const renderRightActions = (progress, dragX) => {
+    const scale = dragX.interpolate({
+      inputRange: [-80, 0],
+      outputRange: [1, 0],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDelete}
+        >
+          <Ionicons name="trash-outline" size={24} color="#fff" />
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   const styles = StyleSheet.create({
+    swipeableContainer: {
+      marginBottom: getSpacing.sm,
+    },
     templateCard: {
       backgroundColor: theme.surface,
-      padding: getSpacing.lg,
+      padding: getSpacing.md,
       borderRadius: getBorderRadius.md,
-      marginBottom: getSpacing.md,
       borderWidth: 1,
       borderColor: theme.border,
     },
-    templateHeader: {
+    cardContent: {
       flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: getSpacing.sm,
+      alignItems: "flex-start",
     },
-    templateHeaderLeft: {
+    leftContent: {
       flex: 1,
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
       gap: getSpacing.sm,
     },
-    templateName: {
-      fontSize: getTypography.h4.fontSize,
-      fontWeight: "600",
-      color: theme.text.primary,
-      flex: 1,
+    iconBadge: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
     },
-    badge: {
-      paddingHorizontal: getSpacing.sm,
-      paddingVertical: getSpacing.xs,
-      borderRadius: getBorderRadius.sm,
-    },
-    groupBadge: {
+    groupIconBadge: {
       backgroundColor: theme.primary + "20",
     },
-    personalBadge: {
+    personalIconBadge: {
       backgroundColor: theme.text.secondary + "20",
     },
-    badgeText: {
-      fontSize: getTypography.bodySmall.fontSize,
+    nameAndMetadata: {
+      flex: 1,
+    },
+    templateName: {
+      fontSize: getTypography.body.fontSize,
       fontWeight: "600",
-    },
-    groupBadgeText: {
-      color: theme.primary,
-    },
-    personalBadgeText: {
-      color: theme.text.secondary,
-    },
-    ellipsisButton: {
-      padding: getSpacing.xs,
+      color: theme.text.primary,
+      lineHeight: getTypography.body.fontSize * 1.4,
+      marginBottom: getSpacing.xs,
     },
     metadataRow: {
       flexDirection: "row",
       alignItems: "center",
       flexWrap: "wrap",
-      gap: getSpacing.md,
+      gap: getSpacing.sm,
     },
     metadataItem: {
       flexDirection: "row",
       alignItems: "center",
       gap: getSpacing.xs,
     },
-    itemCount: {
-      fontSize: getTypography.body.fontSize,
-      color: theme.text.secondary,
-    },
     metadataText: {
-      fontSize: getTypography.body.fontSize,
+      fontSize: getTypography.bodySmall.fontSize,
       color: theme.text.secondary,
     },
-    screenTimeIndicator: {
+    thirdLineRow: {
       flexDirection: "row",
       alignItems: "center",
+      gap: getSpacing.sm,
       marginTop: getSpacing.xs,
+    },
+    screenTimeItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: getSpacing.xs,
     },
     screenTimeText: {
       fontSize: getTypography.bodySmall.fontSize,
       color: theme.primary,
+    },
+    groupNameText: {
+      fontSize: getTypography.bodySmall.fontSize,
+      color: theme.primary,
+      fontWeight: '600',
+    },
+    moveButton: {
+      padding: getSpacing.xs,
       marginLeft: getSpacing.xs,
+    },
+    deleteButton: {
+      backgroundColor: theme.error,
+      justifyContent: "center",
+      alignItems: "center",
+      width: 80,
+      height: "100%",
+      borderTopRightRadius: getBorderRadius.md,
+      borderBottomRightRadius: getBorderRadius.md,
+    },
+    deleteButtonText: {
+      color: "#fff",
+      fontSize: getTypography.bodySmall.fontSize,
+      fontWeight: "600",
+      marginTop: 4,
     },
   });
 
   return (
     <>
-      <TouchableOpacity 
-        style={styles.templateCard}
-        onPress={() => onPress(template)}
+      <Swipeable
+        ref={swipeableRef}
+        renderRightActions={renderRightActions}
+        overshootRight={false}
+        containerStyle={styles.swipeableContainer}
       >
-        <View style={styles.templateHeader}>
-          <View style={styles.templateHeaderLeft}>
-            <Text style={styles.templateName} numberOfLines={1}>
-              {template.name}
-            </Text>
-            {template.isGroupTemplate ? (
-              <View style={[styles.badge, styles.groupBadge]}>
-                <Text style={[styles.badgeText, styles.groupBadgeText]}>
-                  {template.groupName}
-                </Text>
+        <TouchableOpacity 
+          style={styles.templateCard}
+          onPress={() => onPress(template)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardContent}>
+            {/* Left: Icon + Name + Metadata */}
+            <View style={styles.leftContent}>
+              {/* Small icon badge - just visual, not clickable */}
+              <View
+                style={[
+                  styles.iconBadge,
+                  template.isGroupTemplate ? styles.groupIconBadge : styles.personalIconBadge
+                ]}
+              >
+                <Ionicons
+                  name={template.isGroupTemplate ? "people" : "person"}
+                  size={12}
+                  color={template.isGroupTemplate ? theme.primary : theme.text.secondary}
+                />
               </View>
-            ) : (
-              <View style={[styles.badge, styles.personalBadge]}>
-                <Text style={[styles.badgeText, styles.personalBadgeText]}>
-                  Personal
+
+              {/* Name and metadata */}
+              <View style={styles.nameAndMetadata}>
+                {/* Line 1: Template name - truncate to 1 line */}
+                <Text style={styles.templateName} numberOfLines={1}>
+                  {template.name}
                 </Text>
+
+                {/* Line 2: Metadata Row */}
+                <View style={styles.metadataRow}>
+                  {/* Item count */}
+                  <Text style={styles.metadataText}>
+                    {template.items?.length || 0} item{template.items?.length !== 1 ? 's' : ''}
+                  </Text>
+
+                  {/* Default reminder time */}
+                  {template.defaultReminderTime && (
+                    <View style={styles.metadataItem}>
+                      <Ionicons name="time-outline" size={14} color={theme.text.secondary} />
+                      <Text style={styles.metadataText}>
+                        {formatTimeDisplay(template.defaultReminderTime)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Default notify admin */}
+                  {template.defaultNotifyAdmin && (
+                    <View style={styles.metadataItem}>
+                      <Ionicons name="notifications-outline" size={14} color={theme.text.secondary} />
+                      <Text style={styles.metadataText}>Admin</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Line 3: Screen time + Group name (only if either exists) */}
+                {showThirdLine && (
+                  <View style={styles.thirdLineRow}>
+                    {/* Screen time indicator */}
+                    {hasScreenTime && (
+                      <View style={styles.screenTimeItem}>
+                        <Ionicons name="phone-portrait" size={12} color={theme.primary} />
+                        <Text style={styles.screenTimeText}>Screen time</Text>
+                      </View>
+                    )}
+
+                    {/* Group name */}
+                    {template.isGroupTemplate && (
+                      <Text style={styles.groupNameText}>
+                        {template.groupName}
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
+            </View>
+
+            {/* Right: Move button */}
+            {availableMoveTargets.length > 0 && (
+              <TouchableOpacity
+                ref={moveButtonRef}
+                onPress={handleMovePress}
+                style={styles.moveButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name="arrow-forward-circle-outline"
+                  size={20}
+                  color={theme.text.secondary}
+                />
+              </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity
-            ref={ellipsisRef}
-            onPress={handleEllipsisPress}
-            style={styles.ellipsisButton}
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={20}
-              color={theme.text.secondary}
-            />
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+      </Swipeable>
 
-        {/* Metadata Row: Items count, reminder time, notify admin */}
-        <View style={styles.metadataRow}>
-          {/* Item count */}
-          <Text style={styles.itemCount}>
-            {template.items?.length || 0} item{template.items?.length !== 1 ? 's' : ''}
-          </Text>
-
-          {/* Default reminder time */}
-          {template.defaultReminderTime && (
-            <View style={styles.metadataItem}>
-              <Ionicons name="time-outline" size={16} color={theme.text.secondary} />
-              <Text style={styles.metadataText}>
-                {formatTimeDisplay(template.defaultReminderTime)}
-              </Text>
-            </View>
-          )}
-
-          {/* Default notify admin */}
-          {template.defaultNotifyAdmin && (
-            <View style={styles.metadataItem}>
-              <Ionicons name="notifications-outline" size={16} color={theme.text.secondary} />
-              <Text style={styles.metadataText}>
-                Admin
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Screen time indicator (separate row if exists) */}
-        {template.items?.some(i => i.requiredForScreenTime) && (
-          <View style={styles.screenTimeIndicator}>
-            <Ionicons name="phone-portrait" size={14} color={theme.primary} />
-            <Text style={styles.screenTimeText}>Has screen time requirements</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-
+      {/* Move modal */}
       <ModalDropdown
-        visible={showDropdown}
-        options={dropdownOptions}
-        onClose={() => setShowDropdown(false)}
+        visible={showMoveModal}
+        options={moveOptions}
+        onClose={() => setShowMoveModal(false)}
         onSelect={(option) => option.action()}
         anchorPosition={anchorPosition}
       />

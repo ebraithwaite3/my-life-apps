@@ -43,17 +43,21 @@ const ChecklistItemRow = ({
   }
 
   // NEW: Handle press based on mode
-  const handlePress = () => {
-    if (selectionMode) {
-      if (isMoveable && onSelect) {
-        onSelect(item.id, shouldRenderAsGroup);
-      }
-    } else {
-      if (!isYesNo || isAnswered) {
-        onToggle(item.id);
-      }
+const handlePress = () => {
+  if (selectionMode) {
+    if (isMoveable && onSelect) {
+      onSelect(item.id, shouldRenderAsGroup);
     }
-  };
+  } else {
+    // In normal mode, don't allow clicking group headers
+    if (shouldRenderAsGroup) {
+      return; // Do nothing - groups are auto-completed by sub-items
+    }
+    if (!isYesNo || isAnswered) {
+      onToggle(item.id);
+    }
+  }
+};
 
   const handleSubItemPress = (subItemId) => {
     if (selectionMode) {
@@ -187,7 +191,6 @@ const ChecklistItemRow = ({
           ]}
           onPress={handlePress}
           activeOpacity={selectionMode ? 0.6 : 1}
-          disabled={!isMoveable && selectionMode}
         >
           <View style={styles.rowContent}>
             {selectionMode ? (

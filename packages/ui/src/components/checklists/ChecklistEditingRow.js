@@ -20,7 +20,7 @@ const ChecklistEditingRow = ({
   onBlur,
   onSubmitEditing,
   registerInput,
-  hideIcons = false,
+  hideIcons = false
 }) => {
   // Check if item is configured (not just simple checkbox)
   const isConfigured = item.itemType && item.itemType !== 'checkbox' ||

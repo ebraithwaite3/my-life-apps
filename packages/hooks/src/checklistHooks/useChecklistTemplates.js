@@ -5,6 +5,41 @@ import { useAuth } from '../../../contexts/src/AuthContext';
 import { useData } from '../../../contexts/src/DataContext';
 
 /**
+ * Clean a template - remove undefined fields and ensure completed is boolean
+ */
+const cleanTemplate = (template) => {
+  const cleaned = {
+    ...template,
+    items: template.items.map(item => {
+      const cleanedItem = {
+        ...item,
+        completed: item.completed === true,
+      };
+      
+      // Handle sub-items if they exist
+      if (item.subItems) {
+        cleanedItem.subItems = item.subItems.map(sub => ({
+          ...sub,
+          completed: sub.completed === true,
+        }));
+      }
+      
+      return cleanedItem;
+    }),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Remove any undefined top-level fields
+  Object.keys(cleaned).forEach(key => {
+    if (cleaned[key] === undefined) {
+      delete cleaned[key];
+    }
+  });
+
+  return cleaned;
+};
+
+/**
  * useChecklistTemplates - Manage checklist templates (CRUD operations)
  * 
  * Handles:
@@ -75,22 +110,14 @@ export const useChecklistTemplates = () => {
     setIsLoading(true);
   
     try {
-      // Clean template (ensure completed is boolean, add timestamps)
-      const cleanedTemplate = {
-        ...template,
-        items: template.items.map(item => ({
-          ...item,
-          completed: item.completed === true,
-        })),
-        updatedAt: new Date().toISOString(),
-      };
+      // Clean the template being saved
+      const cleanedTemplate = cleanTemplate(template);
   
       console.log('🧹 Cleaned template:', cleanedTemplate);
   
       if (context.type === 'personal') {
         console.log('💾 Saving to PERSONAL templates');
         console.log('  User ID:', user?.userId);
-        console.log('  Current templates:', user?.checklistTemplates?.length || 0);
         
         const currentTemplates = user?.checklistTemplates || [];
         const existingIndex = currentTemplates.findIndex(
@@ -99,12 +126,13 @@ export const useChecklistTemplates = () => {
   
         console.log('  Existing index:', existingIndex);
   
+        // IMPORTANT: Clean ALL templates before saving
         const updatedTemplates =
           existingIndex !== -1
             ? currentTemplates.map(t =>
-                t.id === cleanedTemplate.id ? cleanedTemplate : t
+                t.id === cleanedTemplate.id ? cleanedTemplate : cleanTemplate(t)
               )
-            : [...currentTemplates, cleanedTemplate];
+            : [...currentTemplates.map(cleanTemplate), cleanedTemplate];
   
         console.log('  Updated templates count:', updatedTemplates.length);
         console.log('  Updating Firestore...');
@@ -127,8 +155,7 @@ export const useChecklistTemplates = () => {
         );
   
         console.log('  Found group:', group?.name);
-        console.log('  Current templates:', group?.checklistTemplates?.length || 0);
-  
+        
         const currentTemplates = group?.checklistTemplates || [];
         const existingIndex = currentTemplates.findIndex(
           t => t.id === cleanedTemplate.id
@@ -136,12 +163,13 @@ export const useChecklistTemplates = () => {
   
         console.log('  Existing index:', existingIndex);
   
+        // IMPORTANT: Clean ALL templates before saving
         const updatedTemplates =
           existingIndex !== -1
             ? currentTemplates.map(t =>
-                t.id === cleanedTemplate.id ? cleanedTemplate : t
+                t.id === cleanedTemplate.id ? cleanedTemplate : cleanTemplate(t)
               )
-            : [...currentTemplates, cleanedTemplate];
+            : [...currentTemplates.map(cleanTemplate), cleanedTemplate];
   
         console.log('  Updated templates count:', updatedTemplates.length);
         console.log('  Updating Firestore...');
@@ -240,7 +268,7 @@ export const useChecklistTemplates = () => {
       }
 
       // Step 2: Clean template (remove context-specific fields)
-      const cleanTemplate = {
+      const cleanedTemplate = {
         id: template.id,
         name: template.name,
         items: template.items,
@@ -249,10 +277,10 @@ export const useChecklistTemplates = () => {
       };
 
       if (template.defaultNotifyAdmin) {
-        cleanTemplate.defaultNotifyAdmin = true;
+        cleanedTemplate.defaultNotifyAdmin = true;
       }
       if (template.defaultReminderTime) {
-        cleanTemplate.defaultReminderTime = template.defaultReminderTime;
+        cleanedTemplate.defaultReminderTime = template.defaultReminderTime;
       }
 
       // Step 3: Add to new location
@@ -260,7 +288,7 @@ export const useChecklistTemplates = () => {
         await updateDoc(doc(db, 'users', user.userId), {
           checklistTemplates: [
             ...(user?.checklistTemplates || []),
-            cleanTemplate,
+            cleanedTemplate,
           ],
         });
       } else {
@@ -271,7 +299,7 @@ export const useChecklistTemplates = () => {
         await updateDoc(doc(db, 'groups', targetContext.groupId), {
           checklistTemplates: [
             ...(group?.checklistTemplates || []),
-            cleanTemplate,
+            cleanedTemplate,
           ],
         });
       }

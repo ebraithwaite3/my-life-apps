@@ -160,9 +160,15 @@ console.log('🔍 Calendar screen allPinned length:', allPinned?.length);
         onEditEvent={calendarHandlers.handleEditEvent}
         onAddActivity={calendarHandlers.handleAddChecklist}
         onActivityPress={(activity, event) => {
-          // ActivityRow passes (activity, event) but handleViewChecklist expects (event, activity)
+          console.log('🔍 Activity:', activity);
+          console.log('🔍 Event:', event);
+          console.log('🔍 Calling handleViewChecklist');
+          
           calendarHandlers.handleViewChecklist(event, activity);
+          
+          console.log('🔍 After handleViewChecklist');
         }}
+        
         onActivityDelete={(activity, event) => {
           // ActivityRow passes (activity, event) but handleDeleteChecklist expects (event, activity)
           calendarHandlers.handleDeleteChecklist(event, activity);
