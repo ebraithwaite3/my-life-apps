@@ -88,6 +88,24 @@ const TemplateCard = ({
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
+  // Render the 3-icon transfer visualization
+  const renderTransferIcons = () => {
+    const isGroup = template.isGroupTemplate;
+    
+    // Icon configuration - show what transformation will happen
+    const sourceIcon = isGroup ? "people" : "person";
+    const targetIcon = isGroup ? "person" : "people";
+    const arrowIcon = "arrow-forward";
+    
+    return (
+      <View style={styles.transferContainer}>
+        <Ionicons name={sourceIcon} size={14} color={theme.text.secondary} />
+        <Ionicons name={arrowIcon} size={12} color={theme.text.secondary} style={{ marginHorizontal: 2 }} />
+        <Ionicons name={targetIcon} size={16} color={theme.primary} />
+      </View>
+    );
+  };
+
   const hasScreenTime = template.items?.some(i => i.requiredForScreenTime);
   const showThirdLine = hasScreenTime || template.isGroupTemplate;
 
@@ -193,8 +211,19 @@ const TemplateCard = ({
       fontWeight: '600',
     },
     moveButton: {
-      padding: getSpacing.xs,
-      marginLeft: getSpacing.xs,
+      paddingVertical: getSpacing.xs,
+      paddingHorizontal: getSpacing.sm,
+      backgroundColor: theme.background,
+      borderRadius: getBorderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginLeft: getSpacing.sm,
+      alignSelf: 'center',
+    },
+    transferContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     deleteButton: {
       backgroundColor: theme.error,
@@ -298,7 +327,7 @@ const TemplateCard = ({
               </View>
             </View>
 
-            {/* Right: Move button */}
+            {/* Right: 3-Icon Move Button */}
             {availableMoveTargets.length > 0 && (
               <TouchableOpacity
                 ref={moveButtonRef}
@@ -306,11 +335,7 @@ const TemplateCard = ({
                 style={styles.moveButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons
-                  name="arrow-forward-circle-outline"
-                  size={20}
-                  color={theme.text.secondary}
-                />
+                {renderTransferIcons()}
               </TouchableOpacity>
             )}
           </View>

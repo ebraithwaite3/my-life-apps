@@ -12,3 +12,4 @@ export * from './modals';
 export * from './buttons';
 export * from './general';
 export * from './keyboard';
+export * from './sorting';

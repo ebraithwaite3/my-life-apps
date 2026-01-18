@@ -94,6 +94,24 @@ const PinnedChecklistCard = ({
     });
   };
 
+  // Render the 3-icon transfer visualization
+  const renderTransferIcons = () => {
+    const isGroup = checklist.isGroupChecklist;
+    
+    // Icon configuration - show what transformation will happen
+    const sourceIcon = isGroup ? "people" : "person";
+    const targetIcon = isGroup ? "person" : "people";
+    const arrowIcon = "arrow-forward";
+    
+    return (
+      <View style={styles.transferContainer}>
+        <Ionicons name={sourceIcon} size={14} color={theme.text.secondary} />
+        <Ionicons name={arrowIcon} size={12} color={theme.text.secondary} style={{ marginHorizontal: 2 }} />
+        <Ionicons name={targetIcon} size={16} color={theme.primary} />
+      </View>
+    );
+  };
+
   // Render swipe actions (delete button)
   const renderRightActions = (progress, dragX) => {
     const scale = dragX.interpolate({
@@ -121,7 +139,7 @@ const PinnedChecklistCard = ({
     },
     checklistCard: {
       backgroundColor: theme.surface,
-      padding: getSpacing.md, // Reduced from lg
+      padding: getSpacing.md,
       borderRadius: getBorderRadius.md,
       borderWidth: 1,
       borderColor: theme.border,
@@ -167,8 +185,19 @@ const PinnedChecklistCard = ({
       marginTop: 2,
     },
     moveButton: {
-      padding: getSpacing.xs,
-      marginLeft: getSpacing.xs,
+      paddingVertical: getSpacing.xs,
+      paddingHorizontal: getSpacing.sm,
+      backgroundColor: theme.background,
+      borderRadius: getBorderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginLeft: getSpacing.sm,
+      alignSelf: 'center',
+    },
+    transferContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     reminderRow: {
       flexDirection: "row",
@@ -240,7 +269,7 @@ const PinnedChecklistCard = ({
               </View>
             </View>
 
-            {/* Right: Move button */}
+            {/* Right: 3-Icon Move Button */}
             {availableMoveTargets.length > 0 && (
               <TouchableOpacity
                 ref={moveButtonRef}
@@ -248,11 +277,7 @@ const PinnedChecklistCard = ({
                 style={styles.moveButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons
-                  name="arrow-forward-circle-outline"
-                  size={20}
-                  color={theme.text.secondary}
-                />
+                {renderTransferIcons()}
               </TouchableOpacity>
             )}
           </View>

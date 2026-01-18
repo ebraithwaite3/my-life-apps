@@ -1,20 +1,26 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, Alert, KeyboardAvoidingView, Platform } from "react-native"; // ✅ ADD IMPORTS
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, FlatList, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useTheme, useData } from "@my-apps/contexts";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   PageHeader,
   EditChecklistContent,
   ModalWrapper,
   ModalHeader,
+  SortModal,
+  CustomOrderModal,
 } from "@my-apps/ui";
 import { Ionicons } from "@expo/vector-icons";
 import TemplateCard from "../components/cards/TemplateCard";
 import { useChecklistTemplates } from "@my-apps/hooks";
+import { applySorting } from "@my-apps/utils";
+
+const SORT_KEY = '@checklist_templates_sort';
 
 const TemplatesScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
-  const { user } = useData();
+  const { user, isUserAdmin } = useData();
   const editContentRef = React.useRef(null);
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -24,12 +30,55 @@ const TemplatesScreen = () => {
     deleteTemplate,
     moveTemplate,
     getAvailableMoveTargets,
+    updateTemplateOrder,
     promptForContext,
   } = useChecklistTemplates();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateContext, setTemplateContext] = useState(null);
+  const [currentSort, setCurrentSort] = useState('a-z');
+  const [showSortModal, setShowSortModal] = useState(false);
+  const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
+  const [hasSortBeenChanged, setHasSortBeenChanged] = useState(false);
+
+  // Load saved sort preference
+  useEffect(() => {
+    loadSortPreference();
+  }, []);
+
+  const loadSortPreference = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(SORT_KEY);
+      if (saved) {
+        setCurrentSort(saved);
+      }
+    } catch (error) {
+      console.error('Failed to load sort preference:', error);
+    }
+  };
+
+  const saveSortPreference = async (sortType) => {
+    try {
+      await AsyncStorage.setItem(SORT_KEY, sortType);
+      setCurrentSort(sortType);
+    } catch (error) {
+      console.error('Failed to save sort preference:', error);
+    }
+  };
+
+  // Sort options
+  const sortOptions = [
+    { id: 'a-z', label: 'A to Z', icon: 'text-outline' },
+    { id: 'z-a', label: 'Z to A', icon: 'text-outline' },
+    { id: 'newest', label: 'Newest First', icon: 'time-outline' },
+    { id: 'oldest', label: 'Oldest First', icon: 'time-outline' },
+    { id: 'custom', label: 'Custom Order', icon: 'list-outline' },
+    { id: 'edit-custom', label: 'Edit Custom Order', icon: 'reorder-three-outline', closesModal: true },
+  ];
+
+  // Apply current sort
+  const sortedTemplates = applySorting(allTemplates, currentSort);
 
   const closeTemplateModal = () => {
     setShowEditModal(false);
@@ -100,6 +149,31 @@ const TemplatesScreen = () => {
     }
   };
 
+  // Handle sort selection
+  const handleSortChange = (sortType) => {
+    if (sortType === 'edit-custom') {
+      setShowCustomOrderModal(true);
+    } else {
+      saveSortPreference(sortType);
+      setHasSortBeenChanged(true); // Mark that sort has changed
+    }
+  };
+
+  // Save custom order
+  const handleSaveCustomOrder = async (newOrder) => {
+    const success = await updateTemplateOrder(newOrder);
+    if (success) {
+      saveSortPreference('custom');
+      setShowCustomOrderModal(false);
+      Alert.alert("Success", "Custom order saved");
+    }
+  };
+
+  const handleCloseSortModal = () => {
+    setShowSortModal(false);
+    setHasSortBeenChanged(false); // Reset when closing
+  };
+
   const renderTemplate = ({ item }) => (
     <TemplateCard
       template={item}
@@ -108,6 +182,19 @@ const TemplatesScreen = () => {
       onMove={handleMoveTemplate}
       availableMoveTargets={getAvailableMoveTargets(item)}
     />
+  );
+
+  const EmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons
+        name="document-text-outline"
+        size={64}
+        color={theme.text.tertiary}
+      />
+      <Text style={styles.emptyText}>
+        No templates yet.{"\n"}Create a template to reuse checklists.
+      </Text>
+    </View>
   );
 
   const styles = StyleSheet.create({
@@ -139,26 +226,29 @@ const TemplatesScreen = () => {
       <PageHeader
         title="Templates"
         subtext="Reusable checklists"
-        icons={[{ icon: "add", action: handleCreateTemplate }]}
+        icons={[
+          ...(user?.admin ? [{ 
+            icon: "swap-vertical", 
+            action: () => {
+              setShowSortModal(true);
+              setHasSortBeenChanged(false); // Reset when opening
+            }
+          }] : []),
+          { 
+            icon: "add", 
+            action: handleCreateTemplate 
+          },
+        ]}
       />
 
       <View style={styles.content}>
         {allTemplates.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="document-text-outline"
-              size={64}
-              color={theme.text.tertiary}
-            />
-            <Text style={styles.emptyText}>
-              No templates yet.{"\n"}Create a template to reuse checklists.
-            </Text>
-          </View>
+          <EmptyState />
         ) : (
           <FlatList
-            data={allTemplates}
+            data={sortedTemplates}
             renderItem={renderTemplate}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               paddingBottom: tabBarHeight,
@@ -167,6 +257,35 @@ const TemplatesScreen = () => {
         )}
       </View>
 
+      {/* Sort Selection Modal */}
+      <SortModal
+        visible={showSortModal}
+        onClose={handleCloseSortModal}
+        options={sortOptions}
+        currentSort={currentSort}
+        onSelectSort={handleSortChange}
+        headerRightContent={
+          <TouchableOpacity onPress={handleCloseSortModal}>
+            <Ionicons 
+              name={hasSortBeenChanged ? "checkmark" : "close"} 
+              size={24} 
+              color={hasSortBeenChanged ? theme.success : theme.text.secondary} 
+            />
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Custom Order Modal */}
+      <CustomOrderModal
+        visible={showCustomOrderModal}
+        items={sortedTemplates}
+        onSave={handleSaveCustomOrder}
+        onClose={() => setShowCustomOrderModal(false)}
+        keyExtractor={(item) => item.id}
+        getItemName={(item) => item.name}
+      />
+
+      {/* Edit Template Modal */}
       <ModalWrapper visible={showEditModal} onClose={closeTemplateModal}>
         <View
           style={{
@@ -180,7 +299,6 @@ const TemplatesScreen = () => {
             alignItems: "center",
           }}
         >
-          {/* ✅ ADD KeyboardAvoidingView HERE */}
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ width: "100%", height: "90%" }}

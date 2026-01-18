@@ -1,32 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@my-apps/contexts';
-import { calculateChecklistProgress } from '@my-apps/utils';
-import ChecklistItemRow from '../../../checklists/ChecklistItemRow';
-import ProgressBar from '../../../general/ProgressBar';
-import MultipleChoiceSelectionModal from '../../composed/modals/MultipleChoiceSelectionModals';
-import FillInSelectionModal from '../../composed/modals/FillInSelectionModal';
-import MoveItemsModal from '../../composed/modals/MoveItemsModal';
-import { generateUUID } from '@my-apps/utils';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@my-apps/contexts";
+import { calculateChecklistProgress } from "@my-apps/utils";
+import ChecklistItemRow from "../../../checklists/ChecklistItemRow";
+import ProgressBar from "../../../general/ProgressBar";
+import MultipleChoiceSelectionModal from "../../composed/modals/MultipleChoiceSelectionModals";
+import FillInSelectionModal from "../../composed/modals/FillInSelectionModal";
+import MoveItemsModal from "../../composed/modals/MoveItemsModal";
+import { generateUUID } from "@my-apps/utils";
+import { CustomOrderModal } from "../../../sorting";
+import { useData } from "@my-apps/contexts";
 
-const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklists = [] }) => {
-  console.log('🔍 ChecklistContent received pinnedChecklists:', pinnedChecklists);
+const ChecklistContent = ({
+  checklist,
+  onItemToggle,
+  onMoveItems,
+  pinnedChecklists = [],
+}) => {
+  console.log(
+    "🔍 ChecklistContent received pinnedChecklists:",
+    pinnedChecklists
+  );
 
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+  const { isUserAdmin } = useData();
   const [items, setItems] = useState([]);
   const reorderTimeoutRef = useRef(null);
-  
+
   // Multiple choice modal state
   const [showMultiChoiceModal, setShowMultiChoiceModal] = useState(false);
   const [multiChoiceItem, setMultiChoiceItem] = useState(null);
-  
+
   // Fill in modal state
   const [showFillInModal, setShowFillInModal] = useState(false);
   const [fillInItem, setFillInItem] = useState(null);
@@ -34,9 +45,15 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   // NEW: Selection mode state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState(new Set());
-  
+
   // NEW: Move items modal state
   const [showMoveModal, setShowMoveModal] = useState(false);
+
+  // Sort Modal State
+  const [showSortModal, setShowSortModal] = useState(false);
+  const [sortingItems, setSortingItems] = useState([]);
+  const [sortingParent, setSortingParent] = useState(null);
+  const [sortModalStack, setSortModalStack] = useState([]);
 
   useEffect(() => {
     if (checklist?.items) {
@@ -46,15 +63,15 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   }, [checklist]);
 
   const reorderItems = (itemsToReorder) => {
-    const incomplete = itemsToReorder.filter(i => !i.completed);
-    const completed = itemsToReorder.filter(i => i.completed);
+    const incomplete = itemsToReorder.filter((i) => !i.completed);
+    const completed = itemsToReorder.filter((i) => i.completed);
     return [...incomplete, ...completed];
   };
 
   // NEW: Check if item is moveable
   const isItemMoveable = (item) => {
     // Cannot move yesNo, multiChoice, or items with special requirements
-    if (item.itemType === 'yesNo') return false;
+    if (item.itemType === "yesNo") return false;
     if (item.yesNoConfig) return false;
     if (item.requiredForScreenTime) return false;
     if (item.requiresParentApproval) return false;
@@ -63,23 +80,25 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
 
   // NEW: Handle selection toggle
   const toggleSelection = (itemId, isParent = false, parentId = null) => {
-    setSelectedItems(prev => {
+    setSelectedItems((prev) => {
       const newSelection = new Set(prev);
-      
+
       if (isParent) {
         // Toggling a parent - toggle all its sub-items
-        const item = items.find(i => i.id === itemId);
+        const item = items.find((i) => i.id === itemId);
         if (item?.subItems) {
-          const allSelected = item.subItems.every(sub => newSelection.has(sub.id));
-          
+          const allSelected = item.subItems.every((sub) =>
+            newSelection.has(sub.id)
+          );
+
           if (allSelected) {
             // Uncheck parent and all subs
             newSelection.delete(itemId);
-            item.subItems.forEach(sub => newSelection.delete(sub.id));
+            item.subItems.forEach((sub) => newSelection.delete(sub.id));
           } else {
             // Check parent and all subs
             newSelection.add(itemId);
-            item.subItems.forEach(sub => newSelection.add(sub.id));
+            item.subItems.forEach((sub) => newSelection.add(sub.id));
           }
         } else {
           // Regular item
@@ -97,14 +116,14 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
           newSelection.delete(parentId);
         } else {
           newSelection.add(itemId);
-          
+
           // Check if all siblings are now selected
-          const parent = items.find(i => i.id === parentId);
+          const parent = items.find((i) => i.id === parentId);
           if (parent?.subItems) {
-            const allSelected = parent.subItems.every(sub => 
-              newSelection.has(sub.id) || sub.id === itemId
+            const allSelected = parent.subItems.every(
+              (sub) => newSelection.has(sub.id) || sub.id === itemId
             );
-            
+
             if (allSelected) {
               newSelection.add(parentId);
             }
@@ -118,32 +137,32 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
           newSelection.add(itemId);
         }
       }
-      
+
       return newSelection;
     });
   };
 
   // NEW: Handle move items
   const handleMoveItems = (destination) => {
-    console.log('🚀 Moving items to:', destination);
-    
+    console.log("🚀 Moving items to:", destination);
+
     // Build list of items to move
     const itemsToMove = [];
     const itemIdsToRemove = new Set();
-    
-    items.forEach(item => {
+
+    items.forEach((item) => {
       if (selectedItems.has(item.id)) {
         // Parent is selected - move entire group
         if (item.subItems && item.subItems.length > 0) {
           itemIdsToRemove.add(item.id);
-          item.subItems.forEach(sub => itemIdsToRemove.add(sub.id));
-          
+          item.subItems.forEach((sub) => itemIdsToRemove.add(sub.id));
+
           // Check if this is the ONLY selection (single group)
           const onlyThisGroup = selectedItems.size === 1 + item.subItems.length;
-          
+
           if (onlyThisGroup) {
             // Flatten: add sub-items as individual items
-            item.subItems.forEach(sub => {
+            item.subItems.forEach((sub) => {
               itemsToMove.push({
                 ...sub,
                 parentId: null, // Remove parent relationship
@@ -160,19 +179,21 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
         }
       } else if (item.subItems && item.subItems.length > 0) {
         // Check if some sub-items are selected
-        const selectedSubs = item.subItems.filter(sub => selectedItems.has(sub.id));
-        
+        const selectedSubs = item.subItems.filter((sub) =>
+          selectedItems.has(sub.id)
+        );
+
         if (selectedSubs.length > 0) {
           const allSubsSelected = selectedSubs.length === item.subItems.length;
-          
+
           if (allSubsSelected) {
             // All subs selected - move parent too
             itemIdsToRemove.add(item.id);
-            item.subItems.forEach(sub => itemIdsToRemove.add(sub.id));
+            item.subItems.forEach((sub) => itemIdsToRemove.add(sub.id));
             itemsToMove.push(item);
           } else {
             // Partial selection - move as group with only selected subs
-            selectedSubs.forEach(sub => itemIdsToRemove.add(sub.id));
+            selectedSubs.forEach((sub) => itemIdsToRemove.add(sub.id));
             itemsToMove.push({
               ...item,
               id: generateUUID(), // New ID for the partial group
@@ -182,15 +203,15 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
         }
       }
     });
-    
-    console.log('📦 Items to move:', itemsToMove);
-    console.log('🗑️ Items to remove from source:', Array.from(itemIdsToRemove));
-    
+
+    console.log("📦 Items to move:", itemsToMove);
+    console.log("🗑️ Items to remove from source:", Array.from(itemIdsToRemove));
+
     // Call parent handler
     if (onMoveItems) {
       onMoveItems(itemsToMove, itemIdsToRemove, destination);
     }
-    
+
     // Exit selection mode
     setSelectionMode(false);
     setSelectedItems(new Set());
@@ -198,15 +219,17 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   };
 
   const toggleItem = (itemId) => {
-    let updatedItems = items.map(item => {
+    let updatedItems = items.map((item) => {
       if (item.subItems && item.subItems.length > 0) {
-        const subItemIndex = item.subItems.findIndex(sub => sub.id === itemId);
+        const subItemIndex = item.subItems.findIndex(
+          (sub) => sub.id === itemId
+        );
         if (subItemIndex !== -1) {
-          const updatedSubItems = item.subItems.map(sub =>
+          const updatedSubItems = item.subItems.map((sub) =>
             sub.id === itemId ? { ...sub, completed: !sub.completed } : sub
           );
 
-          const allComplete = updatedSubItems.every(sub => sub.completed);
+          const allComplete = updatedSubItems.every((sub) => sub.completed);
 
           return {
             ...item,
@@ -241,21 +264,21 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   };
 
   const handleYesNoAnswer = (itemId, answer) => {
-    const item = items.find(i => i.id === itemId);
-    
-    if (answer === 'yes' && item?.yesNoConfig?.type === 'multiChoice') {
+    const item = items.find((i) => i.id === itemId);
+
+    if (answer === "yes" && item?.yesNoConfig?.type === "multiChoice") {
       setMultiChoiceItem(item);
       setShowMultiChoiceModal(true);
       return;
     }
 
-    if (answer === 'yes' && item?.yesNoConfig?.type === 'fillIn') {
+    if (answer === "yes" && item?.yesNoConfig?.type === "fillIn") {
       setFillInItem(item);
       setShowFillInModal(true);
       return;
     }
 
-    const updatedItems = items.map(item => {
+    const updatedItems = items.map((item) => {
       if (item.id !== itemId) return item;
 
       const updatedItem = {
@@ -267,7 +290,7 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
         },
       };
 
-      if (answer === 'no') {
+      if (answer === "no") {
         updatedItem.completed = true;
       }
 
@@ -276,7 +299,7 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
 
     setItems(updatedItems);
 
-    if (answer === 'no') {
+    if (answer === "no") {
       if (reorderTimeoutRef.current) {
         clearTimeout(reorderTimeoutRef.current);
       }
@@ -299,22 +322,22 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   const handleMultiChoiceConfirm = (selectedOptions) => {
     if (!multiChoiceItem) return;
 
-    const subItems = selectedOptions.map(option => ({
+    const subItems = selectedOptions.map((option) => ({
       id: generateUUID(),
       name: option,
-      itemType: 'checkbox',
+      itemType: "checkbox",
       completed: false,
       parentId: multiChoiceItem.id,
     }));
 
-    const updatedItems = items.map(item => {
+    const updatedItems = items.map((item) => {
       if (item.id === multiChoiceItem.id) {
         return {
           ...item,
           yesNoConfig: {
             ...item.yesNoConfig,
             answered: true,
-            answer: 'yes',
+            answer: "yes",
           },
           subItems: subItems,
           completed: false,
@@ -335,22 +358,22 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   const handleFillInConfirm = (typedItems) => {
     if (!fillInItem) return;
 
-    const subItems = typedItems.map(itemText => ({
+    const subItems = typedItems.map((itemText) => ({
       id: generateUUID(),
       name: itemText,
-      itemType: 'checkbox',
+      itemType: "checkbox",
       completed: false,
       parentId: fillInItem.id,
     }));
 
-    const updatedItems = items.map(item => {
+    const updatedItems = items.map((item) => {
       if (item.id === fillInItem.id) {
         return {
           ...item,
           yesNoConfig: {
             ...item.yesNoConfig,
             answered: true,
-            answer: 'yes',
+            answer: "yes",
           },
           subItems: subItems,
           completed: false,
@@ -369,7 +392,7 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
   };
 
   const handleResetYesNo = (itemId) => {
-    const updatedItems = items.map(item => {
+    const updatedItems = items.map((item) => {
       if (item.id !== itemId) return item;
 
       return {
@@ -400,10 +423,73 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
     }, 500);
   };
 
-  const { completed: completedCount, total: totalCount } = calculateChecklistProgress(items);
+  const { completed: completedCount, total: totalCount } =
+    calculateChecklistProgress(items);
+
+  // Update handleSort
+const handleSort = () => {
+  const incompleteItems = items.filter(item => !item.completed);
+  setSortingItems(incompleteItems);
+  setSortingParent(null);
+  setSortModalStack([]); // Clear stack when opening fresh
+  setShowSortModal(true);
+};
+
+// Update handleDrillDown
+const handleDrillDown = (parentItem) => {
+  setSortModalStack(prev => [...prev, { items: sortingItems, parent: sortingParent }]); // Push current state
+  setSortingItems(parentItem.subItems);
+  setSortingParent(parentItem);
+};
+
+// Update handleSaveSort
+const handleSaveSort = (reorderedItems) => {
+  if (sortingParent) {
+    // We were sorting sub-items - update the parent's subItems
+    const updatedItems = items.map(item => {
+      if (item.id === sortingParent.id) {
+        return {
+          ...item,
+          subItems: reorderedItems,
+        };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    if (onItemToggle) {
+      onItemToggle(updatedItems); // Immediate update!
+    }
+
+    // Go back to parent level if there's a stack
+    if (sortModalStack.length > 0) {
+      const previous = sortModalStack[sortModalStack.length - 1];
+      setSortingItems(previous.items);
+      setSortingParent(previous.parent);
+      setSortModalStack(prev => prev.slice(0, -1)); // Pop stack
+      // Modal stays open!
+    } else {
+      // No stack - close modal
+      setShowSortModal(false);
+      setSortingParent(null);
+    }
+  } else {
+    // We were sorting top-level items - merge with completed items at bottom
+    const completedItems = items.filter(item => item.completed);
+    const mergedItems = [...reorderedItems, ...completedItems];
+    
+    setItems(mergedItems);
+    if (onItemToggle) {
+      onItemToggle(mergedItems); // Immediate update!
+    }
+    
+    // Close modal
+    setShowSortModal(false);
+  }
+};
 
   const styles = StyleSheet.create({
-    container: { 
+    container: {
       flex: 1,
     },
     progressBarContainer: {
@@ -415,9 +501,9 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
       borderBottomColor: theme.border.primary,
     },
     headerContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingHorizontal: getSpacing.md,
       paddingVertical: getSpacing.sm,
       backgroundColor: theme.background.primary,
@@ -425,23 +511,23 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
       borderBottomColor: theme.border.primary,
     },
     moveButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       paddingHorizontal: getSpacing.md,
       paddingVertical: getSpacing.sm,
-      backgroundColor: selectionMode ? theme.primary : theme.primary + '20',
+      backgroundColor: selectionMode ? theme.primary : theme.primary + "20",
       borderRadius: getBorderRadius.md,
     },
     moveButtonText: {
       fontSize: getTypography.body.fontSize,
-      color: selectionMode ? '#fff' : theme.primary,
+      color: selectionMode ? "#fff" : theme.primary,
       marginLeft: getSpacing.xs,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     confirmMoveButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
       paddingVertical: getSpacing.md,
       paddingHorizontal: getSpacing.lg,
       backgroundColor: theme.primary,
@@ -450,17 +536,17 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
     },
     confirmMoveButtonText: {
       fontSize: getTypography.body.fontSize,
-      color: '#fff',
-      fontWeight: '600',
+      color: "#fff",
+      fontWeight: "600",
       marginLeft: getSpacing.xs,
     },
-    scrollContent: { 
+    scrollContent: {
       padding: getSpacing.md,
       paddingTop: getSpacing.sm,
     },
     emptyState: {
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       paddingVertical: getSpacing.xl * 2,
     },
     emptyStateText: {
@@ -468,37 +554,64 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
       color: theme.text.secondary,
       marginTop: getSpacing.md,
     },
+    sortButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: getSpacing.md,
+      paddingVertical: getSpacing.sm,
+      backgroundColor: theme.primary + "20",
+      borderRadius: getBorderRadius.md,
+    },
+    sortButtonText: {
+      fontSize: getTypography.body.fontSize,
+      color: theme.primary,
+      marginLeft: getSpacing.xs,
+      fontWeight: "600",
+    },
   });
 
   return (
     <View style={styles.container}>
-      {/* Header with Move Items button */}
-      {items.length > 0 && (
-        <View style={styles.headerContainer}>
-          <TouchableOpacity
-            style={styles.moveButton}
-            onPress={() => {
-              if (selectionMode) {
-                // Cancel selection
-                setSelectionMode(false);
-                setSelectedItems(new Set());
-              } else {
-                // Enter selection mode
-                setSelectionMode(true);
-              }
-            }}
-          >
-            <Ionicons
-              name={selectionMode ? 'close' : 'move-outline'}
-              size={20}
-              color={selectionMode ? '#fff' : theme.primary}
-            />
-            <Text style={styles.moveButtonText}>
-              {selectionMode ? 'Cancel' : 'Move Items'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Header with Sort and Move Items buttons */}
+{items.length > 0 && (
+  <View style={styles.headerContainer}>
+    <TouchableOpacity
+      style={styles.sortButton}
+      onPress={handleSort}
+    >
+      <Ionicons
+        name="swap-vertical"
+        size={20}
+        color={theme.primary}
+      />
+      <Text style={styles.sortButtonText}>Sort</Text>
+    </TouchableOpacity>
+    
+    {/* Only show Move Items if user is admin */}
+    {isUserAdmin && (
+      <TouchableOpacity
+        style={styles.moveButton}
+        onPress={() => {
+          if (selectionMode) {
+            setSelectionMode(false);
+            setSelectedItems(new Set());
+          } else {
+            setSelectionMode(true);
+          }
+        }}
+      >
+        <Ionicons
+          name={selectionMode ? 'close' : 'move-outline'}
+          size={20}
+          color={selectionMode ? '#fff' : theme.primary}
+        />
+        <Text style={styles.moveButtonText}>
+          {selectionMode ? 'Cancel' : 'Move Items'}
+        </Text>
+      </TouchableOpacity>
+    )}
+  </View>
+)}
 
       {/* Sticky Progress Bar */}
       {items.length > 0 && !selectionMode && (
@@ -529,7 +642,7 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
           </View>
         ) : (
           <>
-            {items.map(item => (
+            {items.map((item) => (
               <ChecklistItemRow
                 key={item.id}
                 item={item}
@@ -554,7 +667,8 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
         >
           <Ionicons name="arrow-forward" size={20} color="#fff" />
           <Text style={styles.confirmMoveButtonText}>
-            Move {selectedItems.size} {selectedItems.size === 1 ? 'item' : 'items'}
+            Move {selectedItems.size}{" "}
+            {selectedItems.size === 1 ? "item" : "items"}
           </Text>
         </TouchableOpacity>
       )}
@@ -588,6 +702,23 @@ const ChecklistContent = ({ checklist, onItemToggle, onMoveItems, pinnedChecklis
         pinnedChecklists={pinnedChecklists}
         onConfirm={handleMoveItems}
         onCancel={() => setShowMoveModal(false)}
+      />
+
+      {/* Sort Modal */}
+      <CustomOrderModal
+        visible={showSortModal}
+        items={sortingItems}
+        onSave={handleSaveSort}
+        onClose={() => {
+          setShowSortModal(false);
+          setSortingParent(null);
+        }}
+        keyExtractor={(item) => item.id}
+        getItemName={(item) => item.name}
+        title={sortingParent ? sortingParent.name : "Sort Items"}
+        showChevrons={!sortingParent} // Only show chevrons on main level
+        onDrillDown={handleDrillDown}
+        hiddenCount={!sortingParent ? items.filter(i => i.completed).length : 0}
       />
     </View>
   );

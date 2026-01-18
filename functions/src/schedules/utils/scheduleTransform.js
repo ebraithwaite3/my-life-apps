@@ -36,63 +36,65 @@ function parseGameDateTime(date, time, year, defaultDuration = 3) {
   try {
     let dt;
 
-    // Try multiple date formats
+    // CRITICAL FIX: Check for ISO date format FIRST (YYYY-MM-DD)
+    // This is used by EPL schedules
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      dt = DateTime.fromISO(dateStr, {zone: "America/New_York"});
 
-    // Format: "Mon, Nov 3, 2025" (CBB with day of week)
-    dt = DateTime.fromFormat(
-        dateStr,
-        "EEE, MMM d, yyyy",
-        {zone: "America/New_York"},
-    );
+      if (!dt.isValid) {
+        console.warn(`Invalid ISO date: ${dateStr} (${dt.invalidReason})`);
+        return null;
+      }
+    } else {
+      // Try multiple date formats for other sports (working correctly)
 
-    if (!dt.isValid) {
-      // Format: "Nov 3, 2025" (CBB without day of week)
+      // Format: "Mon, Nov 3, 2025" (CBB with day of week)
       dt = DateTime.fromFormat(
           dateStr,
-          "MMM d, yyyy",
+          "EEE, MMM d, yyyy",
           {zone: "America/New_York"},
       );
-    }
 
-    if (!dt.isValid) {
-      // Format: "September 7 2025" (NFL)
-      dt = DateTime.fromFormat(
-          dateStr,
-          "MMMM d yyyy",
-          {zone: "America/New_York"},
-      );
-    }
+      if (!dt.isValid) {
+        // Format: "Nov 3, 2025" (CBB without day of week)
+        dt = DateTime.fromFormat(
+            dateStr,
+            "MMM d, yyyy",
+            {zone: "America/New_York"},
+        );
+      }
 
-    if (!dt.isValid) {
-      // Format: "Aug 30, 2025" (CFB)
-      dt = DateTime.fromFormat(
-          dateStr,
-          "MMM d, yyyy",
-          {zone: "America/New_York"},
-      );
-    }
+      if (!dt.isValid) {
+        // Format: "September 7 2025" (NFL)
+        dt = DateTime.fromFormat(
+            dateStr,
+            "MMMM d yyyy",
+            {zone: "America/New_York"},
+        );
+      }
 
-    if (!dt.isValid) {
-      // Format: "Aug 30 2025" (alternate CFB)
-      dt = DateTime.fromFormat(
-          dateStr,
-          "MMM d yyyy",
-          {zone: "America/New_York"},
-      );
-    }
+      if (!dt.isValid) {
+        // Format: "Aug 30, 2025" (CFB)
+        dt = DateTime.fromFormat(
+            dateStr,
+            "MMM d, yyyy",
+            {zone: "America/New_York"},
+        );
+      }
 
-    if (!dt.isValid) {
-      // Format: "2025-08-17" (EPL - ISO date format)
-      dt = DateTime.fromFormat(
-          dateStr,
-          "yyyy-MM-dd",
-          {zone: "America/New_York"},
-      );
-    }
+      if (!dt.isValid) {
+        // Format: "Aug 30 2025" (alternate CFB)
+        dt = DateTime.fromFormat(
+            dateStr,
+            "MMM d yyyy",
+            {zone: "America/New_York"},
+        );
+      }
 
-    if (!dt.isValid) {
-      console.warn(`Invalid date: ${dateStr} (${dt.invalidReason})`);
-      return null;
+      if (!dt.isValid) {
+        console.warn(`Invalid date: ${dateStr} (${dt.invalidReason})`);
+        return null;
+      }
     }
 
     // If TBD, create all-day event (12:01 AM to 11:59 PM)
