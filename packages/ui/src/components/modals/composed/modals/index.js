@@ -5,3 +5,4 @@ export { default as SharedEventModal } from './SharedEventModal';
 export { default as ChecklistItemConfigModal } from './ChecklistItemConfigModal';
 export { default as MultipleChoiceSelectionModal } from './MultipleChoiceSelectionModals';
 export { default as FillInSelectionModal } from './FillInSelectionModal';
+export { default as AddChecklistToEventModal } from './AddChecklistToEventModal';

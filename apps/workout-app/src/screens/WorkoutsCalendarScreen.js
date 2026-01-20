@@ -527,6 +527,7 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         workout={selectedWorkoutActivity}
         event={selectedWorkoutEvent}
         onUpdateWorkout={handleUpdateWorkout}
+        selectedDate={selectedDate}
       />
 
       {/* Add Workout Modal - For adding new workouts to existing events */}

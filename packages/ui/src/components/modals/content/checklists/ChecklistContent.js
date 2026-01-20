@@ -142,11 +142,9 @@ const ChecklistContent = ({
     });
   };
 
-  // NEW: Handle move items
   const handleMoveItems = (destination) => {
     console.log("🚀 Moving items to:", destination);
 
-    // Build list of items to move
     const itemsToMove = [];
     const itemIdsToRemove = new Set();
 
@@ -157,28 +155,14 @@ const ChecklistContent = ({
           itemIdsToRemove.add(item.id);
           item.subItems.forEach((sub) => itemIdsToRemove.add(sub.id));
 
-          // Check if this is the ONLY selection (single group)
-          const onlyThisGroup = selectedItems.size === 1 + item.subItems.length;
-
-          if (onlyThisGroup) {
-            // Flatten: add sub-items as individual items
-            item.subItems.forEach((sub) => {
-              itemsToMove.push({
-                ...sub,
-                parentId: null, // Remove parent relationship
-              });
-            });
-          } else {
-            // Keep as group
-            itemsToMove.push(item);
-          }
+          // ALWAYS keep as group - never flatten
+          itemsToMove.push(item);
         } else {
           // Regular item
           itemIdsToRemove.add(item.id);
           itemsToMove.push(item);
         }
       } else if (item.subItems && item.subItems.length > 0) {
-        // Check if some sub-items are selected
         const selectedSubs = item.subItems.filter((sub) =>
           selectedItems.has(sub.id)
         );
@@ -187,16 +171,16 @@ const ChecklistContent = ({
           const allSubsSelected = selectedSubs.length === item.subItems.length;
 
           if (allSubsSelected) {
-            // All subs selected - move parent too
+            // All subs selected - move parent too as complete group
             itemIdsToRemove.add(item.id);
             item.subItems.forEach((sub) => itemIdsToRemove.add(sub.id));
             itemsToMove.push(item);
           } else {
-            // Partial selection - move as group with only selected subs
+            // Partial selection - move as NEW group with only selected subs
             selectedSubs.forEach((sub) => itemIdsToRemove.add(sub.id));
             itemsToMove.push({
               ...item,
-              id: generateUUID(), // New ID for the partial group
+              id: generateUUID(),
               subItems: selectedSubs,
             });
           }
@@ -204,18 +188,39 @@ const ChecklistContent = ({
       }
     });
 
-    console.log("📦 Items to move:", itemsToMove);
-    console.log("🗑️ Items to remove from source:", Array.from(itemIdsToRemove));
-
-    // Call parent handler
     if (onMoveItems) {
       onMoveItems(itemsToMove, itemIdsToRemove, destination);
     }
 
-    // Exit selection mode
     setSelectionMode(false);
     setSelectedItems(new Set());
     setShowMoveModal(false);
+  };
+
+  // Count individual items (sub-items count individually)
+  const getLogicalItemCount = () => {
+    let count = 0;
+
+    items.forEach((item) => {
+      if (selectedItems.has(item.id)) {
+        if (item.subItems && item.subItems.length > 0) {
+          // Parent selected - count all sub-items
+          count += item.subItems.length;
+        } else {
+          // Regular item
+          count++;
+        }
+      } else if (item.subItems && item.subItems.length > 0) {
+        // Check individual sub-items
+        item.subItems.forEach((sub) => {
+          if (selectedItems.has(sub.id)) {
+            count++;
+          }
+        });
+      }
+    });
+
+    return count;
   };
 
   const toggleItem = (itemId) => {
@@ -427,66 +432,69 @@ const ChecklistContent = ({
     calculateChecklistProgress(items);
 
   // Update handleSort
-const handleSort = () => {
-  const incompleteItems = items.filter(item => !item.completed);
-  setSortingItems(incompleteItems);
-  setSortingParent(null);
-  setSortModalStack([]); // Clear stack when opening fresh
-  setShowSortModal(true);
-};
+  const handleSort = () => {
+    const incompleteItems = items.filter((item) => !item.completed);
+    setSortingItems(incompleteItems);
+    setSortingParent(null);
+    setSortModalStack([]); // Clear stack when opening fresh
+    setShowSortModal(true);
+  };
 
-// Update handleDrillDown
-const handleDrillDown = (parentItem) => {
-  setSortModalStack(prev => [...prev, { items: sortingItems, parent: sortingParent }]); // Push current state
-  setSortingItems(parentItem.subItems);
-  setSortingParent(parentItem);
-};
+  // Update handleDrillDown
+  const handleDrillDown = (parentItem) => {
+    setSortModalStack((prev) => [
+      ...prev,
+      { items: sortingItems, parent: sortingParent },
+    ]); // Push current state
+    setSortingItems(parentItem.subItems);
+    setSortingParent(parentItem);
+  };
 
-// Update handleSaveSort
-const handleSaveSort = (reorderedItems) => {
-  if (sortingParent) {
-    // We were sorting sub-items - update the parent's subItems
-    const updatedItems = items.map(item => {
-      if (item.id === sortingParent.id) {
-        return {
-          ...item,
-          subItems: reorderedItems,
-        };
+  // Update handleSaveSort
+  const handleSaveSort = (reorderedItems) => {
+    if (sortingParent) {
+      // We were sorting sub-items - update the parent's subItems
+      const updatedItems = items.map((item) => {
+        if (item.id === sortingParent.id) {
+          return {
+            ...item,
+            subItems: reorderedItems,
+          };
+        }
+        return item;
+      });
+
+      setItems(updatedItems);
+      if (onItemToggle) {
+        onItemToggle(updatedItems); // Immediate update!
       }
-      return item;
-    });
-    
-    setItems(updatedItems);
-    if (onItemToggle) {
-      onItemToggle(updatedItems); // Immediate update!
-    }
 
-    // Go back to parent level if there's a stack
-    if (sortModalStack.length > 0) {
-      const previous = sortModalStack[sortModalStack.length - 1];
-      setSortingItems(previous.items);
-      setSortingParent(previous.parent);
-      setSortModalStack(prev => prev.slice(0, -1)); // Pop stack
-      // Modal stays open!
+      // Go back to parent level if there's a stack
+      if (sortModalStack.length > 0) {
+        const previous = sortModalStack[sortModalStack.length - 1];
+        setSortingItems(previous.items);
+        setSortingParent(previous.parent);
+        setSortModalStack((prev) => prev.slice(0, -1)); // Pop stack
+        // Modal stays open!
+      } else {
+        // No stack - close modal
+        setShowSortModal(false);
+        setSortingParent(null);
+      }
     } else {
-      // No stack - close modal
+      // We were sorting top-level items - merge with completed items at bottom
+      const completedItems = items.filter((item) => item.completed);
+      const mergedItems = [...reorderedItems, ...completedItems];
+
+      setItems(mergedItems);
+      if (onItemToggle) {
+        onItemToggle(mergedItems); // Immediate update!
+      }
+
+      // Close modal
       setShowSortModal(false);
-      setSortingParent(null);
     }
-  } else {
-    // We were sorting top-level items - merge with completed items at bottom
-    const completedItems = items.filter(item => item.completed);
-    const mergedItems = [...reorderedItems, ...completedItems];
-    
-    setItems(mergedItems);
-    if (onItemToggle) {
-      onItemToggle(mergedItems); // Immediate update!
-    }
-    
-    // Close modal
-    setShowSortModal(false);
-  }
-};
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -573,45 +581,38 @@ const handleSaveSort = (reorderedItems) => {
   return (
     <View style={styles.container}>
       {/* Header with Sort and Move Items buttons */}
-{items.length > 0 && (
-  <View style={styles.headerContainer}>
-    <TouchableOpacity
-      style={styles.sortButton}
-      onPress={handleSort}
-    >
-      <Ionicons
-        name="swap-vertical"
-        size={20}
-        color={theme.primary}
-      />
-      <Text style={styles.sortButtonText}>Sort</Text>
-    </TouchableOpacity>
-    
-    {/* Only show Move Items if user is admin */}
-    {isUserAdmin && (
-      <TouchableOpacity
-        style={styles.moveButton}
-        onPress={() => {
-          if (selectionMode) {
-            setSelectionMode(false);
-            setSelectedItems(new Set());
-          } else {
-            setSelectionMode(true);
-          }
-        }}
-      >
-        <Ionicons
-          name={selectionMode ? 'close' : 'move-outline'}
-          size={20}
-          color={selectionMode ? '#fff' : theme.primary}
-        />
-        <Text style={styles.moveButtonText}>
-          {selectionMode ? 'Cancel' : 'Move Items'}
-        </Text>
-      </TouchableOpacity>
-    )}
-  </View>
-)}
+      {items.length > 0 && (
+        <View style={styles.headerContainer}>
+          <TouchableOpacity style={styles.sortButton} onPress={handleSort}>
+            <Ionicons name="swap-vertical" size={20} color={theme.primary} />
+            <Text style={styles.sortButtonText}>Sort</Text>
+          </TouchableOpacity>
+
+          {/* Only show Move Items if user is admin */}
+          {isUserAdmin && (
+            <TouchableOpacity
+              style={styles.moveButton}
+              onPress={() => {
+                if (selectionMode) {
+                  setSelectionMode(false);
+                  setSelectedItems(new Set());
+                } else {
+                  setSelectionMode(true);
+                }
+              }}
+            >
+              <Ionicons
+                name={selectionMode ? "close" : "move-outline"}
+                size={20}
+                color={selectionMode ? "#fff" : theme.primary}
+              />
+              <Text style={styles.moveButtonText}>
+                {selectionMode ? "Cancel" : "Move Items"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Sticky Progress Bar */}
       {items.length > 0 && !selectionMode && (
@@ -653,6 +654,7 @@ const handleSaveSort = (reorderedItems) => {
                 isSelected={selectedItems.has(item.id)}
                 onSelect={toggleSelection}
                 isMoveable={isItemMoveable(item)}
+                selectedItems={selectedItems}
               />
             ))}
           </>
@@ -667,8 +669,8 @@ const handleSaveSort = (reorderedItems) => {
         >
           <Ionicons name="arrow-forward" size={20} color="#fff" />
           <Text style={styles.confirmMoveButtonText}>
-            Move {selectedItems.size}{" "}
-            {selectedItems.size === 1 ? "item" : "items"}
+            Move {getLogicalItemCount()}{" "}
+            {getLogicalItemCount() === 1 ? "item" : "items"}
           </Text>
         </TouchableOpacity>
       )}
@@ -718,7 +720,9 @@ const handleSaveSort = (reorderedItems) => {
         title={sortingParent ? sortingParent.name : "Sort Items"}
         showChevrons={!sortingParent} // Only show chevrons on main level
         onDrillDown={handleDrillDown}
-        hiddenCount={!sortingParent ? items.filter(i => i.completed).length : 0}
+        hiddenCount={
+          !sortingParent ? items.filter((i) => i.completed).length : 0
+        }
       />
     </View>
   );

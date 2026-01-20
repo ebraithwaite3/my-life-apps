@@ -278,17 +278,36 @@ export const usePinnedOperations = (
         }
       }
       
-      const remainingItems = updatedItems.filter(item => {
-        if (itemIdsToRemove.has(item.id)) return false;
-        
-        if (item.subItems && item.subItems.length > 0) {
-          const remainingSubs = item.subItems.filter(sub => !itemIdsToRemove.has(sub.id));
-          if (remainingSubs.length === 0) return false;
-          item.subItems = remainingSubs;
-        }
-        
-        return true;
-      });
+      // FIXED: Properly filter items immutably
+      const remainingItems = updatedItems
+        .map(item => {
+          // If parent is marked for removal, skip it
+          if (itemIdsToRemove.has(item.id)) {
+            return null;
+          }
+          
+          // If item has sub-items, check if any need to be removed
+          if (item.subItems && item.subItems.length > 0) {
+            const remainingSubs = item.subItems.filter(sub => !itemIdsToRemove.has(sub.id));
+            
+            // If no subs remain, remove the parent too
+            if (remainingSubs.length === 0) {
+              return null;
+            }
+            
+            // If some subs were removed, return new item with filtered subs
+            if (remainingSubs.length !== item.subItems.length) {
+              return {
+                ...item,
+                subItems: remainingSubs,
+              };
+            }
+          }
+          
+          // Item unchanged
+          return item;
+        })
+        .filter(Boolean); // Remove nulls
       
       const updatedSourceChecklist = {
         ...selectedChecklist,

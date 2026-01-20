@@ -18,6 +18,7 @@ const WorkoutModal = ({
   onUpdateWorkout,
   templateContext,
   isUserAdmin,
+  selectedDate,
 }) => {
   const { theme, getSpacing } = useTheme();
   const editContentRef = useRef(null);
@@ -30,6 +31,7 @@ const WorkoutModal = ({
 
   // Unified working state for the workout
   const [workingWorkout, setWorkingWorkout] = useState(null);
+  console.log("Working Workout:", workingWorkout, "Selected Date:", selectedDate);
 
   // Initialize working workout when modal opens
   useEffect(() => {
@@ -307,6 +309,7 @@ const WorkoutModal = ({
                 setUpdatedExercises(newExercises);
                 setWorkingWorkout(prev => ({ ...prev, exercises: newExercises }));
               }}
+              selectedDate={selectedDate}
             />
           ) : (
             <EditWorkoutTemplate

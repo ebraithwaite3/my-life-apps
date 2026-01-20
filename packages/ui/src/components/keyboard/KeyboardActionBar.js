@@ -8,13 +8,15 @@ import { useTheme } from '@my-apps/contexts';
  * 
  * @param {Object} leftButton - Optional left button config { text: string, icon: string, onPress: function }
  * @param {Object} centerButton - Optional center button config { text: string, icon: string, onPress: function }
+ * @param {React.ReactNode} centerContent - Optional custom React content for center (overrides centerButton)
  * @param {Object} rightButton - Optional right button config (defaults to "Done" dismiss keyboard)
  * @param {boolean} visible - Whether to show the bar (typically keyboardVisible state)
  * @param {Function} onWillDismiss - Optional callback fired before keyboard dismisses (use to hide bar immediately)
  */
 const KeyboardActionBar = ({ 
   leftButton, 
-  centerButton, 
+  centerButton,
+  centerContent,
   rightButton,
   visible = false,
   onWillDismiss 
@@ -28,30 +30,24 @@ const KeyboardActionBar = ({
     text: 'Done',
     icon: 'checkmark-circle',
     onPress: () => {
-      onWillDismiss?.(); // Hide bar immediately
-      Keyboard.dismiss(); // Then dismiss keyboard
+      onWillDismiss?.();
+      Keyboard.dismiss();
     }
   };
 
   const finalRightButton = rightButton || defaultRightButton;
 
   const renderButton = (button, position) => {
-    if (!button) return <View style={{ flex: 1 }} />;
+    if (!button) return <View style={styles.buttonContainer} />;
 
     return (
       <TouchableOpacity
         style={[
           styles.button,
           {
-            //backgroundColor: theme.primary + '20',
-            paddingHorizontal: getSpacing.sm, // Tighter
-            paddingVertical: getSpacing.xs,   // Tighter
-            borderRadius: 8,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
-            shadowRadius: 2,
-            elevation: 2,
+            paddingHorizontal: getSpacing.sm,
+            paddingVertical: 6,
+            borderRadius: 6,
           }
         ]}
         onPress={button.onPress}
@@ -59,9 +55,9 @@ const KeyboardActionBar = ({
         {button.icon && (
           <Ionicons 
             name={button.icon} 
-            size={20} // Smaller icon
+            size={18}
             color={theme.primary}
-            style={{ marginRight: button.text ? getSpacing.xs : 0 }}
+            style={{ marginRight: button.text ? 4 : 0 }}
           />
         )}
         {button.text && (
@@ -80,7 +76,7 @@ const KeyboardActionBar = ({
         backgroundColor: theme.background,
         borderTopWidth: 1,
         borderTopColor: theme.border,
-        paddingVertical: getSpacing.xs, // Changed from md to xs - tighter spacing
+        paddingVertical: 6,
         paddingHorizontal: getSpacing.md,
       }
     ]}>
@@ -89,9 +85,9 @@ const KeyboardActionBar = ({
         {renderButton(leftButton, 'left')}
       </View>
 
-      {/* Center Button */}
-      <View style={styles.buttonContainer}>
-        {renderButton(centerButton, 'center')}
+      {/* Center - Custom Content or Button */}
+      <View style={[styles.buttonContainer, styles.centerContainer]}>
+        {centerContent || renderButton(centerButton, 'center')}
       </View>
 
       {/* Right Button (defaults to Done) */}
@@ -107,11 +103,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    margin: 0, // Explicitly no margin
+    margin: 0,
   },
   buttonContainer: {
-    flex: 1,
+    minWidth: 80,
     alignItems: 'center',
+  },
+  centerContainer: {
+    flex: 1,
+    marginHorizontal: 8,
   },
   button: {
     flexDirection: 'row',

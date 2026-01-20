@@ -5,6 +5,7 @@ import {
   SharedEventModal,
   ChecklistSelector,
   EditChecklistContent,
+  AddChecklistToEventModal,
 } from "@my-apps/ui";
 import { useData, useChecklistData } from "@my-apps/contexts";
 import {
@@ -79,9 +80,9 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     useChecklistTemplates();
   const { createPinnedChecklist, updatePinnedChecklist } =
     usePinnedChecklists();
-const { allPinned } = useChecklistData();
-    console.log('🔍 Calendar screen allPinned:', allPinned);
-console.log('🔍 Calendar screen allPinned length:', allPinned?.length);
+  const { allPinned } = useChecklistData();
+  console.log("🔍 Calendar screen allPinned:", allPinned);
+  console.log("🔍 Calendar screen allPinned length:", allPinned?.length);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
 
   // Handle navigation params for deep links (notifications, etc.)
@@ -160,15 +161,14 @@ console.log('🔍 Calendar screen allPinned length:', allPinned?.length);
         onEditEvent={calendarHandlers.handleEditEvent}
         onAddActivity={calendarHandlers.handleAddChecklist}
         onActivityPress={(activity, event) => {
-          console.log('🔍 Activity:', activity);
-          console.log('🔍 Event:', event);
-          console.log('🔍 Calling handleViewChecklist');
-          
+          console.log("🔍 Activity:", activity);
+          console.log("🔍 Event:", event);
+          console.log("🔍 Calling handleViewChecklist");
+
           calendarHandlers.handleViewChecklist(event, activity);
-          
-          console.log('🔍 After handleViewChecklist');
+
+          console.log("🔍 After handleViewChecklist");
         }}
-        
         onActivityDelete={(activity, event) => {
           // ActivityRow passes (activity, event) but handleDeleteChecklist expects (event, activity)
           calendarHandlers.handleDeleteChecklist(event, activity);
@@ -236,6 +236,21 @@ console.log('🔍 Calendar screen allPinned length:', allPinned?.length);
         pinnedChecklists={allPinned}
         onCreatePinnedChecklist={createPinnedChecklist}
         onUpdatePinnedChecklist={updatePinnedChecklist}
+      />
+
+      {/* Add Checklist to Event Modal */}
+      <AddChecklistToEventModal
+        visible={calendarState.addChecklistModalVisible}
+        onClose={() => {
+          calendarState.setAddChecklistModalVisible(false);
+          calendarState.setSelectedEvent(null);
+        }}
+        selectedEvent={calendarState.selectedEvent}
+        templates={allTemplates}
+        onSaveChecklist={calendarHandlers.handleSaveChecklist}
+        onSaveTemplate={saveTemplate}
+        promptForContext={promptForContext}
+        isUserAdmin={user?.admin === true}
       />
     </>
   );

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useData, useAuth } from '@my-apps/contexts';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { DateTime } from 'luxon';
 
 const WorkoutDataContext = createContext();
 
@@ -144,6 +145,28 @@ export const WorkoutDataProvider = ({ children }) => {
     return workoutHistory?.exercises?.[exerciseId]?.lastWorkouts?.[0] || null;
   };
 
+  // Get last workout for specific exercise that was NOT today or in the future
+  // Also if the workout date is in the past, return null
+  const getLastPastWorkout = (exerciseId, workoutDate) => {
+    if (!workoutDate) return null;
+  
+    // The date of the workout currently being displayed/edited
+    const targetDate = DateTime.fromISO(workoutDate).startOf('day');
+  
+    const lastWorkouts = getLastWorkouts(exerciseId);
+    
+    // Find the first workout in history that happened BEFORE the current workout's date
+    for (let workout of lastWorkouts) {
+      const workoutDateTime = DateTime.fromISO(workout.date).startOf('day');
+      
+      if (workoutDateTime < targetDate) {
+        return workout;
+      }
+    }
+    
+    return null;
+  };
+
   const value = useMemo(() => ({
     // Raw data
     workoutCatalog,
@@ -163,6 +186,7 @@ export const WorkoutDataProvider = ({ children }) => {
     getExercisesWithTracking,
     getLastWorkouts,
     getLastWorkout,
+    getLastPastWorkout,
   }), [
     workoutCatalog,
     workoutHistory,

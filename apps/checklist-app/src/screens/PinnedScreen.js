@@ -418,17 +418,22 @@ const PinnedScreen = () => {
                   ref={editContentRef}
                   checklist={workingChecklist}
                   onSave={async (checklist, shouldSaveAsTemplate) => {
-                    await handleSaveChecklist(checklist);
+                    // Preserve the order field from the original checklist
+                    const checklistToSave = {
+                      ...checklist,
+                      order: workingChecklist?.order, // Preserve existing order
+                    };
+                    await handleSaveChecklist(checklistToSave);
                     Keyboard.dismiss();
                     setTimeout(() => {
                       showSuccessToast("Checklist saved", "", 2000, "top");
                     }, 100);
-                    setWorkingChecklist(checklist);
-                    setUpdatedItems(checklist.items);
+                    setWorkingChecklist(checklistToSave);
+                    setUpdatedItems(checklistToSave.items);
                     setIsDirtyComplete(false);
                     if (shouldSaveAsTemplate) {
                       promptForContext(async (context) => {
-                        const success = await saveTemplate(checklist, context);
+                        const success = await saveTemplate(checklistToSave, context);
                         if (success) {
                           Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
                         }

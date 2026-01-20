@@ -14,6 +14,7 @@ const ChecklistItemRow = ({
   isSelected = false,
   onSelect,
   isMoveable = true,
+  selectedItems = new Set(),
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
@@ -254,9 +255,10 @@ const handlePress = () => {
               onToggle={handleSubItemPress}
               isSubItem={true}
               selectionMode={selectionMode}
-              isSelected={isSelected} // Parent selection applies to all subs
+              isSelected={selectedItems.has(subItem.id)}
               onSelect={onSelect}
               isMoveable={isMoveable}
+              selectedItems={selectedItems}
             />
           </View>
         ))}

@@ -8,18 +8,87 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  findNodeHandle,
+  UIManager,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Swipeable from "react-native-gesture-handler/Swipeable";
 import { useTheme } from "@my-apps/contexts";
 import { useWorkoutData } from "../../contexts/WorkoutDataContext";
 import WorkoutRow from "../workout/WorkoutRow";
+import { KeyboardActionBar } from "@my-apps/ui";
 
-const WorkoutContent = ({ workout, onExerciseUpdate }) => {
+const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  const { allExercises } = useWorkoutData();
+  const { allExercises, workoutHistory, getLastPastWorkout } = useWorkoutData();
+  console.log("Workout History:", workoutHistory, "Workout", workout);
 
   const [expandedExercises, setExpandedExercises] = React.useState([]);
+  const [keyboardVisible, setKeyboardVisible] = React.useState(false);
+  const [focusedInput, setFocusedInput] = React.useState(null);
+  
+  const rowRefs = React.useRef({});
+  const scrollViewRef = React.useRef(null);
+  const keyboardHeight = React.useRef(0);
+
+  // Keyboard listeners with height tracking
+  React.useEffect(() => {
+    const showListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', 
+      (e) => {
+        keyboardHeight.current = e.endCoordinates.height;
+        setKeyboardVisible(true);
+      }
+    );
+    const hideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', 
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
+
+  // Handle input focus with auto-scroll logic
+const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
+  setFocusedInput({ exerciseIndex, setIndex, field });
+
+  if (!inputRef || !scrollViewRef.current) return;
+
+  // Double requestAnimationFrame ensures layout is complete (React Native standard)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const scrollNode = findNodeHandle(scrollViewRef.current);
+      const inputNode = findNodeHandle(inputRef);
+      
+      if (!scrollNode || !inputNode) return;
+
+      UIManager.measureLayout(
+        inputNode,
+        scrollNode,
+        (error) => {
+          if (__DEV__) console.warn('measureLayout error:', error);
+        },
+        (x, y, width, height) => {
+          // Position the focused row 100px from the TOP of the scroll area
+          // This guarantees visibility regardless of keyboard size
+          const topMargin = 100;
+          const scrollToY = Math.max(0, y - topMargin);
+          
+          scrollViewRef.current.scrollTo({
+            y: scrollToY,
+            animated: true,
+          });
+        }
+      );
+    });
+  });
+};
 
   const toggleExercise = (index) => {
     setExpandedExercises((prev) =>
@@ -59,7 +128,6 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
     onExerciseUpdate(updatedExercises);
   };
 
-  // Delete entire exercise
   const handleDeleteExercise = (exerciseIndex, exerciseName) => {
     Alert.alert(
       "Delete Exercise",
@@ -79,34 +147,99 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
     );
   };
 
-  // Delete individual set
   const handleDeleteSet = (exerciseIndex, setIndex) => {
     const updatedExercises = JSON.parse(JSON.stringify(workout.exercises));
     updatedExercises[exerciseIndex].sets.splice(setIndex, 1);
     onExerciseUpdate(updatedExercises);
   };
 
-  // Render right swipe actions for exercise
-  const renderExerciseRightActions = (exerciseIndex, exerciseName) => {
-    return (
-      <TouchableOpacity
-        style={styles.deleteExerciseAction}
-        onPress={() => handleDeleteExercise(exerciseIndex, exerciseName)}
-      >
-        <Ionicons name="trash" size={24} color="#fff" />
-        <Text style={styles.deleteActionText}>Delete</Text>
-      </TouchableOpacity>
-    );
+  const getCurrentRowInputs = () => {
+    if (!focusedInput) return [];
+    const { exerciseIndex } = focusedInput;
+    const workoutEx = workout.exercises[exerciseIndex];
+    const exercise = allExercises.find((ex) => ex.id === workoutEx.exerciseId);
+    const tracking = exercise?.tracking || [];
+    
+    const inputs = [];
+    if (tracking.includes('weight')) inputs.push('weight');
+    if (tracking.includes('reps')) inputs.push('reps');
+    if (tracking.includes('distance')) inputs.push('distance');
+    if (tracking.includes('time')) inputs.push('time');
+    return inputs;
   };
 
+  const handleNavigate = (direction) => {
+    if (!focusedInput) return;
+    const rowInputs = getCurrentRowInputs();
+    const currentIndex = rowInputs.indexOf(focusedInput.field);
+    if (currentIndex === -1) return;
+
+    const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex < 0 || nextIndex >= rowInputs.length) return;
+
+    const nextField = rowInputs[nextIndex];
+    const rowKey = `${focusedInput.exerciseIndex}-${focusedInput.setIndex}`;
+    const rowRef = rowRefs.current[rowKey];
+    if (rowRef) rowRef.focusField(nextField);
+  };
+
+  const handleAdjust = (direction) => {
+    if (!focusedInput) return;
+    const { exerciseIndex, setIndex, field } = focusedInput;
+    const currentSet = workout.exercises[exerciseIndex].sets[setIndex];
+    let increment = 0;
+    let currentValue = currentSet[field] || 0;
+    
+    switch (field) {
+      case 'weight': increment = direction === 'increment' ? 5 : -5; break;
+      case 'reps': increment = direction === 'increment' ? 1 : -1; break;
+      case 'distance': increment = direction === 'increment' ? 0.1 : -0.1; break;
+      case 'time': increment = direction === 'increment' ? 30 : -30; break;
+    }
+
+    let newValue = Math.max(0, currentValue + increment);
+    if (field === 'distance') newValue = Math.round(newValue * 100) / 100;
+    if (field === 'weight') newValue = Math.round(newValue * 2) / 2;
+
+    handleSetUpdate(exerciseIndex, setIndex, { [field]: newValue });
+  };
+
+  const getIncrementText = () => {
+    if (!focusedInput) return '';
+    switch (focusedInput.field) {
+      case 'weight': return '5 lbs';
+      case 'reps': return '1 rep';
+      case 'distance': return '0.1 mi';
+      case 'time': return '30 sec';
+      default: return '';
+    }
+  };
+
+  const getNavigationState = () => {
+    if (!focusedInput) return { canGoBack: false, canGoNext: false };
+    const rowInputs = getCurrentRowInputs();
+    const currentIndex = rowInputs.indexOf(focusedInput.field);
+    return {
+      canGoBack: currentIndex > 0,
+      canGoNext: currentIndex < rowInputs.length - 1,
+    };
+  };
+
+  const { canGoBack, canGoNext } = getNavigationState();
+
+  const renderExerciseRightActions = (exerciseIndex, exerciseName) => (
+    <TouchableOpacity
+      style={styles.deleteExerciseAction}
+      onPress={() => handleDeleteExercise(exerciseIndex, exerciseName)}
+    >
+      <Ionicons name="trash" size={24} color="#fff" />
+      <Text style={styles.deleteActionText}>Delete</Text>
+    </TouchableOpacity>
+  );
+
   const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    scrollContent: {
-      padding: getSpacing.md,
-    },
+    container: { flex: 1, backgroundColor: theme.background },
+    scrollContent: { padding: getSpacing.md },
     exerciseCard: {
       backgroundColor: theme.surface,
       borderRadius: getBorderRadius.lg,
@@ -115,10 +248,7 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
       borderWidth: 1,
       borderColor: theme.border,
     },
-    exerciseCardComplete: {
-      borderColor: theme.border,
-      borderWidth: 2,
-    },
+    exerciseCardComplete: { borderColor: theme.border, borderWidth: 2 },
     exerciseHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -128,32 +258,22 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
-    exerciseHeaderComplete: {
-      backgroundColor: `${theme.success}10`,
-    },
-    exerciseHeaderLeft: {
-      flex: 1,
-    },
+    exerciseHeaderComplete: { backgroundColor: `${theme.success}10` },
+    exerciseHeaderLeft: { flex: 1 },
     exerciseName: {
       fontSize: getTypography.h3.fontSize,
       fontWeight: "600",
       color: theme.text.primary,
       marginBottom: 4,
     },
-    exerciseNameComplete: {
-      color: theme.success,
-    },
+    exerciseNameComplete: { color: theme.success },
     setsProgress: {
       fontSize: getTypography.bodySmall.fontSize,
       color: theme.text.secondary,
       fontWeight: "500",
     },
-    setsProgressComplete: {
-      color: theme.success,
-    },
-    chevronButton: {
-      padding: getSpacing.sm,
-    },
+    setsProgressComplete: { color: theme.success },
+    chevronButton: { padding: getSpacing.sm },
     columnHeaders: {
       flexDirection: "row",
       alignItems: "center",
@@ -170,19 +290,10 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
       textTransform: "uppercase",
       letterSpacing: 0.5,
     },
-    setColumn: {
-      width: 50,
-    },
-    prevColumn: {
-      flex: 1,
-    },
-    dataColumn: {
-      width: 70,
-      textAlign: "center",
-    },
-    checkColumn: {
-      width: 44,
-    },
+    setColumn: { width: 50 },
+    prevColumn: { flex: 1 },
+    dataColumn: { width: 70, textAlign: "center" },
+    checkColumn: { width: 44 },
     addSetButton: {
       flexDirection: "row",
       alignItems: "center",
@@ -213,15 +324,23 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
       fontWeight: "600",
       marginTop: 4,
     },
-    emptyState: {
-      padding: getSpacing.xl,
-      alignItems: "center",
-    },
+    emptyState: { padding: getSpacing.xl, alignItems: "center" },
     emptyText: {
       fontSize: getTypography.body.fontSize,
       color: theme.text.tertiary,
       textAlign: "center",
     },
+    centerButtonContainer: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
+    adjustButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      gap: 4,
+      backgroundColor: `${theme.primary}10`,
+    },
+    adjustButtonText: { fontSize: 13, fontWeight: '600', color: theme.primary },
   });
 
   if (!workout.exercises || workout.exercises.length === 0) {
@@ -237,126 +356,136 @@ const WorkoutContent = ({ workout, onExerciseUpdate }) => {
 
   return (
     <KeyboardAvoidingView 
-    style={styles.container}
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    keyboardVerticalOffset={80}
-  >
-    <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0} // Increased to account for ActionBar
     >
-      {workout.exercises.map((workoutEx, exerciseIndex) => {
-        const exercise = allExercises.find((ex) => ex.id === workoutEx.exerciseId);
-        const completedSets = workoutEx.sets?.filter((s) => s.completed).length || 0;
-        const totalSets = workoutEx.sets?.length || 0;
-        const allComplete = completedSets === totalSets && totalSets > 0;
-        const isExpanded = expandedExercises.includes(exerciseIndex);
-        const tracking = exercise?.tracking || [];
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}      
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {workout.exercises.map((workoutEx, displayIndex) => {
+          const exerciseIndex = displayIndex;
+          const exercise = allExercises.find((ex) => ex.id === workoutEx.exerciseId);
+          const completedSets = workoutEx.sets?.filter((s) => s.completed).length || 0;
+          const totalSets = workoutEx.sets?.length || 0;
+          const allComplete = completedSets === totalSets && totalSets > 0;
+          const isExpanded = expandedExercises.includes(displayIndex);
+          const tracking = exercise?.tracking || [];
+          const lastPastWorkout = getLastPastWorkout(workoutEx.exerciseId, selectedDate);
+          console.log('Last past workout for', exercise?.name, lastPastWorkout, workoutEx.exerciseId, selectedDate);
 
-        return (
-          <Swipeable
-            key={`exercise-${exerciseIndex}-${workoutEx.exerciseId}`}
-            renderRightActions={() =>
-              renderExerciseRightActions(exerciseIndex, exercise?.name || "Exercise")
-            }
-            overshootRight={false}
-          >
-            <View
-              style={[
-                styles.exerciseCard,
-                allComplete && styles.exerciseCardComplete,
-              ]}
+          return (
+            <Swipeable
+              key={`exercise-${exerciseIndex}-${workoutEx.exerciseId}`}
+              renderRightActions={() =>
+                renderExerciseRightActions(exerciseIndex, exercise?.name || "Exercise")
+              }
+              overshootRight={false}
             >
-              <TouchableOpacity
-                style={[
-                  styles.exerciseHeader,
-                  allComplete && styles.exerciseHeaderComplete,
-                ]}
-                onPress={() => toggleExercise(exerciseIndex)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.exerciseHeaderLeft}>
-                  <Text
-                    style={[
-                      styles.exerciseName,
-                      allComplete && styles.exerciseNameComplete,
-                    ]}
-                  >
-                    {exercise?.name || "Unknown Exercise"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.setsProgress,
-                      allComplete && styles.setsProgressComplete,
-                    ]}
-                  >
-                    {completedSets}/{totalSets} sets complete
-                  </Text>
-                </View>
-
-                <View style={styles.chevronButton}>
-                  <Ionicons
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={24}
-                    color={allComplete ? theme.success : theme.text.secondary}
-                  />
-                </View>
-              </TouchableOpacity>
-
-              {isExpanded && (
-                <>
-                  <View style={styles.columnHeaders}>
-                    <Text style={[styles.columnHeader, styles.setColumn]}>SET</Text>
-                    <Text style={[styles.columnHeader, styles.prevColumn]}>PREV</Text>
-
-                    {tracking.includes("weight") && (
-                      <Text style={[styles.columnHeader, styles.dataColumn]}>LBS</Text>
-                    )}
-
-                    {tracking.includes("reps") && (
-                      <Text style={[styles.columnHeader, styles.dataColumn]}>REPS</Text>
-                    )}
-
-                    {tracking.includes("distance") && (
-                      <Text style={[styles.columnHeader, styles.dataColumn]}>MILES</Text>
-                    )}
-
-                    {tracking.includes("time") && (
-                      <Text style={[styles.columnHeader, styles.dataColumn]}>TIME</Text>
-                    )}
-
-                    <View style={styles.checkColumn} />
+              <View style={[styles.exerciseCard, allComplete && styles.exerciseCardComplete]}>
+                <TouchableOpacity
+                  style={[styles.exerciseHeader, allComplete && styles.exerciseHeaderComplete]}
+                  onPress={() => toggleExercise(displayIndex)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.exerciseHeaderLeft}>
+                    <Text style={[styles.exerciseName, allComplete && styles.exerciseNameComplete]}>
+                      {exercise?.name || "Unknown Exercise"}
+                    </Text>
+                    <Text style={[styles.setsProgress, allComplete && styles.setsProgressComplete]}>
+                      {completedSets}/{totalSets} sets complete
+                    </Text>
                   </View>
-
-                  {workoutEx.sets?.map((set, setIndex) => (
-                    <WorkoutRow
-                      key={set.id}
-                      set={set}
-                      setNumber={setIndex + 1}
-                      tracking={tracking}
-                      onUpdate={(updates) =>
-                        handleSetUpdate(exerciseIndex, setIndex, updates)
-                      }
-                      onDelete={() => handleDeleteSet(exerciseIndex, setIndex)}
+                  <View style={styles.chevronButton}>
+                    <Ionicons
+                      name={isExpanded ? "chevron-up" : "chevron-down"}
+                      size={24}
+                      color={allComplete ? theme.success : theme.text.secondary}
                     />
-                  ))}
+                  </View>
+                </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.addSetButton}
-                    onPress={() => handleAddSet(exerciseIndex)}
-                  >
-                    <Ionicons name="add" size={20} color={theme.primary} />
-                    <Text style={styles.addSetText}>Add Set</Text>
-                  </TouchableOpacity>
-                </>
-              )}
+                {isExpanded && (
+                  <>
+                    <View style={styles.columnHeaders}>
+                      <Text style={[styles.columnHeader, styles.setColumn]}>SET</Text>
+                      <Text style={[styles.columnHeader, styles.prevColumn]}>PREV</Text>
+                      {tracking.includes("weight") && <Text style={[styles.columnHeader, styles.dataColumn]}>LBS</Text>}
+                      {tracking.includes("reps") && <Text style={[styles.columnHeader, styles.dataColumn]}>REPS</Text>}
+                      {tracking.includes("distance") && <Text style={[styles.columnHeader, styles.dataColumn]}>MILES</Text>}
+                      {tracking.includes("time") && <Text style={[styles.columnHeader, styles.dataColumn]}>TIME</Text>}
+                      <View style={styles.checkColumn} />
+                    </View>
+
+                    {workoutEx.sets?.map((set, setIndex) => {
+                      const rowKey = `${exerciseIndex}-${setIndex}`;
+                      return (
+                        <WorkoutRow
+                          key={set.id}
+                          ref={(ref) => (rowRefs.current[rowKey] = ref)}
+                          set={set}
+                          setNumber={setIndex + 1}
+                          tracking={tracking}
+                          previousSet={lastPastWorkout?.sets?.[setIndex]}
+                          onUpdate={(updates) => handleSetUpdate(exerciseIndex, setIndex, updates)}
+                          onDelete={() => handleDeleteSet(exerciseIndex, setIndex)}
+                          onFocus={(field, inputRef) => handleInputFocus(exerciseIndex, setIndex, field, inputRef)}
+                          onBlur={() => setFocusedInput(null)}
+                        />
+                      );
+                    })}
+
+                    <TouchableOpacity
+                      style={styles.addSetButton}
+                      onPress={() => handleAddSet(exerciseIndex)}
+                    >
+                      <Ionicons name="add" size={20} color={theme.primary} />
+                      <Text style={styles.addSetText}>Add Set</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </Swipeable>
+          );
+        })}
+        
+        {/* CRITICAL FIX: The Spacer */}
+        {/* This View adds height to the bottom of the ScrollView ONLY when the keyboard is open */}
+        {/* It allows the ScrollView to move the last items much higher than usually allowed */}
+        {keyboardVisible && (
+          <View style={{ height: keyboardHeight.current + 80 }} />
+        )}
+      </ScrollView>
+
+      <KeyboardActionBar
+        visible={keyboardVisible}
+        onWillDismiss={() => setKeyboardVisible(false)}
+        leftButton={
+          canGoBack
+            ? { icon: 'chevron-back', text: 'Back', onPress: () => handleNavigate('prev') }
+            : canGoNext
+            ? { icon: 'chevron-forward', text: 'Next', onPress: () => handleNavigate('next') }
+            : undefined
+        }
+        centerContent={
+          focusedInput ? (
+            <View style={styles.centerButtonContainer}>
+              <TouchableOpacity style={styles.adjustButton} onPress={() => handleAdjust('decrement')}>
+                <Ionicons name="remove" size={20} color={theme.primary} />
+                <Text style={styles.adjustButtonText}>{getIncrementText()}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.adjustButton} onPress={() => handleAdjust('increment')}>
+                <Ionicons name="add" size={20} color={theme.primary} />
+                <Text style={styles.adjustButtonText}>{getIncrementText()}</Text>
+              </TouchableOpacity>
             </View>
-          </Swipeable>
-        );
-      })}
-    </ScrollView>
+          ) : undefined
+        }
+      />
     </KeyboardAvoidingView>
   );
 };
