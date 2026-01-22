@@ -235,10 +235,13 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
-    scrollContent: { padding: getSpacing.md },
     timerContainer: {
-      marginBottom: getSpacing.md,
+      paddingHorizontal: getSpacing.md,
+      paddingTop: getSpacing.md,
+      paddingBottom: getSpacing.sm,
+      backgroundColor: theme.background,
     },
+    scrollContent: { padding: getSpacing.md, paddingTop: 0 },
     exerciseCard: {
       backgroundColor: theme.surface,
       borderRadius: getBorderRadius.lg,
@@ -359,23 +362,22 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
+      {/* Timer Banner - Sticky at top, doesn't scroll */}
+      <View style={styles.timerContainer}>
+        <TimerBanner
+          onTimerComplete={() => {
+            console.log('⏰ Rest timer complete!');
+          }}
+        />
+      </View>
+
       <ScrollView
         ref={scrollViewRef}
-        style={styles.container}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}      
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Timer Banner - Always visible, compact */}
-        <View style={styles.timerContainer}>
-          <TimerBanner
-            onTimerComplete={() => {
-              console.log('⏰ Rest timer complete!');
-              // Could add haptic feedback or sound here
-            }}
-          />
-        </View>
-
         {/* Workout Exercises */}
         {workout.exercises.map((workoutEx, displayIndex) => {
           const exerciseIndex = displayIndex;
