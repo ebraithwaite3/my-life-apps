@@ -291,6 +291,7 @@ const WorkoutModal = ({
                     };
                     setWorkingWorkout(updatedWorkout);
                     setUpdatedExercises(mergedExercises);
+                    setOriginalExercises(JSON.parse(JSON.stringify(mergedExercises)));
                     setIsDirty(false);
                   } else if (workoutMode === 'complete') {
                     // Switching FROM complete TO edit - update working workout with exercises

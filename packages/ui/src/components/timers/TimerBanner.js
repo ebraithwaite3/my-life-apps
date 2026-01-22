@@ -4,495 +4,364 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Animated,
+  AppState,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
-import { SpinnerPicker } from '../dropdowns/SpinnerPicker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 
-/**
- * TimerBanner - Banner-style timer with setup and running states
- * 
- * Two modes:
- * 1. Setup Mode (timer not running): Show time selection spinners + START/CLOSE buttons
- * 2. Running Mode (timer active): Show countdown + PAUSE/END buttons
- * 
- * @param {Function} onClose - Called when close button pressed
- * @param {Function} onTimerStart - Called when timer starts (receives total seconds and notification ID setter)
- * @param {Function} onTimerPause - Called when timer pauses (receives remaining seconds)
- * @param {Function} onTimerResume - Called when timer resumes (receives remaining seconds and notification ID setter)
- * @param {Function} onTimerEnd - Called when timer ends/stops
- * @param {Function} onTimerComplete - Called when timer reaches 0
- */
-const TimerBanner = ({ 
-  onClose,
-  onTimerStart,
-  onTimerPause,
-  onTimerResume,
-  onTimerEnd,
-  onTimerComplete,
-}) => {
-  const { theme, getSpacing, getBorderRadius, getTypography } = useTheme();
+const TIMER_STORAGE_KEY = '@timer_state';
+
+Notifications.setNotificationHandler({
+  handleNotification: async (notification) => {
+    return {
+      shouldShowAlert: true, 
+      shouldPlaySound: true, 
+      shouldSetBadge: false,
+    };
+  },
+});
+
+const TimerBanner = ({ onTimerComplete }) => {
+  const { theme, getSpacing, getBorderRadius } = useTheme();
   
-  // Timer state
   const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [totalSeconds, setTotalSeconds] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(60);
+  const [totalSeconds, setTotalSeconds] = useState(60);
+  const [startTime, setStartTime] = useState(null);
+  const [notificationId, setNotificationId] = useState(null);
   const intervalRef = useRef(null);
+  const resetTimeoutRef = useRef(null); // Track the auto-reset timeout
+  const appState = useRef(AppState.currentState);
 
-  // Setup state (when not running)
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(5);
-  const [seconds, setSeconds] = useState(0);
-
-  // Picker visibility
-  const [showHoursPicker, setShowHoursPicker] = useState(false);
-  const [showMinutesPicker, setShowMinutesPicker] = useState(false);
-  const [showSecondsPicker, setShowSecondsPicker] = useState(false);
-
-  // Animation for progress bar
-  const progressAnim = useRef(new Animated.Value(1)).current;
-
-  // Format time for display
-  const formatTime = (totalSecs) => {
-    const hrs = Math.floor(totalSecs / 3600);
-    const mins = Math.floor((totalSecs % 3600) / 60);
-    const secs = totalSecs % 60;
-    
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Start timer
-  const handleStart = () => {
-    const total = (hours * 3600) + (minutes * 60) + seconds;
-    if (total === 0) return; // Don't start if time is 0
-    
-    setTotalSeconds(total);
-    setRemainingSeconds(total);
-    setIsRunning(true);
-    setIsPaused(false);
-    
-    // Call callback with total seconds
-    if (onTimerStart) {
-      onTimerStart(total);
-    }
-    
-    // Start countdown
-    intervalRef.current = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current);
-          setIsRunning(false);
-          handleTimerComplete();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  // Pause timer
-  const handlePause = () => {
-    clearInterval(intervalRef.current);
-    setIsPaused(true);
-    setIsRunning(false);
-    
-    // Call callback with remaining seconds
-    if (onTimerPause) {
-      onTimerPause(remainingSeconds);
-    }
-  };
-
-  // Resume timer
-  const handleResume = () => {
-    setIsRunning(true);
-    setIsPaused(false);
-    
-    // Call callback with remaining seconds
-    if (onTimerResume) {
-      onTimerResume(remainingSeconds);
-    }
-    
-    intervalRef.current = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current);
-          setIsRunning(false);
-          handleTimerComplete();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  // End/Stop timer
-  const handleEnd = () => {
-    clearInterval(intervalRef.current);
-    setIsRunning(false);
-    setIsPaused(false);
-    setRemainingSeconds(0);
-    setTotalSeconds(0);
-    
-    // Call callback
-    if (onTimerEnd) {
-      onTimerEnd();
-    }
-  };
-
-  // Timer completion
-  const handleTimerComplete = () => {
-    console.log('⏰ Timer Complete!');
-    
-    // Call callback
-    if (onTimerComplete) {
-      onTimerComplete();
-    }
-  };
-
-  // Close banner
-  const handleClose = () => {
-    handleEnd(); // Stop timer if running
-    console.log('CLOSE');
-    if (onClose) onClose();
-  };
-
-  // Update progress animation
   useEffect(() => {
-    if (totalSeconds > 0) {
-      const progress = remainingSeconds / totalSeconds;
-      Animated.timing(progressAnim, {
-        toValue: progress,
-        duration: 300,
-        useNativeDriver: false,
-      }).start();
+    loadTimerState();
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [startTime, totalSeconds, isRunning]);
+
+  useEffect(() => {
+    if (isRunning && startTime) {
+      saveTimerState();
     }
-  }, [remainingSeconds, totalSeconds]);
+  }, [isRunning, startTime, totalSeconds, notificationId]);
+
+  const handleAppStateChange = (nextAppState) => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      if (isRunning && startTime) {
+        recalculateTimer();
+      }
+    }
+    appState.current = nextAppState;
+  };
+
+  const saveTimerState = async () => {
+    try {
+      const state = { isRunning, startTime, totalSeconds, notificationId };
+      await AsyncStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error('Error saving timer state:', error);
+    }
+  };
+
+  const loadTimerState = async () => {
+    try {
+      const stateStr = await AsyncStorage.getItem(TIMER_STORAGE_KEY);
+      if (stateStr) {
+        const state = JSON.parse(stateStr);
+        if (state.isRunning && state.startTime) {
+          setTotalSeconds(state.totalSeconds);
+          setStartTime(state.startTime);
+          setNotificationId(state.notificationId);
+          setIsRunning(true);
+          recalculateTimer(state.startTime, state.totalSeconds);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading timer state:', error);
+    }
+  };
+
+  const clearTimerState = async () => {
+    try {
+      await AsyncStorage.removeItem(TIMER_STORAGE_KEY);
+    } catch (error) {
+      console.error('Error clearing timer state:', error);
+    }
+  };
+
+  const scheduleNotification = async (seconds) => {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') return null;
+  
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "⏰ Timer Complete!",
+          body: "Your rest timer has finished.",
+          sound: 'default',
+          data: { type: 'timer_complete', scheduledFor: seconds },
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          vibrate: [0, 250, 250, 250],
+          ...(Platform.OS === 'ios' && { interruptionLevel: 'timeSensitive' }),
+        },
+        trigger: { type: 'timeInterval', seconds: seconds, repeats: false },
+      });
+      setNotificationId(id);
+      return id;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const cancelNotification = async (id = notificationId) => {
+    if (id) {
+      try {
+        await Notifications.cancelScheduledNotificationAsync(id);
+        setNotificationId(null);
+      } catch (error) {}
+    }
+  };
+
+  const recalculateTimer = (savedStartTime = startTime, savedTotalSeconds = totalSeconds) => {
+    const now = Date.now();
+    const elapsed = Math.floor((now - savedStartTime) / 1000);
+    const remaining = Math.max(0, savedTotalSeconds - elapsed);
+    
+    // If we re-open the app and the timer finished more than 5 seconds ago
+    if (remaining <= 0 && elapsed >= savedTotalSeconds + 5) {
+        handleReset(); // Just reset it immediately, it's been done for a while
+        return;
+    }
+
+    if (remaining <= 0) {
+      handleTimerComplete();
+      return;
+    }
+    setRemainingSeconds(remaining);
+    startCountdown(remaining);
+  };
+
+  const startCountdown = (initialRemaining = remainingSeconds) => {
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        const newRemaining = prev - 1;
+        if (newRemaining <= 0) {
+          clearInterval(intervalRef.current);
+          handleTimerComplete();
+          return 0;
+        }
+        return newRemaining;
+      });
+    }, 1000);
+  };
+
+  const adjustTime = (delta) => {
+    if (isRunning) return;
+    const newTime = Math.max(5, Math.min(3600, totalSeconds + delta));
+    setTotalSeconds(newTime);
+    setRemainingSeconds(newTime);
+  };
+
+  const handleStart = async () => {
+    const now = Date.now();
+    setStartTime(now);
+    setIsRunning(true);
+    await scheduleNotification(totalSeconds);
+    startCountdown(totalSeconds);
+  };
+
+  const handleStop = async () => {
+    clearInterval(intervalRef.current);
+    setIsRunning(false);
+    await cancelNotification();
+  };
+
+  const handleReset = async () => {
+    clearInterval(intervalRef.current);
+    setIsRunning(false);
+    setRemainingSeconds(totalSeconds);
+    setStartTime(null);
+    
+    // Clear auto-reset timeout if it exists
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
+    
+    await cancelNotification();
+    await clearTimerState();
+  };
+
+  const handleTimerComplete = async () => {
+    clearInterval(intervalRef.current);
+    setIsRunning(false);
+    setRemainingSeconds(0);
+    
+    await cancelNotification();
+    await clearTimerState();
+    
+    if (onTimerComplete) onTimerComplete();
+
+    // Clear any existing reset timeout
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+    }
+
+    // AUTO-RESET DISPLAY: Wait 5 seconds, then reset to ready-to-go time
+    resetTimeoutRef.current = setTimeout(() => {
+      setRemainingSeconds(totalSeconds); // Just resets display value
+      setStartTime(null);                // NOT starting the timer
+      resetTimeoutRef.current = null;
+    }, 5000);
+  };
+
+  const formatTime = (secs) => {
+    const mins = Math.floor(secs / 60);
+    const remainingSecs = secs % 60;
+    if (mins > 0) return `${mins}:${remainingSecs.toString().padStart(2, '0')}`;
+    return `${secs}s`;
+  };
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       clearInterval(intervalRef.current);
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+      }
     };
   }, []);
 
-  // Create a date object for spinner (using current date + time values)
-  const createDateForSpinner = (hrs, mins, secs) => {
-    const date = new Date();
-    date.setHours(hrs, mins, secs, 0);
-    return date;
-  };
-
   const styles = StyleSheet.create({
-    banner: {
-      backgroundColor: theme.surface,
-      borderRadius: getBorderRadius.lg,
-      padding: getSpacing.lg,
-      borderWidth: 2,
-      borderColor: isRunning ? theme.success || '#4CAF50' : isPaused ? theme.warning || '#FFA500' : theme.border,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    header: {
+    container: {
       flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: getSpacing.md,
-    },
-    title: {
-      fontSize: getTypography.h4.fontSize,
-      fontWeight: '600',
-      color: theme.text.primary,
-    },
-    closeButton: {
-      padding: getSpacing.xs,
-    },
-    // Setup mode styles
-    setupContainer: {
-      alignItems: 'center',
-    },
-    timeSelectors: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: getSpacing.sm,
-      marginBottom: getSpacing.lg,
-    },
-    timeSelector: {
-      alignItems: 'center',
-    },
-    timeSelectorButton: {
-      backgroundColor: theme.background,
-      borderRadius: getBorderRadius.md,
+      backgroundColor: theme.surface,
+      borderRadius: getBorderRadius.l || 16,
+      paddingHorizontal: getSpacing.md,
+      paddingVertical: getSpacing.xs,
       borderWidth: 1,
-      borderColor: theme.border,
-      paddingHorizontal: getSpacing.lg,
-      paddingVertical: getSpacing.md,
-      minWidth: 70,
+      borderColor: isRunning ? theme.success + '40' : (remainingSeconds === 0 ? theme.success : theme.border),
+      height: 54,
+    },
+    pillGroup: {
+      flexDirection: 'row',
       alignItems: 'center',
-    },
-    timeSelectorValue: {
-      fontSize: 32,
-      fontWeight: '700',
-      color: theme.text.primary,
-    },
-    timeSelectorLabel: {
-      fontSize: getTypography.bodySmall.fontSize,
-      color: theme.text.secondary,
-      marginTop: getSpacing.xs,
-    },
-    timeSeparator: {
-      fontSize: 32,
-      fontWeight: '700',
-      color: theme.text.tertiary,
-      marginBottom: 20, // To align with values above labels
-    },
-    // Running mode styles
-    runningContainer: {
-      alignItems: 'center',
-    },
-    countdownDisplay: {
-      fontSize: 48,
-      fontWeight: '700',
-      color: theme.text.primary,
-      marginBottom: getSpacing.sm,
-      fontVariant: ['tabular-nums'],
-    },
-    progressContainer: {
-      width: '100%',
-      height: 6,
       backgroundColor: theme.background,
-      borderRadius: 3,
-      overflow: 'hidden',
-      marginBottom: getSpacing.lg,
+      borderRadius: getBorderRadius.m || 12,
+      paddingHorizontal: 4,
+      height: 38,
     },
-    progressBar: {
-      height: '100%',
-      backgroundColor: isRunning ? theme.success || '#4CAF50' : theme.warning || '#FFA500',
-    },
-    // Button styles
-    buttonRow: {
-      flexDirection: 'row',
+    adjustButton: {
+      width: 34,
+      height: 34,
+      alignItems: 'center',
       justifyContent: 'center',
-      gap: getSpacing.md,
     },
-    button: {
+    adjustButtonDisabled: {
+      opacity: 0.2,
+    },
+    timeDisplay: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: (isRunning || remainingSeconds === 0) ? theme.success : theme.text.primary,
+      fontVariant: ['tabular-nums'],
+      minWidth: 45,
+      textAlign: 'center',
+      marginHorizontal: 4,
+    },
+    actionButtons: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: getSpacing.lg,
-      paddingVertical: getSpacing.md,
-      borderRadius: getBorderRadius.md,
-      gap: getSpacing.xs,
-      minWidth: 120,
+      gap: 16, 
+    },
+    circleButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
       justifyContent: 'center',
     },
     startButton: {
       backgroundColor: theme.primary,
     },
-    pauseButton: {
-      backgroundColor: theme.warning || '#FFA500',
-    },
-    resumeButton: {
-      backgroundColor: theme.success || '#4CAF50',
-    },
-    endButton: {
+    stopButton: {
       backgroundColor: theme.error,
     },
-    secondaryButton: {
-      backgroundColor: theme.background,
+    resetButton: {
+      backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.border,
     },
-    buttonText: {
-      fontSize: getTypography.body.fontSize,
-      fontWeight: '600',
-      color: '#FFF',
-    },
-    secondaryButtonText: {
-      color: theme.text.primary,
-    },
   });
 
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
-
-  // Render setup mode (not running)
-  if (!isRunning && !isPaused) {
-    return (
-      <View style={styles.banner}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Set Timer</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-            <Ionicons name="close" size={24} color={theme.text.secondary} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.setupContainer}>
-          {/* Time Selectors */}
-          <View style={styles.timeSelectors}>
-            {/* Hours */}
-            <View style={styles.timeSelector}>
-              <TouchableOpacity
-                style={styles.timeSelectorButton}
-                onPress={() => setShowHoursPicker(true)}
-              >
-                <Text style={styles.timeSelectorValue}>
-                  {hours.toString().padStart(2, '0')}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.timeSelectorLabel}>hours</Text>
-            </View>
-
-            <Text style={styles.timeSeparator}>:</Text>
-
-            {/* Minutes */}
-            <View style={styles.timeSelector}>
-              <TouchableOpacity
-                style={styles.timeSelectorButton}
-                onPress={() => setShowMinutesPicker(true)}
-              >
-                <Text style={styles.timeSelectorValue}>
-                  {minutes.toString().padStart(2, '0')}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.timeSelectorLabel}>minutes</Text>
-            </View>
-
-            <Text style={styles.timeSeparator}>:</Text>
-
-            {/* Seconds */}
-            <View style={styles.timeSelector}>
-              <TouchableOpacity
-                style={styles.timeSelectorButton}
-                onPress={() => setShowSecondsPicker(true)}
-              >
-                <Text style={styles.timeSelectorValue}>
-                  {seconds.toString().padStart(2, '0')}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.timeSelectorLabel}>seconds</Text>
-            </View>
-          </View>
-
-          {/* Buttons */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton]}
-              onPress={handleClose}
-            >
-              <Ionicons name="close-outline" size={20} color={theme.text.primary} />
-              <Text style={[styles.buttonText, styles.secondaryButtonText]}>Close</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.startButton]}
-              onPress={handleStart}
-            >
-              <Ionicons name="play" size={20} color="#FFF" />
-              <Text style={styles.buttonText}>Start</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Hours Picker */}
-        <SpinnerPicker
-          visible={showHoursPicker}
-          mode="time"
-          value={createDateForSpinner(hours, 0, 0)}
-          onConfirm={(date) => {
-            setHours(date.getHours());
-            setShowHoursPicker(false);
-          }}
-          onClose={() => setShowHoursPicker(false)}
-        />
-
-        {/* Minutes Picker */}
-        <SpinnerPicker
-          visible={showMinutesPicker}
-          mode="time"
-          value={createDateForSpinner(0, minutes, 0)}
-          onConfirm={(date) => {
-            setMinutes(date.getMinutes());
-            setShowMinutesPicker(false);
-          }}
-          onClose={() => setShowMinutesPicker(false)}
-        />
-
-        {/* Seconds Picker */}
-        <SpinnerPicker
-          visible={showSecondsPicker}
-          mode="time"
-          value={createDateForSpinner(0, 0, seconds)}
-          onConfirm={(date) => {
-            setSeconds(date.getSeconds());
-            setShowSecondsPicker(false);
-          }}
-          onClose={() => setShowSecondsPicker(false)}
-        />
-      </View>
-    );
-  }
-
-  // Render running/paused mode
   return (
-    <View style={styles.banner}>
-      <View style={styles.header}>
-        <Text style={styles.title}>
-          {isPaused ? 'Timer Paused' : 'Timer Running'}
-        </Text>
-        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <Ionicons name="close" size={24} color={theme.text.secondary} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <View style={styles.pillGroup}>
+        {!isRunning ? (
+          <>
+            <TouchableOpacity
+              style={[styles.adjustButton, totalSeconds <= 5 && styles.adjustButtonDisabled]}
+              onPress={() => adjustTime(-5)}
+              disabled={totalSeconds <= 5}
+            >
+              <Ionicons 
+                name="remove" 
+                size={18} 
+                color={totalSeconds <= 5 ? theme.text.tertiary : theme.text.primary} 
+              />
+            </TouchableOpacity>
+
+            <Text style={styles.timeDisplay}>
+                {remainingSeconds === 0 ? "Done" : formatTime(remainingSeconds)}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.adjustButton}
+              onPress={() => adjustTime(5)}
+            >
+              <Ionicons name="add" size={18} color={theme.text.primary} />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={{ paddingHorizontal: 16 }}>
+            <Text style={styles.timeDisplay}>{formatTime(remainingSeconds)}</Text>
+          </View>
+        )}
       </View>
 
-      <View style={styles.runningContainer}>
-        {/* Countdown Display */}
-        <Text style={styles.countdownDisplay}>
-          {formatTime(remainingSeconds)}
-        </Text>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[styles.circleButton, styles.resetButton]}
+          onPress={handleReset}
+        >
+          <Ionicons name="refresh" size={18} color={theme.text.secondary} />
+        </TouchableOpacity>
 
-        {/* Progress Bar */}
-        <View style={styles.progressContainer}>
-          <Animated.View style={[styles.progressBar, { width: progressWidth }]} />
-        </View>
-
-        {/* Buttons */}
-        <View style={styles.buttonRow}>
+        {isRunning ? (
           <TouchableOpacity
-            style={[styles.button, styles.endButton]}
-            onPress={handleEnd}
+            style={[styles.circleButton, styles.stopButton]}
+            onPress={handleStop}
           >
-            <Ionicons name="stop" size={20} color="#FFF" />
-            <Text style={styles.buttonText}>End</Text>
+            <Ionicons name="stop" size={16} color="#FFF" />
           </TouchableOpacity>
-
-          {isPaused ? (
-            <TouchableOpacity
-              style={[styles.button, styles.resumeButton]}
-              onPress={handleResume}
-            >
-              <Ionicons name="play" size={20} color="#FFF" />
-              <Text style={styles.buttonText}>Resume</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.button, styles.pauseButton]}
-              onPress={handlePause}
-            >
-              <Ionicons name="pause" size={20} color="#FFF" />
-              <Text style={styles.buttonText}>Pause</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.circleButton, styles.startButton]}
+            onPress={handleStart}
+          >
+            <Ionicons name="play" size={16} color="#FFF" style={{ marginLeft: 2 }} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

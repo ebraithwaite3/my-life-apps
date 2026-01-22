@@ -17,12 +17,11 @@ import Swipeable from "react-native-gesture-handler/Swipeable";
 import { useTheme } from "@my-apps/contexts";
 import { useWorkoutData } from "../../contexts/WorkoutDataContext";
 import WorkoutRow from "../workout/WorkoutRow";
-import { KeyboardActionBar } from "@my-apps/ui";
+import { KeyboardActionBar, TimerBanner } from "@my-apps/ui";
 
 const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const { allExercises, workoutHistory, getLastPastWorkout } = useWorkoutData();
-  console.log("Workout History:", workoutHistory, "Workout", workout);
 
   const [expandedExercises, setExpandedExercises] = React.useState([]);
   const [keyboardVisible, setKeyboardVisible] = React.useState(false);
@@ -55,40 +54,37 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
   }, []);
 
   // Handle input focus with auto-scroll logic
-const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
-  setFocusedInput({ exerciseIndex, setIndex, field });
+  const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
+    setFocusedInput({ exerciseIndex, setIndex, field });
 
-  if (!inputRef || !scrollViewRef.current) return;
+    if (!inputRef || !scrollViewRef.current) return;
 
-  // Double requestAnimationFrame ensures layout is complete (React Native standard)
-  requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const scrollNode = findNodeHandle(scrollViewRef.current);
-      const inputNode = findNodeHandle(inputRef);
-      
-      if (!scrollNode || !inputNode) return;
+      requestAnimationFrame(() => {
+        const scrollNode = findNodeHandle(scrollViewRef.current);
+        const inputNode = findNodeHandle(inputRef);
+        
+        if (!scrollNode || !inputNode) return;
 
-      UIManager.measureLayout(
-        inputNode,
-        scrollNode,
-        (error) => {
-          if (__DEV__) console.warn('measureLayout error:', error);
-        },
-        (x, y, width, height) => {
-          // Position the focused row 100px from the TOP of the scroll area
-          // This guarantees visibility regardless of keyboard size
-          const topMargin = 100;
-          const scrollToY = Math.max(0, y - topMargin);
-          
-          scrollViewRef.current.scrollTo({
-            y: scrollToY,
-            animated: true,
-          });
-        }
-      );
+        UIManager.measureLayout(
+          inputNode,
+          scrollNode,
+          (error) => {
+            if (__DEV__) console.warn('measureLayout error:', error);
+          },
+          (x, y, width, height) => {
+            const topMargin = 100;
+            const scrollToY = Math.max(0, y - topMargin);
+            
+            scrollViewRef.current.scrollTo({
+              y: scrollToY,
+              animated: true,
+            });
+          }
+        );
+      });
     });
-  });
-};
+  };
 
   const toggleExercise = (index) => {
     setExpandedExercises((prev) =>
@@ -240,6 +236,9 @@ const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
     scrollContent: { padding: getSpacing.md },
+    timerContainer: {
+      marginBottom: getSpacing.md,
+    },
     exerciseCard: {
       backgroundColor: theme.surface,
       borderRadius: getBorderRadius.lg,
@@ -358,7 +357,7 @@ const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0} // Increased to account for ActionBar
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
       <ScrollView
         ref={scrollViewRef}
@@ -367,6 +366,17 @@ const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Timer Banner - Always visible, compact */}
+        <View style={styles.timerContainer}>
+          <TimerBanner
+            onTimerComplete={() => {
+              console.log('⏰ Rest timer complete!');
+              // Could add haptic feedback or sound here
+            }}
+          />
+        </View>
+
+        {/* Workout Exercises */}
         {workout.exercises.map((workoutEx, displayIndex) => {
           const exerciseIndex = displayIndex;
           const exercise = allExercises.find((ex) => ex.id === workoutEx.exerciseId);
@@ -376,7 +386,6 @@ const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
           const isExpanded = expandedExercises.includes(displayIndex);
           const tracking = exercise?.tracking || [];
           const lastPastWorkout = getLastPastWorkout(workoutEx.exerciseId, selectedDate);
-          console.log('Last past workout for', exercise?.name, lastPastWorkout, workoutEx.exerciseId, selectedDate);
 
           return (
             <Swipeable
@@ -453,9 +462,6 @@ const handleInputFocus = (exerciseIndex, setIndex, field, inputRef) => {
           );
         })}
         
-        {/* CRITICAL FIX: The Spacer */}
-        {/* This View adds height to the bottom of the ScrollView ONLY when the keyboard is open */}
-        {/* It allows the ScrollView to move the last items much higher than usually allowed */}
         {keyboardVisible && (
           <View style={{ height: keyboardHeight.current + 80 }} />
         )}

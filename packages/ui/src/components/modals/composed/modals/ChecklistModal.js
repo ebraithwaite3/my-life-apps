@@ -406,14 +406,14 @@ const ChecklistModal = ({
                   selectedValue={checklistMode}
                   onSelect={(value) => {
                     if (checklistMode === "edit" && editContentRef.current) {
-                      const currentState =
-                        editContentRef.current.getCurrentState();
+                      const currentState = editContentRef.current.getCurrentState();
                       const updatedChecklist = {
                         ...workingChecklist,
                         ...currentState,
                       };
                       setWorkingChecklist(updatedChecklist);
                       setUpdatedItems(currentState.items);
+                      setInitialChecklist(JSON.parse(JSON.stringify(updatedChecklist))); // ← ADD THIS LINE
                     } else if (checklistMode === "complete") {
                       setWorkingChecklist((prev) => ({
                         ...prev,
