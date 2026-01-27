@@ -47,6 +47,14 @@ export const DataProvider = ({ children }) => {
   const [currentDate, setCurrentDate] = useState(DateTime.local().toISODate());
   console.log("Selected Date:", selectedDate, selectedMonth, selectedYear);
 
+  // State for adding a checklist to an event
+  const [addingToEvent, setAddingToEvent] = useState({
+    isActive: false,
+    itemsToMove: [],
+    returnPath: null,
+    sourceInfo: null,
+  });
+
   // USE HOOKS FOR ALL SUBSCRIPTIONS
   const { user, loading, error: userError } = useUserDoc(db, authUser?.uid);
   const {
@@ -238,6 +246,10 @@ const value = useMemo(
       unreadMessagesCount,
       unacceptedChecklistsCount,
       messagesCount,
+
+      // Add Event States
+      addingToEvent,
+      setAddingToEvent,
   
       // Data from hooks
       groups,
@@ -307,6 +319,7 @@ const value = useMemo(
       selectedDate,
       selectedMonth,
       selectedYear,
+      addingToEvent,
       getEventsForCalendar,
       getEventsForMonth,
       getEventsForDay,

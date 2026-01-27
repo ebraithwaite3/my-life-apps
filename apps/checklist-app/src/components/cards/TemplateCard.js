@@ -1,26 +1,38 @@
 import React, { useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  Animated,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import { ModalDropdown } from "@my-apps/ui";
 import { Swipeable } from "react-native-gesture-handler";
 
-const TemplateCard = ({ 
-  template, 
-  onPress, 
-  onDelete, 
+const TemplateCard = ({
+  template,
+  onPress,
+  onDelete,
   onMove,
-  availableMoveTargets = []
+  availableMoveTargets = [],
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [anchorPosition, setAnchorPosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [anchorPosition, setAnchorPosition] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const moveButtonRef = useRef(null);
   const swipeableRef = useRef(null);
 
   const handleMovePress = () => {
     if (availableMoveTargets.length === 0) return;
-    
+
     if (moveButtonRef.current) {
       moveButtonRef.current.measureInWindow((x, y, width, height) => {
         setAnchorPosition({ x, y, width, height });
@@ -37,7 +49,7 @@ const TemplateCard = ({
         {
           text: "Cancel",
           style: "cancel",
-          onPress: () => swipeableRef.current?.close()
+          onPress: () => swipeableRef.current?.close(),
         },
         {
           text: "Delete",
@@ -45,68 +57,73 @@ const TemplateCard = ({
           onPress: () => {
             swipeableRef.current?.close();
             onDelete(template);
-          }
-        }
+          },
+        },
       ]
     );
   };
 
   const handleMove = (target) => {
     setShowMoveModal(false);
-    const targetName = target.type === 'personal' ? 'Personal' : target.groupName;
-    Alert.alert(
-      "Move Template",
-      `Move "${template.name}" to ${targetName}?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Move",
-          onPress: () => onMove(template, target)
-        }
-      ]
-    );
+    const targetName =
+      target.type === "personal" ? "Personal" : target.groupName;
+    Alert.alert("Move Template", `Move "${template.name}" to ${targetName}?`, [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Move",
+        onPress: () => onMove(template, target),
+      },
+    ]);
   };
 
   // Build move options for dropdown
-  const moveOptions = availableMoveTargets.map(target => ({
-    label: target.type === 'personal' ? 'Move to Personal' : `Move to ${target.groupName}`,
-    action: () => handleMove(target)
+  const moveOptions = availableMoveTargets.map((target) => ({
+    label:
+      target.type === "personal"
+        ? "Move to Personal"
+        : `Move to ${target.groupName}`,
+    action: () => handleMove(target),
   }));
 
   // Format time display (convert HH:mm to 12-hour format)
   const formatTimeDisplay = (timeString) => {
     if (!timeString) return null;
-    
-    const [hours, minutes] = timeString.split(':');
+
+    const [hours, minutes] = timeString.split(":");
     const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const ampm = hour >= 12 ? "PM" : "AM";
     const displayHour = hour % 12 || 12;
-    
+
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
   // Render the 3-icon transfer visualization
   const renderTransferIcons = () => {
     const isGroup = template.isGroupTemplate;
-    
+
     // Icon configuration - show what transformation will happen
     const sourceIcon = isGroup ? "people" : "person";
     const targetIcon = isGroup ? "person" : "people";
     const arrowIcon = "arrow-forward";
-    
+
     return (
       <View style={styles.transferContainer}>
         <Ionicons name={sourceIcon} size={14} color={theme.text.secondary} />
-        <Ionicons name={arrowIcon} size={12} color={theme.text.secondary} style={{ marginHorizontal: 2 }} />
+        <Ionicons
+          name={arrowIcon}
+          size={12}
+          color={theme.text.secondary}
+          style={{ marginHorizontal: 2 }}
+        />
         <Ionicons name={targetIcon} size={16} color={theme.primary} />
       </View>
     );
   };
 
-  const hasScreenTime = template.items?.some(i => i.requiredForScreenTime);
+  const hasScreenTime = template.items?.some((i) => i.requiredForScreenTime);
   const showThirdLine = hasScreenTime || template.isGroupTemplate;
 
   // Render swipe actions (delete button)
@@ -114,15 +131,12 @@ const TemplateCard = ({
     const scale = dragX.interpolate({
       inputRange: [-80, 0],
       outputRange: [1, 0],
-      extrapolate: 'clamp',
+      extrapolate: "clamp",
     });
 
     return (
       <Animated.View style={{ transform: [{ scale }] }}>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDelete}
-        >
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
           <Ionicons name="trash-outline" size={24} color="#fff" />
           <Text style={styles.deleteButtonText}>Delete</Text>
         </TouchableOpacity>
@@ -208,7 +222,7 @@ const TemplateCard = ({
     groupNameText: {
       fontSize: getTypography.bodySmall.fontSize,
       color: theme.primary,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     moveButton: {
       paddingVertical: getSpacing.xs,
@@ -218,12 +232,12 @@ const TemplateCard = ({
       borderWidth: 1,
       borderColor: theme.border,
       marginLeft: getSpacing.sm,
-      alignSelf: 'center',
+      alignSelf: "center",
     },
     transferContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
     },
     deleteButton: {
       backgroundColor: theme.error,
@@ -250,7 +264,7 @@ const TemplateCard = ({
         overshootRight={false}
         containerStyle={styles.swipeableContainer}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.templateCard}
           onPress={() => onPress(template)}
           activeOpacity={0.7}
@@ -262,13 +276,19 @@ const TemplateCard = ({
               <View
                 style={[
                   styles.iconBadge,
-                  template.isGroupTemplate ? styles.groupIconBadge : styles.personalIconBadge
+                  template.isGroupTemplate
+                    ? styles.groupIconBadge
+                    : styles.personalIconBadge,
                 ]}
               >
                 <Ionicons
                   name={template.isGroupTemplate ? "people" : "person"}
                   size={12}
-                  color={template.isGroupTemplate ? theme.primary : theme.text.secondary}
+                  color={
+                    template.isGroupTemplate
+                      ? theme.primary
+                      : theme.text.secondary
+                  }
                 />
               </View>
 
@@ -283,15 +303,22 @@ const TemplateCard = ({
                 <View style={styles.metadataRow}>
                   {/* Item count */}
                   <Text style={styles.metadataText}>
-                    {template.items?.length || 0} item{template.items?.length !== 1 ? 's' : ''}
+                    {template.items?.length || 0} item
+                    {template.items?.length !== 1 ? "s" : ""}
                   </Text>
 
                   {/* Default reminder time */}
                   {template.defaultReminderTime && (
                     <View style={styles.metadataItem}>
-                      <Ionicons name="time-outline" size={14} color={theme.text.secondary} />
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color={theme.text.secondary}
+                      />
                       <Text style={styles.metadataText}>
                         {formatTimeDisplay(template.defaultReminderTime)}
+                        {/* ✅ ADD RECURRING INDICATOR */}
+                        {template.defaultIsRecurring && " (Recurring)"}
                       </Text>
                     </View>
                   )}
@@ -299,7 +326,11 @@ const TemplateCard = ({
                   {/* Default notify admin */}
                   {template.defaultNotifyAdmin && (
                     <View style={styles.metadataItem}>
-                      <Ionicons name="notifications-outline" size={14} color={theme.text.secondary} />
+                      <Ionicons
+                        name="notifications-outline"
+                        size={14}
+                        color={theme.text.secondary}
+                      />
                       <Text style={styles.metadataText}>Admin</Text>
                     </View>
                   )}
@@ -311,7 +342,11 @@ const TemplateCard = ({
                     {/* Screen time indicator */}
                     {hasScreenTime && (
                       <View style={styles.screenTimeItem}>
-                        <Ionicons name="phone-portrait" size={12} color={theme.primary} />
+                        <Ionicons
+                          name="phone-portrait"
+                          size={12}
+                          color={theme.primary}
+                        />
                         <Text style={styles.screenTimeText}>Screen time</Text>
                       </View>
                     )}

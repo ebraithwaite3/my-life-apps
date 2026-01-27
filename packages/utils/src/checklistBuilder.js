@@ -14,6 +14,8 @@ export const buildChecklistObject = ({
   notifyAdminOnCompletion,
   defaultNotifyAdmin,
   defaultReminderTime,
+  defaultIsRecurring,        // ✅ NEW
+  defaultRecurringConfig,    // ✅ NEW
   hasEventTime,
   eventStartTime,
 }) => {
@@ -69,17 +71,25 @@ export const buildChecklistObject = ({
   };
 
   if (isTemplate) {
+    // ✅ TEMPLATES: Save default values
     if (defaultNotifyAdmin) {
       newChecklist.defaultNotifyAdmin = true;
     }
     if (defaultReminderTime) {
       newChecklist.defaultReminderTime = defaultReminderTime;
     }
+    if (defaultIsRecurring) {
+      newChecklist.defaultIsRecurring = true;
+      newChecklist.defaultRecurringConfig = defaultRecurringConfig;
+    }
   } else {
+    // REGULAR CHECKLISTS: Save actual values
     if (notifyAdminOnCompletion) {
       newChecklist.notifyAdmin = true;
     }
 
+    // Note: Reminders for regular checklists are now handled via pendingNotifications collection
+    // These fields (reminderMinutes, reminderTime) are legacy and only used for calendar events
     if (hasEventTime && reminderMinutes !== null) {
       const eventTime = DateTime.fromISO(eventStartTime.toISOString());
       const reminderTimeObj = DateTime.fromISO(reminderMinutes);

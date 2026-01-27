@@ -10,20 +10,17 @@ const getStartOfDay = (date = null) =>
 const getEndOfDay = (date = null) =>
   (date ? DateTime.fromJSDate(date) : DateTime.local()).endOf("day").toJSDate();
 
-// NEW: Round to nearest 30 minutes
+// Round to nearest 30 minutes
 const getRoundedToNearestHalfHour = (date = null) => {
   const dt = date ? DateTime.fromJSDate(date) : DateTime.now();
   const minutes = dt.minute;
 
   let roundedMinutes;
   if (minutes < 15) {
-    // 0-14 minutes → round down to :00
     roundedMinutes = 0;
   } else if (minutes < 45) {
-    // 15-44 minutes → round to :30
     roundedMinutes = 30;
   } else {
-    // 45-59 minutes → round up to next hour :00
     return dt
       .plus({ hours: 1 })
       .set({ minute: 0, second: 0, millisecond: 0 })
@@ -35,15 +32,27 @@ const getRoundedToNearestHalfHour = (date = null) => {
     .toJSDate();
 };
 
-// NEW: Get 1 hour after rounded time
+// Get 1 hour after rounded time
 const getOneHourAfterRounded = (date = null) => {
   const rounded = getRoundedToNearestHalfHour(date);
   return DateTime.fromJSDate(rounded).plus({ hours: 1 }).toJSDate();
 };
 
+// NEW: Normalize reminder to consistent object format
+const normalizeReminder = (reminder) => {
+  if (!reminder) return null;
+  if (typeof reminder === "string") {
+    return {
+      scheduledFor: reminder,
+      isRecurring: false,
+    };
+  }
+  return reminder;
+};
+
 /**
  * useEventFormState - Shared form state for EventModal
- * * Manages all form state (title, dates, calendar, etc.)
+ * Manages all form state (title, dates, calendar, etc.)
  * Used by ALL app EventModals
  */
 export const useEventFormState = ({
@@ -55,7 +64,7 @@ export const useEventFormState = ({
   defaultTitle = "Event",
   userPreferences = {},
 }) => {
-  console.log("GRoups in useEventFormState:", groups);
+  console.log("Groups in useEventFormState:", groups);
   const { allCalendars: fullCalendars } = useData();
 
   const isEditing = event !== null;
@@ -101,60 +110,44 @@ export const useEventFormState = ({
     return "internal";
   }, [availableCalendars, userPreferences?.defaultCalendarId]);
 
-  // Form state - CHANGED: Use rounded current time as default
+  // Form state
   const [title, setTitle] = useState(defaultTitle);
-  const [isAllDay, setIsAllDay] = useState(false); // Already false, confirmed!
+  const [isAllDay, setIsAllDay] = useState(false);
   const [startDate, setStartDate] = useState(getRoundedToNearestHalfHour);
   const [endDate, setEndDate] = useState(getOneHourAfterRounded);
-
-  const [selectedCalendarId, setSelectedCalendarId] =
-    useState(defaultCalendarId);
+  const [selectedCalendarId, setSelectedCalendarId] = useState(defaultCalendarId);
 
   const membersToNotify = useMemo(() => {
-    // Safety check - fullCalendars might be undefined/loading
     if (!fullCalendars || !selectedCalendarId) {
       return [];
     }
 
-    // Get the full calendar document (not just metadata)
     const fullCalendar = fullCalendars[selectedCalendarId];
 
     if (!fullCalendar) {
       console.log("No full calendar found for:", selectedCalendarId);
-      // Find the group, based on selectedCalendarId with group- removed, in the groups array
       const groupId =
         selectedCalendarId.startsWith("group-") &&
         selectedCalendarId.replace("group-", "");
       const group = groups.find((g) => g.groupId === groupId);
       if (group) {
-        // map through and create an array of member userIds
         const memberIds = group.members
           ? group.members.map((member) => member.userId)
           : [];
-        console.log(
-          `➡️ Group members for ${selectedCalendarId}:`,
-          memberIds
-        );
+        console.log(`➡️ Group members for ${selectedCalendarId}:`, memberIds);
         return memberIds;
       }
       return [];
     }
 
-    // Use calendar's subscribingUsers directly
     const subscribers = fullCalendar.subscribingUsers || [];
-
-    console.log(
-      `➡️ Calendar subscribers for ${selectedCalendarId}:`,
-      subscribers
-    );
+    console.log(`➡️ Calendar subscribers for ${selectedCalendarId}:`, subscribers);
     return subscribers;
-  }, [selectedCalendarId, fullCalendars]);
-  console.log("✅ useEventFormState - membersToNotify**:", membersToNotify);
+  }, [selectedCalendarId, fullCalendars, groups]);
 
-  console.log(
-    "✅ useEventFormState** - selectedCalendarId:",
-    selectedCalendarId
-  );
+  console.log("✅ useEventFormState - membersToNotify:", membersToNotify);
+  console.log("✅ useEventFormState - selectedCalendarId:", selectedCalendarId);
+
   const [description, setDescription] = useState("");
   const [reminderMinutes, setReminderMinutes] = useState(null);
   const [errors, setErrors] = useState([]);
@@ -185,15 +178,27 @@ export const useEventFormState = ({
   useEffect(() => {
     if (!isVisible) return;
 
-    // If we have an event (either editing OR adding activity to existing event)
     if (event) {
       console.log("📅 Initializing with event data:", event.calendarId);
       setTitle(event.title || defaultTitle);
       setIsAllDay(event.isAllDay ?? false);
-      setSelectedCalendarId(event.calendarId || defaultCalendarId); // ← Use event's calendar!
+      
+      // ✅ FIX: Check for groupId first to determine correct calendar
+      if (event.groupId) {
+        // Group event - use group calendar ID
+        setSelectedCalendarId(`group-${event.groupId}`);
+        console.log("📅 Group event detected, using calendar:", `group-${event.groupId}`);
+      } else {
+        // Personal or Google calendar event
+        setSelectedCalendarId(event.calendarId || defaultCalendarId);
+        console.log("📅 Personal event, using calendar:", event.calendarId);
+      }
+      
       setDescription(event.description || "");
-      setReminderMinutes(event.reminderMinutes ?? null);
-
+      
+      // ✅ NORMALIZE REMINDER HERE
+      setReminderMinutes(normalizeReminder(event.reminderMinutes));
+    
       if (event.startTime) setStartDate(new Date(event.startTime));
       if (event.endTime) setEndDate(new Date(event.endTime));
     } else {
@@ -227,7 +232,7 @@ export const useEventFormState = ({
       setTitle(defaultTitle);
       setIsAllDay(false);
       setReminderMinutes(null);
-      setSelectedCalendarId(defaultCalendarId); // ← Use default for NEW events
+      setSelectedCalendarId(defaultCalendarId);
       setDescription("");
       setSelectedActivity(null);
     }
@@ -278,8 +283,8 @@ export const useEventFormState = ({
   const resetForm = () => {
     setTitle(defaultTitle);
     setIsAllDay(false);
-    setStartDate(getRoundedToNearestHalfHour()); // CHANGED
-    setEndDate(getOneHourAfterRounded()); // CHANGED
+    setStartDate(getRoundedToNearestHalfHour());
+    setEndDate(getOneHourAfterRounded());
     setSelectedCalendarId(defaultCalendarId);
     setDescription("");
     setReminderMinutes(null);

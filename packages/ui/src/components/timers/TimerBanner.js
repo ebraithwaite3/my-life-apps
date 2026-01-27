@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,14 @@ import {
   StyleSheet,
   AppState,
   Platform,
+  TextInput,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
 
 const TIMER_STORAGE_KEY = '@timer_state';
 
@@ -24,7 +27,11 @@ Notifications.setNotificationHandler({
   },
 });
 
-const TimerBanner = ({ onTimerComplete }) => {
+const TimerBanner = forwardRef(({ 
+  onTimerComplete, 
+  onEditingChange,
+  maxSeconds = 3600 // Default to 1 hour, can be overridden
+}, ref) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
   
   const [isRunning, setIsRunning] = useState(false);
@@ -32,9 +39,37 @@ const TimerBanner = ({ onTimerComplete }) => {
   const [totalSeconds, setTotalSeconds] = useState(60);
   const [startTime, setStartTime] = useState(null);
   const [notificationId, setNotificationId] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [timeInput, setTimeInput] = useState('');
+  const [hasError, setHasError] = useState(false);
   const intervalRef = useRef(null);
-  const resetTimeoutRef = useRef(null); // Track the auto-reset timeout
+  const resetTimeoutRef = useRef(null);
   const appState = useRef(AppState.currentState);
+  const inputRef = useRef(null);
+  
+  // Animated error height
+  const errorAnim = useRef(new Animated.Value(0)).current;
+
+  // Expose finishEditing to parent via ref
+  useImperativeHandle(ref, () => ({
+    finishEditing: handleTimeInputDone,
+  }));
+
+  // Notify parent when editing state changes
+  useEffect(() => {
+    if (onEditingChange) {
+      onEditingChange(isEditing);
+    }
+  }, [isEditing, onEditingChange]);
+
+  // Animate error message
+  useEffect(() => {
+    Animated.timing(errorAnim, {
+      toValue: hasError ? 1 : 0,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+  }, [hasError]);
 
   useEffect(() => {
     loadTimerState();
@@ -134,9 +169,8 @@ const TimerBanner = ({ onTimerComplete }) => {
     const elapsed = Math.floor((now - savedStartTime) / 1000);
     const remaining = Math.max(0, savedTotalSeconds - elapsed);
     
-    // If we re-open the app and the timer finished more than 5 seconds ago
     if (remaining <= 0 && elapsed >= savedTotalSeconds + 5) {
-        handleReset(); // Just reset it immediately, it's been done for a while
+        handleReset();
         return;
     }
 
@@ -165,9 +199,113 @@ const TimerBanner = ({ onTimerComplete }) => {
 
   const adjustTime = (delta) => {
     if (isRunning) return;
-    const newTime = Math.max(5, Math.min(3600, totalSeconds + delta));
+    const newTime = Math.max(5, Math.min(maxSeconds, totalSeconds + delta));
     setTotalSeconds(newTime);
     setRemainingSeconds(newTime);
+  };
+
+  // Format time in MM:SS or HH:MM:SS for display
+  const formatTimeDisplay = (seconds) => {
+    if (!seconds) return "00:00";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hrs > 0) {
+      return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Format time input as user types (auto-insert colons)
+  const formatTimeInput = (text) => {
+    const digits = text.replace(/\D/g, '');
+    
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) {
+      return `${digits.slice(0, -2)}:${digits.slice(-2)}`;
+    }
+    return `${digits.slice(0, -4)}:${digits.slice(-4, -2)}:${digits.slice(-2)}`;
+  };
+
+  // Parse formatted time back to total seconds
+  const parseTimeToSeconds = (formattedTime) => {
+    const parts = formattedTime.split(':').map(p => parseInt(p) || 0);
+    
+    if (parts.length === 1) {
+      return parts[0];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    } else {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+  };
+
+  // Handle long press on time display
+  const handleLongPress = () => {
+    if (isRunning) return;
+    
+    const formatted = formatTimeDisplay(totalSeconds);
+    setTimeInput(formatted);
+    setHasError(false);
+    setIsEditing(true);
+    
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  };
+
+  // Handle time input change with improved validation
+  const handleTimeInputChange = (text) => {
+    const formatted = formatTimeInput(text);
+    setTimeInput(formatted);
+    
+    // Only validate after 2+ digits to avoid premature errors
+    const digits = text.replace(/\D/g, '');
+    
+    if (digits.length < 2) {
+      setHasError(false);
+      return;
+    }
+
+    const seconds = parseTimeToSeconds(formatted);
+    
+    if (seconds < 5 || seconds > maxSeconds) {
+      // Haptic feedback on error state change
+      if (!hasError) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+      }
+      setHasError(true);
+    } else {
+      setHasError(false);
+    }
+  };
+
+  // Handle blur or done with auto-correction
+  const handleTimeInputDone = () => {
+    if (!timeInput) {
+      setIsEditing(false);
+      setHasError(false);
+      return;
+    }
+
+    let seconds = parseTimeToSeconds(timeInput);
+    
+    // Auto-correct to valid range instead of rejecting
+    if (seconds < 5) {
+      seconds = 5;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } else if (seconds > maxSeconds) {
+      seconds = maxSeconds;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+    
+    setTotalSeconds(seconds);
+    setRemainingSeconds(seconds);
+    setIsEditing(false);
+    setHasError(false);
+    setTimeInput('');
   };
 
   const handleStart = async () => {
@@ -190,7 +328,6 @@ const TimerBanner = ({ onTimerComplete }) => {
     setRemainingSeconds(totalSeconds);
     setStartTime(null);
     
-    // Clear auto-reset timeout if it exists
     if (resetTimeoutRef.current) {
       clearTimeout(resetTimeoutRef.current);
       resetTimeoutRef.current = null;
@@ -210,15 +347,13 @@ const TimerBanner = ({ onTimerComplete }) => {
     
     if (onTimerComplete) onTimerComplete();
 
-    // Clear any existing reset timeout
     if (resetTimeoutRef.current) {
       clearTimeout(resetTimeoutRef.current);
     }
 
-    // AUTO-RESET DISPLAY: Wait 5 seconds, then reset to ready-to-go time
     resetTimeoutRef.current = setTimeout(() => {
-      setRemainingSeconds(totalSeconds); // Just resets display value
-      setStartTime(null);                // NOT starting the timer
+      setRemainingSeconds(totalSeconds);
+      setStartTime(null);
       resetTimeoutRef.current = null;
     }, 5000);
   };
@@ -230,7 +365,6 @@ const TimerBanner = ({ onTimerComplete }) => {
     return `${secs}s`;
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       clearInterval(intervalRef.current);
@@ -251,7 +385,7 @@ const TimerBanner = ({ onTimerComplete }) => {
       paddingVertical: getSpacing.xs,
       borderWidth: 1,
       borderColor: isRunning ? theme.success + '40' : (remainingSeconds === 0 ? theme.success : theme.border),
-      height: 54,
+      minHeight: 54,
     },
     pillGroup: {
       flexDirection: 'row',
@@ -278,6 +412,28 @@ const TimerBanner = ({ onTimerComplete }) => {
       minWidth: 45,
       textAlign: 'center',
       marginHorizontal: 4,
+    },
+    timeInput: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: hasError ? theme.error : theme.text.primary,
+      fontVariant: ['tabular-nums'],
+      minWidth: 80,
+      textAlign: 'center',
+      marginHorizontal: 4,
+      backgroundColor: theme.surface,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderWidth: hasError ? 2 : 0,
+      borderColor: hasError ? theme.error : 'transparent',
+    },
+    errorText: {
+      marginTop: 2,
+      fontSize: 10,
+      color: theme.error,
+      fontWeight: '600',
+      textAlign: 'center',
     },
     actionButtons: {
       flexDirection: 'row',
@@ -312,7 +468,7 @@ const TimerBanner = ({ onTimerComplete }) => {
             <TouchableOpacity
               style={[styles.adjustButton, totalSeconds <= 5 && styles.adjustButtonDisabled]}
               onPress={() => adjustTime(-5)}
-              disabled={totalSeconds <= 5}
+              disabled={totalSeconds <= 5 || isEditing}
             >
               <Ionicons 
                 name="remove" 
@@ -321,13 +477,49 @@ const TimerBanner = ({ onTimerComplete }) => {
               />
             </TouchableOpacity>
 
-            <Text style={styles.timeDisplay}>
-                {remainingSeconds === 0 ? "Done" : formatTime(remainingSeconds)}
-            </Text>
+            {isEditing ? (
+              <View style={{ alignItems: 'center' }}>
+                <TextInput
+                  ref={inputRef}
+                  style={styles.timeInput}
+                  value={timeInput}
+                  onChangeText={handleTimeInputChange}
+                  onBlur={handleTimeInputDone}
+                  keyboardType="number-pad"
+                  selectTextOnFocus
+                />
+                <Animated.View
+                  style={{
+                    height: errorAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 14],
+                    }),
+                    opacity: errorAnim,
+                  }}
+                >
+                  {hasError && (
+                    <Text style={styles.errorText}>
+                      Max: {formatTimeDisplay(maxSeconds)}
+                    </Text>
+                  )}
+                </Animated.View>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                onLongPress={handleLongPress}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.timeDisplay}>
+                  {remainingSeconds === 0 ? "Done" : formatTime(remainingSeconds)}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.adjustButton}
               onPress={() => adjustTime(5)}
+              disabled={isEditing}
             >
               <Ionicons name="add" size={18} color={theme.text.primary} />
             </TouchableOpacity>
@@ -358,6 +550,7 @@ const TimerBanner = ({ onTimerComplete }) => {
           <TouchableOpacity
             style={[styles.circleButton, styles.startButton]}
             onPress={handleStart}
+            disabled={isEditing}
           >
             <Ionicons name="play" size={16} color="#FFF" style={{ marginLeft: 2 }} />
           </TouchableOpacity>
@@ -365,6 +558,6 @@ const TimerBanner = ({ onTimerComplete }) => {
       </View>
     </View>
   );
-};
+});
 
 export default TimerBanner;

@@ -7,14 +7,18 @@ import {
   EditChecklistContent,
   AddChecklistToEventModal,
 } from "@my-apps/ui";
-import { useData, useChecklistData } from "@my-apps/contexts";
+import { useData, useChecklistData, useAuth } from "@my-apps/contexts";
 import {
   useCalendarState,
   useCalendarEvents,
   useCalendarHandlers,
   useChecklistTemplates,
   usePinnedChecklists,
+  useRemoveChecklistItems,
+  useUpdateExternalActivities,
+  useUpdateInternalActivities,
 } from "@my-apps/hooks";
+import { Alert } from "react-native";
 
 /**
  * ChecklistCalendarScreen - Complete with all features
@@ -43,13 +47,18 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     getActivitiesForDay,
     preferences,
     groups,
+    addingToEvent,
+    setAddingToEvent,
   } = useData();
-  console.log("Route params:", route.params);
+  console.log("Route params:", route.params, "Adding to event:", addingToEvent);
 
   // Get the joinedApps count from the user
   const joinedAppsCount = useMemo(() => {
     return user?.joinedApps ? Object.keys(user.joinedApps).length : 0;
   }, [user]);
+
+  const updateInternalActivities = useUpdateInternalActivities();
+  const updateExternalActivities = useUpdateExternalActivities();
 
   // HOOK 1: Calendar UI state
   const calendarState = useCalendarState(preferences);
@@ -81,9 +90,25 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   const { createPinnedChecklist, updatePinnedChecklist } =
     usePinnedChecklists();
   const { allPinned } = useChecklistData();
+  const { db } = useAuth();
+  const { removeItemsFromSource } = useRemoveChecklistItems(db, user, updateInternalActivities, updateExternalActivities);
+
   console.log("🔍 Calendar screen allPinned:", allPinned);
   console.log("🔍 Calendar screen allPinned length:", allPinned?.length);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
+  const [selectedCalendarIdForMoving, setSelectedCalendarIdForMoving] = useState(null);
+
+  useEffect(() => {
+    if (addingToEvent.isActive) {
+      console.log("📅 Calendar opened in adding mode:", addingToEvent);
+      console.log("📦 Items to add:", addingToEvent.itemsToMove);
+      console.log("🔙 Return path:", addingToEvent.returnPath);
+      
+      // Force to month view
+      calendarState.setSelectedView('month');
+    }
+  }, [addingToEvent.isActive]);
+
 
   // Handle navigation params for deep links (notifications, etc.)
   useEffect(() => {
@@ -118,6 +143,174 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     addChecklistModalVisible: calendarState.addChecklistModalVisible,
     showChecklistModal: calendarState.showChecklistModal,
   });
+
+  // Use Effect to close modals if adding checklist items to an event
+  useEffect(() => {
+    if (addingToEvent.isActive) {
+      console.log("📅 Calendar opened in adding mode:", addingToEvent);
+      
+      // ✅ Close any open modals
+      calendarState.setShowChecklistModal(false);
+      calendarState.setAddChecklistModalVisible(false);
+      calendarState.setEventModalVisible(false);
+      
+      // Force to month view
+      calendarState.setSelectedView('month');
+    }
+  }, [addingToEvent.isActive]);
+
+  const handleEventSuccess = async () => {
+    if (addingToEvent.isActive) {
+      console.log("✅ Event created successfully, cleaning up adding mode");
+      
+      // Remove items from source
+      try {
+        await removeItemsFromSource(
+          addingToEvent.sourceInfo, 
+          addingToEvent.itemsToMove
+        );
+      } catch (error) {
+        console.error("Error removing items:", error);
+      }
+
+      setSelectedCalendarIdForMoving(null);
+      
+      // Clear state
+      setAddingToEvent({
+        isActive: false,
+        itemsToMove: [],
+        returnPath: null,
+        sourceInfo: null,
+      });
+      
+      // Navigate back
+      navigation.navigate(addingToEvent.returnPath);
+    }
+  };
+
+  // Handles Add Activity button press
+  // If theres addingToEvent, it pre-populates the checklist otherwise normal flow
+  const handleAddActivity = (event) => {
+    if (addingToEvent.isActive) {
+      // Create pre-populated checklist from items being moved
+      const checklist = {
+        id: `checklist_${Date.now()}`,
+        name: "Checklist",
+        items: addingToEvent.itemsToMove.map(item => ({
+          ...item,
+          completed: false,
+        })),
+        createdAt: Date.now(),
+      };
+      
+      setSelectedChecklist(checklist);
+      calendarState.setSelectedEvent(event);
+      calendarState.setAddChecklistModalVisible(true);
+    } else {
+      // Normal flow
+      calendarHandlers.handleAddChecklist(event);
+    }
+  };
+
+  const handleAddItemsToExistingChecklist = async (activity, event) => {
+    console.log("🔄 Adding items to existing checklist:", activity.name);
+    
+    // ✅ Check if same event - need to handle differently
+    const isSameEvent = addingToEvent.sourceInfo?.eventId === event.eventId;
+    
+    if (isSameEvent) {
+      console.log("🔄 Same event - doing add AND remove in one operation");
+      
+      const itemIdsSet = new Set(addingToEvent.sourceInfo.itemIdsToRemove);
+      
+      // Update ALL activities in one pass
+      const updatedActivities = event.activities.map(act => {
+        // Add items to destination checklist
+        if (act.id === activity.id) {
+          return {
+            ...act,
+            items: [
+              ...act.items,
+              ...addingToEvent.itemsToMove.map(item => ({
+                ...item,
+                completed: false,
+              }))
+            ]
+          };
+        }
+        // Remove items from source checklist
+        if (act.id === addingToEvent.sourceInfo.checklistId && act.activityType === 'checklist') {
+          return {
+            ...act,
+            items: act.items.filter(item => !itemIdsSet.has(item.id))
+          };
+        }
+        // Keep other activities unchanged
+        return act;
+      });
+      
+      // Save once
+      const isInternal = event.calendarId === 'internal';
+      const result = isInternal 
+        ? await updateInternalActivities(event.eventId, event.startTime, updatedActivities, event.groupId)
+        : await updateExternalActivities(event.eventId, event.calendarId, event.startTime, updatedActivities);
+      
+      if (result.success) {
+        const returnPath = addingToEvent.returnPath;
+        const itemCount = addingToEvent.itemsToMove.length;
+        const checklistName = activity.name;
+        
+        setAddingToEvent({ isActive: false, itemsToMove: [], returnPath: null, sourceInfo: null });
+        
+        navigation.navigate(returnPath);
+        
+        setTimeout(() => {
+          Alert.alert("Success", `Moved ${itemCount} items`);
+        }, 100);
+      }
+      
+    } else {
+      // Different event - add, then remove (existing logic)
+      const mergedItems = [
+        ...activity.items,
+        ...addingToEvent.itemsToMove.map(item => ({
+          ...item,
+          completed: false,
+        }))
+      ];
+      
+      const updatedActivities = event.activities.map(act => 
+        act.id === activity.id ? { ...act, items: mergedItems } : act
+      );
+      
+      const isInternal = event.calendarId === 'internal';
+      const result = isInternal 
+        ? await updateInternalActivities(event.eventId, event.startTime, updatedActivities, event.groupId)
+        : await updateExternalActivities(event.eventId, event.calendarId, event.startTime, updatedActivities);
+      
+      if (result.success) {
+        console.log("✅ Result success, proceeding with cleanup");
+        
+        try {
+          await removeItemsFromSource(addingToEvent.sourceInfo, addingToEvent.itemsToMove);
+        } catch (error) {
+          console.error("❌ Error removing from source:", error);
+        }
+        
+        const returnPath = addingToEvent.returnPath;
+        const itemCount = addingToEvent.itemsToMove.length;
+        const checklistName = activity.name;
+        
+        setAddingToEvent({ isActive: false, itemsToMove: [], returnPath: null, sourceInfo: null });
+        
+        navigation.navigate(returnPath);
+        
+        setTimeout(() => {
+          Alert.alert("Success", `Added ${itemCount} items`);
+        }, 100);
+      }
+    }
+  };
 
   return (
     <>
@@ -159,20 +352,35 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         // HANDLERS: Pass from calendarHandlers
         onDeleteEvent={calendarHandlers.handleDeleteEvent}
         onEditEvent={calendarHandlers.handleEditEvent}
-        onAddActivity={calendarHandlers.handleAddChecklist}
+        onAddActivity={handleAddActivity}
         onActivityPress={(activity, event) => {
+          // ✅ Check if in adding mode first
+          if (addingToEvent.isActive) {
+            if (activity.activityType === 'checklist') {
+              handleAddItemsToExistingChecklist(activity, event);
+            }
+            return;  // Don't continue to normal flow
+          }
+          
+          // Normal flow - existing logic
           console.log("🔍 Activity:", activity);
           console.log("🔍 Event:", event);
           console.log("🔍 Calling handleViewChecklist");
-
+          const calendarId = event.calendarId;
+          console.log("🔍 Event's calendarId:", calendarId);
+          setSelectedCalendarIdForMoving(calendarId);
+        
           calendarHandlers.handleViewChecklist(event, activity);
-
+        
           console.log("🔍 After handleViewChecklist");
         }}
         onActivityDelete={(activity, event) => {
           // ActivityRow passes (activity, event) but handleDeleteChecklist expects (event, activity)
           calendarHandlers.handleDeleteChecklist(event, activity);
         }}
+        addingToEvent={addingToEvent}
+        setAddingToEvent={setAddingToEvent}
+        setSelectedChecklist={setSelectedChecklist}
       />
 
       {/* Shared Event Modal with Checklist Configuration */}
@@ -182,6 +390,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
           calendarState.setSelectedEvent(null);
           calendarState.setEventModalVisible(false);
         }}
+        onSuccess={handleEventSuccess}
         event={calendarState.selectedEvent}
         userCalendars={user?.calendars || []}
         groups={groups || []}
@@ -236,6 +445,8 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         pinnedChecklists={allPinned}
         onCreatePinnedChecklist={createPinnedChecklist}
         onUpdatePinnedChecklist={updatePinnedChecklist}
+        selectedCalendarIdForMoving={selectedCalendarIdForMoving}
+        setSelectedCalendarIdForMoving={setSelectedCalendarIdForMoving}
       />
 
       {/* Add Checklist to Event Modal */}
@@ -244,8 +455,11 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         onClose={() => {
           calendarState.setAddChecklistModalVisible(false);
           calendarState.setSelectedEvent(null);
+          setSelectedChecklist(null);
         }}
+        onSuccess={handleEventSuccess}
         selectedEvent={calendarState.selectedEvent}
+        preselectedChecklist={selectedChecklist}
         templates={allTemplates}
         onSaveChecklist={calendarHandlers.handleSaveChecklist}
         onSaveTemplate={saveTemplate}

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
-import { canSaveAsTemplate } from '@my-apps/utils'; // ✅ From your existing file
+import { canSaveAsTemplate } from '@my-apps/utils';
 import { buildChecklistObject } from '@my-apps/utils';
 
 export const useChecklistSave = ({
@@ -11,6 +11,8 @@ export const useChecklistSave = ({
   notifyAdminOnCompletion,
   defaultNotifyAdmin,
   defaultReminderTime,
+  defaultIsRecurring,
+  defaultRecurringConfig,
   isEditing,
   isTemplate,
   hasEventTime,
@@ -54,7 +56,7 @@ export const useChecklistSave = ({
         notifyAdmin: notifyAdminOnCompletion,
       };
       
-      const validation = canSaveAsTemplate(currentChecklist); // ✅ From your existing utils
+      const validation = canSaveAsTemplate(currentChecklist);
       if (!validation.valid) {
         Alert.alert(
           "Cannot Save as Template",
@@ -78,6 +80,8 @@ export const useChecklistSave = ({
         notifyAdminOnCompletion,
         defaultNotifyAdmin,
         defaultReminderTime,
+        defaultIsRecurring,
+        defaultRecurringConfig,
         hasEventTime,
         eventStartTime,
       });
@@ -97,6 +101,8 @@ export const useChecklistSave = ({
     notifyAdminOnCompletion,
     defaultNotifyAdmin,
     defaultReminderTime,
+    defaultIsRecurring,
+    defaultRecurringConfig,
     isEditing,
     isTemplate,
     hasEventTime,

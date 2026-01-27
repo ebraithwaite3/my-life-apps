@@ -29,34 +29,47 @@ export const sendNotification = async (userId, title, body, data = {}) => {
 
 /**
  * Schedule push notification for future delivery
+ * NOW: Supports recurring notifications via isRecurring and recurringConfig
  */
 export const scheduleNotification = async (userId, title, body, eventId, scheduledFor, data = {}) => {
   try {
     const db = getFirestore();
+
+    // ✅ Extract recurring fields from data (don't send to device)
+    const { isRecurring, recurringConfig, ...cleanData } = data;
 
     const notificationData = {
       userId,
       title,
       body,
       eventId,
-      notificationId: data.checklistId ? `${eventId}-checklist-${data.checklistId}` : eventId, // ← ADD THIS
-      data: {
-        ...data,
-        app: data.app || 'organizer-app',
-      },
+      notificationId: cleanData.checklistId ? `${eventId}-checklist-${cleanData.checklistId}` : eventId,
       scheduledFor: Timestamp.fromDate(scheduledFor),
       createdAt: Timestamp.now(),
+      data: {
+        ...cleanData, // ✅ Only non-recurring data goes here
+        app: cleanData.app || 'organizer-app',
+      },
+      // ✅ Recurring fields at top level only
+      ...(isRecurring && {
+        isRecurring: true,
+        recurringConfig,
+      }),
     };
 
     const docRef = await addDoc(collection(db, 'pendingNotifications'), notificationData);
 
     console.log('✅ Notification scheduled:', docRef.id);
+    if (isRecurring) {
+      console.log('   📅 Recurring:', recurringConfig);
+    }
     return { success: true, notificationId: docRef.id };
   } catch (error) {
     console.error('❌ Failed to schedule notification:', error);
     return { success: false, error: error.message };
   }
 };
+
 
 /**
  * Send notification to multiple users
@@ -86,25 +99,34 @@ export const sendBatchNotification = async (userIds, title, body, data = {}) => 
 
 /**
  * Schedule notification to multiple users
+ * NOW: Supports recurring notifications
  */
 export const scheduleBatchNotification = async (userIds, title, body, scheduledFor, data = {}) => {
   try {
     const db = getFirestore();
     const notifications = [];
 
+    // ✅ Extract recurring fields from data (don't send to device)
+    const { isRecurring, recurringConfig, ...cleanData } = data;
+
     for (const userId of userIds) {
       const notificationData = {
         userId,
-        eventId: data.eventId,
-        notificationId: `${data.eventId}-checklist-${data.checklistId}`, // ← ADD THIS
+        eventId: cleanData.eventId,
+        notificationId: cleanData.checklistId ? `${cleanData.eventId}-checklist-${cleanData.checklistId}` : cleanData.eventId,
         title,
         body,
-        data: {
-          ...data,
-          app: data.app || 'checklist-app',
-        },
         scheduledFor: Timestamp.fromDate(scheduledFor),
         createdAt: Timestamp.now(),
+        data: {
+          ...cleanData, // ✅ Only non-recurring data goes here
+          app: cleanData.app || 'checklist-app',
+        },
+        // ✅ Recurring fields at top level only
+        ...(isRecurring && {
+          isRecurring: true,
+          recurringConfig,
+        }),
       };
 
       const docRef = await addDoc(collection(db, 'pendingNotifications'), notificationData);
@@ -112,6 +134,9 @@ export const scheduleBatchNotification = async (userIds, title, body, scheduledF
     }
 
     console.log(`✅ Scheduled ${notifications.length} notifications`);
+    if (isRecurring) {
+      console.log('   📅 Recurring:', recurringConfig);
+    }
     return { success: true, notificationIds: notifications };
   } catch (error) {
     console.error('❌ Failed to schedule batch notifications:', error);

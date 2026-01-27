@@ -26,9 +26,11 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
   const [expandedExercises, setExpandedExercises] = React.useState([]);
   const [keyboardVisible, setKeyboardVisible] = React.useState(false);
   const [focusedInput, setFocusedInput] = React.useState(null);
+  const [isTimerEditing, setIsTimerEditing] = React.useState(false); // NEW: Track timer editing
   
   const rowRefs = React.useRef({});
   const scrollViewRef = React.useRef(null);
+  const timerRef = React.useRef(null); // NEW: Reference to TimerBanner
   const keyboardHeight = React.useRef(0);
 
   // Keyboard listeners with height tracking
@@ -343,6 +345,17 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
       backgroundColor: `${theme.primary}10`,
     },
     adjustButtonText: { fontSize: 13, fontWeight: '600', color: theme.primary },
+    timerDoneButton: {
+      paddingHorizontal: 24,
+      paddingVertical: 8,
+      backgroundColor: theme.primary,
+      borderRadius: 8,
+    },
+    timerDoneButtonText: {
+      color: '#FFF',
+      fontWeight: '600',
+      fontSize: 16,
+    },
   });
 
   if (!workout.exercises || workout.exercises.length === 0) {
@@ -365,9 +378,11 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
       {/* Timer Banner - Sticky at top, doesn't scroll */}
       <View style={styles.timerContainer}>
         <TimerBanner
+          ref={timerRef}
           onTimerComplete={() => {
             console.log('⏰ Rest timer complete!');
           }}
+          onEditingChange={setIsTimerEditing}
         />
       </View>
 
@@ -473,14 +488,18 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
         visible={keyboardVisible}
         onWillDismiss={() => setKeyboardVisible(false)}
         leftButton={
-          canGoBack
+          isTimerEditing
+            ? undefined // No left button when editing timer
+            : canGoBack
             ? { icon: 'chevron-back', text: 'Back', onPress: () => handleNavigate('prev') }
             : canGoNext
             ? { icon: 'chevron-forward', text: 'Next', onPress: () => handleNavigate('next') }
             : undefined
         }
         centerContent={
-          focusedInput ? (
+          isTimerEditing ? (
+            null
+          ) : focusedInput ? (
             <View style={styles.centerButtonContainer}>
               <TouchableOpacity style={styles.adjustButton} onPress={() => handleAdjust('decrement')}>
                 <Ionicons name="remove" size={20} color={theme.primary} />

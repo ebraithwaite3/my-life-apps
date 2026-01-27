@@ -36,6 +36,7 @@ import {
 const SharedEventModal = ({
   isVisible,
   onClose,
+  onSuccess,
   event = null,
   userCalendars = [],
   groups = [],
@@ -66,6 +67,7 @@ const SharedEventModal = ({
     defaultTitle,
     userPreferences: user?.preferences,
   });
+  console.log("FORM STATE: ", formState);
 
   // HOOK 2: Validation (shared)
   const { validateEvent } = useEventValidation();
@@ -115,46 +117,67 @@ const SharedEventModal = ({
   };
 
   // Handle template selection (Handles multiple types of activities, coming from each apps CalendarScreen)
-const handleTemplateSelect = (option) => {
-  setShowTemplateModal(false);
+  const handleTemplateSelect = (option) => {
+    setShowTemplateModal(false);
 
-  if (option.value === "new") {
-    formState.setCurrentScreen(currentTemplateActivity.type);
-    return;
-  }
+    if (option.value === "new") {
+      formState.setCurrentScreen(currentTemplateActivity.type);
+      return;
+    }
 
-  const template = option.template;
-  const activityConfig = currentTemplateActivity;
+    const template = option.template;
+    const activityConfig = currentTemplateActivity;
 
-  // Use activity-specific transformer OR fallback to generic
-  const newActivity = activityConfig.transformTemplate
-    ? activityConfig.transformTemplate(template)
-    : {
-        id: `${activityConfig.type}_${Date.now()}`,
-        name: template.name,
-        ...template,
-        createdAt: Date.now(),
+    // Use activity-specific transformer OR fallback to generic
+    const newActivity = activityConfig.transformTemplate
+      ? activityConfig.transformTemplate(template)
+      : {
+          id: `${activityConfig.type}_${Date.now()}`,
+          name: template.name,
+          ...template,
+          createdAt: Date.now(),
+        };
+
+    activityConfig.onSelectActivity(newActivity);
+
+    // ✅ Set reminder from template if provided (with recurring config)
+    if (template.defaultReminderTime) {
+      const [hours, minutes] = template.defaultReminderTime
+        .split(":")
+        .map(Number);
+      const reminderDate = formState.startDate
+        ? new Date(formState.startDate)
+        : new Date();
+      reminderDate.setHours(hours, minutes, 0, 0);
+
+      // ✅ Build fresh runtime state from template config
+      const reminderData = {
+        scheduledFor: reminderDate.toISOString(),
+        isRecurring: template.defaultIsRecurring || false,
+        ...(template.defaultIsRecurring &&
+          template.defaultRecurringConfig && {
+            recurringConfig: {
+              ...template.defaultRecurringConfig,
+              // ✅ Add fresh runtime state
+              currentOccurrence: 1,
+              nextScheduledFor: reminderDate.toISOString(),
+              lastSentAt: null,
+            },
+          }),
       };
 
-  activityConfig.onSelectActivity(newActivity);
+      
+      console.log('📝 Template reminder data built:', reminderData);
+      formState.setReminderMinutes(reminderData);
+    }
 
-  // Set reminder from template if provided
-  if (template.defaultReminderTime) {
-    const [hours, minutes] = template.defaultReminderTime.split(":").map(Number);
-    const reminderDate = formState.startDate
-      ? new Date(formState.startDate)
-      : new Date();
-    reminderDate.setHours(hours, minutes, 0, 0);
-    formState.setReminderMinutes(reminderDate.toISOString());
-  }
-
-  setCurrentTemplateActivity(null);
-};
+    setCurrentTemplateActivity(null);
+  };
 
   // Handle save
   const handleSave = async () => {
-    console.log('💾 SharedEventModal: handleSave called');
-    console.log('Activity that are being saved: ', activities);
+    console.log("💾 SharedEventModal: handleSave called");
+    console.log("Activity that are being saved: ", activities);
     formState.setErrors([]);
 
     // Check if all required activities are selected
@@ -188,13 +211,16 @@ const handleTemplateSelect = (option) => {
 
     // Build activities array from all selected activities
     const activitiesData = formState.isEditing
-  ? event.activities || []
-  : activities
-      .filter((a) => a.selectedActivity)
-      .map((a) => ({
-        ...a.selectedActivity, // ← Spread FIRST (gets everything)
-        activityType: a.type,   // ← Override to ensure correct type
-      }));
+      ? event.activities || []
+      : activities
+          .filter((a) => a.selectedActivity)
+          .map((a) => ({
+            ...a.selectedActivity, // ← Spread FIRST (gets everything)
+            activityType: a.type, // ← Override to ensure correct type
+          }));
+
+          console.log('💾 Saving with reminderMinutes:', formState.reminderMinutes);
+
 
     // Create or update event
     const result = formState.isEditing
@@ -212,6 +238,7 @@ const handleTemplateSelect = (option) => {
           activities: activitiesData,
           appName,
           membersToNotify: formState.membersToNotify,
+          event,
         })
       : await createEvent({
           title: formState.title,
@@ -233,6 +260,8 @@ const handleTemplateSelect = (option) => {
       // Clear all activity selections
       activities.forEach((a) => a.onSelectActivity(null));
       formState.resetForm();
+
+      onSuccess?.();
       onClose();
     }
   };
@@ -433,87 +462,89 @@ const handleTemplateSelect = (option) => {
 
       {/* Activity Editors - Render based on currentScreen */}
       {activities.map((activityConfig) => {
-  if (formState.currentScreen !== activityConfig.type) return null;
+        if (formState.currentScreen !== activityConfig.type) return null;
 
-  const EditorComponent = activityConfig.EditorComponent;
-  if (!EditorComponent) return null;
+        const EditorComponent = activityConfig.EditorComponent;
+        if (!EditorComponent) return null;
 
-  return (
-    <View
-      key={activityConfig.type}
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      {/* ✅ ADD KeyboardAvoidingView HERE */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ width: "100%", height: "90%" }}
-      >
-        <View
-          style={{
-            backgroundColor: theme.surface,
-            borderRadius: 12,
-            width: "100%",
-            height: "100%",
-            overflow: "hidden",
-          }}
-        >
-          <ModalHeader
-            title={
-              activityConfig.selectedActivity
-                ? `Edit ${activityConfig.label}`
-                : `New ${activityConfig.label}`
-            }
-            onCancel={() => formState.setCurrentScreen("event")}
-            onDone={() => editorRefs.current[activityConfig.type]?.save()}
-            doneText={activityConfig.selectedActivity ? "Update" : "Create"}
-          />
+        return (
+          <View
+            key={activityConfig.type}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            {/* ✅ ADD KeyboardAvoidingView HERE */}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={{ width: "100%", height: "90%" }}
+            >
+              <View
+                style={{
+                  backgroundColor: theme.surface,
+                  borderRadius: 12,
+                  width: "100%",
+                  height: "100%",
+                  overflow: "hidden",
+                }}
+              >
+                <ModalHeader
+                  title={
+                    activityConfig.selectedActivity
+                      ? `Edit ${activityConfig.label}`
+                      : `New ${activityConfig.label}`
+                  }
+                  onCancel={() => formState.setCurrentScreen("event")}
+                  onDone={() => editorRefs.current[activityConfig.type]?.save()}
+                  doneText={
+                    activityConfig.selectedActivity ? "Update" : "Create"
+                  }
+                />
 
-          <EditorComponent
-            ref={(ref) => (editorRefs.current[activityConfig.type] = ref)}
-            checklist={activityConfig.selectedActivity}
-            onSave={(activity, shouldSaveAsTemplate) => {
-              // Save the activity
-              activityConfig.onSelectActivity(activity);
+                <EditorComponent
+                  ref={(ref) => (editorRefs.current[activityConfig.type] = ref)}
+                  checklist={activityConfig.selectedActivity}
+                  onSave={(activity, shouldSaveAsTemplate) => {
+                    // Save the activity
+                    activityConfig.onSelectActivity(activity);
 
-              // If "Save as Template" toggle was ON, save as template
-              if (
-                shouldSaveAsTemplate &&
-                activityConfig.editorProps?.onSaveTemplate
-              ) {
-                activityConfig.editorProps.promptForContext?.(
-                  async (context) => {
-                    const success =
-                      await activityConfig.editorProps.onSaveTemplate(
-                        activity,
-                        context
-                      );
-                    if (success) {
-                      Alert.alert(
-                        "Success",
-                        `Template "${activity.name}" saved successfully`
+                    // If "Save as Template" toggle was ON, save as template
+                    if (
+                      shouldSaveAsTemplate &&
+                      activityConfig.editorProps?.onSaveTemplate
+                    ) {
+                      activityConfig.editorProps.promptForContext?.(
+                        async (context) => {
+                          const success =
+                            await activityConfig.editorProps.onSaveTemplate(
+                              activity,
+                              context
+                            );
+                          if (success) {
+                            Alert.alert(
+                              "Success",
+                              `Template "${activity.name}" saved successfully`
+                            );
+                          }
+                        }
                       );
                     }
-                  }
-                );
-              }
 
-              // Return to event screen
-              formState.setCurrentScreen("event");
-            }}
-            {...activityConfig.editorProps}
-          />
-        </View>
-      </KeyboardAvoidingView>
-    </View>
+                    // Return to event screen
+                    formState.setCurrentScreen("event");
+                  }}
+                  {...activityConfig.editorProps}
+                />
+              </View>
+            </KeyboardAvoidingView>
+          </View>
         );
       })}
     </ModalWrapper>

@@ -1,6 +1,5 @@
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
-import { scheduleNotification } from '@my-apps/services';
 import { generateUUID, showSuccessToast } from '@my-apps/utils';
 
 export const usePinnedOperations = (
@@ -13,6 +12,8 @@ export const usePinnedOperations = (
 ) => {
   const handleSaveChecklist = async (checklist, checklistContext, onClose) => {
     try {
+      console.log('💾 Saving pinned checklist:', checklist.name);
+      
       const docId =
         checklistContext?.type === "personal"
           ? user.userId
@@ -20,17 +21,6 @@ export const usePinnedOperations = (
 
       const docRef = doc(db, "pinnedChecklists", docId);
       const docSnap = await getDoc(docRef);
-
-      let oldChecklist = null;
-      if (docSnap.exists()) {
-        const currentPinned = docSnap.data().pinned || [];
-        oldChecklist = currentPinned.find((c) => c.id === checklist.id);
-      }
-
-      if (oldChecklist?.reminderTime) {
-        const notificationId = `pinned-checklist-${checklist.id}`;
-        await deleteNotification(notificationId);
-      }
 
       if (docSnap.exists()) {
         const currentPinned = docSnap.data().pinned || [];
@@ -42,14 +32,17 @@ export const usePinnedOperations = (
         if (existingIndex !== -1) {
           updatedPinned = [...currentPinned];
           updatedPinned[existingIndex] = checklist;
+          console.log('📝 Updating existing checklist at index:', existingIndex);
         } else {
           updatedPinned = [...currentPinned, checklist];
+          console.log('📝 Adding new checklist');
         }
 
         await updateDoc(docRef, {
           pinned: updatedPinned,
           updatedAt: new Date().toISOString(),
         });
+        console.log('✅ Pinned checklist document updated');
       } else {
         await setDoc(docRef, {
           [checklistContext?.type === "personal" ? "userId" : "groupId"]: docId,
@@ -60,35 +53,14 @@ export const usePinnedOperations = (
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
-      }
-
-      if (checklist.reminderTime) {
-        const reminderDate = new Date(checklist.reminderTime);
-
-        if (reminderDate > new Date()) {
-          const itemCount = checklist.items?.length || 0;
-          const notificationId = `pinned-checklist-${checklist.id}`;
-
-          await scheduleNotification(
-            user.userId,
-            `Checklist Reminder: ${checklist.name}`,
-            `${itemCount} item${itemCount !== 1 ? "s" : ""} to complete`,
-            notificationId,
-            reminderDate,
-            {
-              screen: "Pinned",
-              checklistId: checklist.id,
-              app: "checklist-app",
-            }
-          );
-        }
+        console.log('✅ Pinned checklist document created');
       }
 
       if (onClose) {
         onClose();
       }
     } catch (error) {
-      console.error("Error saving pinned checklist:", error);
+      console.error("❌ Error saving pinned checklist:", error);
       Alert.alert("Error", "Failed to save checklist. Please try again.");
     }
   };
@@ -112,11 +84,6 @@ export const usePinnedOperations = (
           pinned: updatedPinned,
           updatedAt: new Date().toISOString(),
         });
-
-        if (checklist.reminderTime) {
-          const notificationId = `pinned-checklist-${checklist.id}`;
-          await deleteNotification(notificationId);
-        }
       }
     } catch (error) {
       console.error("Error unpinning checklist:", error);
@@ -152,10 +119,6 @@ export const usePinnedOperations = (
         createdAt: checklist.createdAt,
         updatedAt: new Date().toISOString(),
       };
-
-      if (checklist.reminderTime) {
-        cleanChecklist.reminderTime = checklist.reminderTime;
-      }
 
       const targetDocId =
         target.type === "personal" ? user.userId : target.groupId;
@@ -271,31 +234,51 @@ export const usePinnedOperations = (
           updatedAt: new Date().toISOString(),
         };
         
-        const result = await updatePinnedChecklist(updatedPinned);
+        // ✅ FIX: Determine document ID from the target checklist
+        const docId = targetPinned.isGroupChecklist 
+          ? targetPinned.groupId 
+          : (targetPinned.userId || user.userId);
         
-        if (result.success) {
-          showSuccessToast(`Moved to "${targetPinned.name}"`, "", 2000, "top");
+        const docRef = doc(db, "pinnedChecklists", docId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const currentPinned = docSnap.data().pinned || [];
+          const existingIndex = currentPinned.findIndex(c => c.id === targetPinned.id);
+          
+          if (existingIndex !== -1) {
+            // Update existing checklist
+            const updatedPinnedArray = [...currentPinned];
+            updatedPinnedArray[existingIndex] = updatedPinned;
+            
+            await updateDoc(docRef, {
+              pinned: updatedPinnedArray,
+              updatedAt: new Date().toISOString(),
+            });
+            
+            showSuccessToast(`Moved to "${targetPinned.name}"`, "", 2000, "top");
+          } else {
+            console.error('❌ Target checklist not found in pinned array');
+            Alert.alert('Error', 'Target checklist not found');
+            return;
+          }
         }
       }
       
-      // FIXED: Properly filter items immutably
+      // ✅ Remove items from source checklist
       const remainingItems = updatedItems
         .map(item => {
-          // If parent is marked for removal, skip it
           if (itemIdsToRemove.has(item.id)) {
             return null;
           }
           
-          // If item has sub-items, check if any need to be removed
           if (item.subItems && item.subItems.length > 0) {
             const remainingSubs = item.subItems.filter(sub => !itemIdsToRemove.has(sub.id));
             
-            // If no subs remain, remove the parent too
             if (remainingSubs.length === 0) {
               return null;
             }
             
-            // If some subs were removed, return new item with filtered subs
             if (remainingSubs.length !== item.subItems.length) {
               return {
                 ...item,
@@ -304,10 +287,9 @@ export const usePinnedOperations = (
             }
           }
           
-          // Item unchanged
           return item;
         })
-        .filter(Boolean); // Remove nulls
+        .filter(Boolean);
       
       const updatedSourceChecklist = {
         ...selectedChecklist,
@@ -331,6 +313,7 @@ export const usePinnedOperations = (
     }
   };
 
+  
   return {
     handleSaveChecklist,
     handleUnpinChecklist,

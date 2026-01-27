@@ -8,49 +8,55 @@ const ReminderSelector = ({
   reminder, 
   onReminderChange, 
   eventStartDate,
-  isAllDay = false, // NEW: Pass this from parent
+  isAllDay = false,
 }) => {
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [customModalVisible, setCustomModalVisible] = useState(false);
 
+  // ✅ Always show the actual time, handle both string and object formats
   const formatReminderDisplay = () => {
     if (!reminder) return "None";
     
-    const reminderTime = DateTime.fromISO(reminder);
+    // ✅ Handle both string and object formats
+    let reminderTimeISO = reminder;
+    let isRecurring = false;
     
-    // For all-day events, just show the date/time
-    if (isAllDay) {
-      return reminderTime.toFormat("MMM d 'at' h:mm a");
+    if (typeof reminder === 'object' && reminder?.scheduledFor) {
+      reminderTimeISO = reminder.scheduledFor;
+      isRecurring = reminder.isRecurring || false;
     }
     
-    // For timed events, check presets
-    const eventTime = DateTime.fromJSDate(eventStartDate);
-    const diffMinutes = Math.round(eventTime.diff(reminderTime, 'minutes').minutes);
+    const reminderTime = DateTime.fromISO(reminderTimeISO);
     
-    if (diffMinutes === 0) return "At time of event";
-    if (diffMinutes === 5) return "5 minutes before";
-    if (diffMinutes === 15) return "15 minutes before";
-    if (diffMinutes === 30) return "30 minutes before";
-    if (diffMinutes === 60) return "1 hour before";
-    if (diffMinutes === 1440) return "1 day before";
-    if (diffMinutes === 2880) return "2 days before";
-    if (diffMinutes === 10080) return "1 week before";
+    if (!reminderTime.isValid) {
+      console.error("Invalid reminder time:", reminder);
+      return "Invalid DateTime";
+    }
     
-    // Custom time
-    return reminderTime.toFormat("MMM d 'at' h:mm a");
+    const recurringText = isRecurring ? " (Recurring)" : "";
+    
+    // Always show the actual time
+    if (isAllDay) {
+      return reminderTime.toFormat("MMM d 'at' h:mm a") + recurringText;
+    } else {
+      // For timed events, show time (and date if not today)
+      const now = DateTime.now();
+      if (reminderTime.hasSame(now, 'day')) {
+        return reminderTime.toFormat("h:mm a") + recurringText;
+      } else {
+        return reminderTime.toFormat("MMM d 'at' h:mm a") + recurringText;
+      }
+    }
   };
 
-  // Different presets for all-day vs timed events
   const getPresetOptions = () => {
     if (isAllDay) {
-      // All-day events: Only None and Custom
       return [
         { id: "none", label: "None", value: null },
         { id: "custom", label: "Custom...", value: "CUSTOM" },
       ];
     }
     
-    // Timed events: All the presets
     return [
       { id: "none", label: "None", value: null },
       { id: "at-time", label: "At time of event", minutes: 0 },
@@ -68,20 +74,24 @@ const ReminderSelector = ({
   const getCurrentPresetId = () => {
     if (!reminder) return "none";
     
-    // For all-day, it's always custom (if set)
-    if (isAllDay) return "custom";
-    
-    const reminderTime = DateTime.fromISO(reminder);
-    const eventTime = DateTime.fromJSDate(eventStartDate);
-    const diffMinutes = Math.round(eventTime.diff(reminderTime, 'minutes').minutes);
-    
-    const presetOptions = getPresetOptions();
-    for (const preset of presetOptions) {
-      if (preset.value === null && !reminder) return "none";
-      if (preset.value === "CUSTOM") continue;
-      if (preset.minutes === diffMinutes) return preset.id;
+    // ✅ Extract ISO string from object if needed
+    let reminderTimeISO = reminder;
+    if (typeof reminder === 'object' && reminder?.scheduledFor) {
+      reminderTimeISO = reminder.scheduledFor;
     }
     
+    if (isAllDay) return "custom";
+  
+    const reminderTime = DateTime.fromISO(reminderTimeISO);
+    if (!reminderTime.isValid) return "custom";
+    
+    const eventTime = DateTime.fromJSDate(eventStartDate);
+    const diffMinutes = Math.round(eventTime.diff(reminderTime, "minutes").minutes);
+  
+    for (const preset of getPresetOptions()) {
+      if (preset.minutes === diffMinutes) return preset.id;
+    }
+  
     return "custom";
   };
 
@@ -93,17 +103,21 @@ const ReminderSelector = ({
       onReminderChange(null);
       setOptionsModalVisible(false);
     } else {
-      // Calculate ISO string based on preset minutes
       const eventTime = DateTime.fromJSDate(eventStartDate);
       const reminderTime = eventTime.minus({ minutes: item.minutes });
       
-      onReminderChange(reminderTime.toISO());
+      // ✅ Return object format (will be normalized by parent)
+      onReminderChange({
+        scheduledFor: reminderTime.toISO(),
+        isRecurring: false,
+      });
       setOptionsModalVisible(false);
     }
   };
 
-  const handleCustomConfirm = (customTime) => {
-    onReminderChange(customTime);
+  const handleCustomConfirm = (customTimeData) => {
+    // ✅ Already in correct normalized format from CustomReminderModal
+    onReminderChange(customTimeData);
     setCustomModalVisible(false);
   };
 

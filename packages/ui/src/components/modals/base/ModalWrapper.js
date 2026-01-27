@@ -18,6 +18,7 @@ const ModalWrapper = ({
   animationType = 'slide',
   transparent = true,
 }) => {
+  if (!visible) return null;
   return (
     <Modal
       animationType={animationType}

@@ -15,6 +15,7 @@ export const useNotifications = () => {
 
   /**
    * Delete pending notifications by eventId
+   * NOW: Also handles recurring notifications
    */
   const deleteNotificationsByEventId = async (eventId) => {
     try {
@@ -33,8 +34,11 @@ export const useNotifications = () => {
 
       let deletedCount = 0;
       for (const docSnap of querySnapshot.docs) {
+        const notifData = docSnap.data();
+        if (notifData.isRecurring) {
+          console.log(`🔁 Deleting recurring notification:`, docSnap.id);
+        }
         await deleteDoc(docSnap.ref);
-        console.log(`✅ Deleted notification:`, docSnap.id);
         deletedCount++;
       }
 
@@ -60,7 +64,6 @@ export const useNotifications = () => {
       const groupData = groupDoc.data();
       const members = groupData.members || [];
       
-      // Extract user IDs, optionally excluding someone
       const memberIds = members
         .map(member => member.userId)
         .filter(userId => excludeUserId ? userId !== excludeUserId : true);
@@ -73,7 +76,7 @@ export const useNotifications = () => {
   };
 
   /**
-   * Notify group members (wrapper around notifyEventCreated)
+   * Notify group members
    */
   const notifyGroupMembers = async (groupId, excludeUserId, title, body, data = {}) => {
     try {
@@ -94,12 +97,13 @@ export const useNotifications = () => {
   };
 
   /**
-   * Schedule group reminder (wrapper around scheduleBatchNotification)
+   * Schedule group reminder
+   * NOW: Passes recurring config through to scheduleBatchNotification
    */
   const scheduleGroupReminder = async (groupId, title, body, eventId, reminderTime, data = {}) => {
     try {
       console.log(`⏰ Getting members for group reminder: ${groupId}`);
-      const memberIds = await getGroupMemberIds(groupId); // Include everyone
+      const memberIds = await getGroupMemberIds(groupId);
       
       if (memberIds.length === 0) {
         console.log('No members to remind');
@@ -107,6 +111,11 @@ export const useNotifications = () => {
       }
 
       console.log(`⏰ Scheduling reminders for ${memberIds.length} group members`);
+      if (data.isRecurring) {
+        console.log('   📅 Recurring reminder detected');
+      }
+      
+      // ✅ Data object already contains isRecurring and recurringConfig from caller
       return await scheduleBatchNotification(memberIds, title, body, reminderTime, data);
     } catch (error) {
       console.error('Error scheduling group reminder:', error);
@@ -116,7 +125,6 @@ export const useNotifications = () => {
 
   /**
    * Send "Event Created" notification
-   * Automatically uses batch if there are members to notify
    */
   const notifyEventCreated = async (event, membersToNotify = [], customData = {}) => {
     const title = "New Event Created";
@@ -128,21 +136,17 @@ export const useNotifications = () => {
       ...customData,
     };
   
-    // Filter out the creator
     const recipients = membersToNotify.filter(id => id !== userId);
     
     if (recipients.length === 0) {
       return { success: true, skipped: true };
     }
   
-    // Use batch for any number of recipients (1 or more)
     return await sendBatchNotification(recipients, title, body, data);
   };
 
   /**
    * Send "Activity Created" notification
-   * Generic for any activity type (checklist, workout, golf round, etc.)
-   * Automatically uses batch if there are members to notify
    */
   const notifyActivityCreated = async (
     activity,
@@ -177,7 +181,6 @@ export const useNotifications = () => {
   
   /**
    * Schedule event reminder notification(s)
-   * Automatically uses batch if there are members to notify
    */
   const scheduleEventReminder = async (event, membersToNotify = [], customData = {}) => {
     if (!event.reminderMinutes) return { success: true, skipped: true };
@@ -220,7 +223,8 @@ export const useNotifications = () => {
   };
 
   /**
-   * Schedule activity reminder notification (generic for any activity type)
+   * Schedule activity reminder notification
+   * NOW: Passes recurring config through to scheduleNotification
    */
   const scheduleActivityReminder = async (
     activity, 
@@ -253,12 +257,18 @@ export const useNotifications = () => {
       body = `${itemCount} item${itemCount !== 1 ? 's' : ''} to complete`;
     }
 
+    // ✅ customData already contains isRecurring and recurringConfig from caller
     const data = {
       screen: eventId ? 'Calendar' : 'Pinned',
       eventId: eventId,
       activityId: activity.id,
-      ...customData,
+      ...customData, // This spreads isRecurring and recurringConfig
     };
+    
+    if (customData.isRecurring) {
+      console.log('   📅 Scheduling recurring activity reminder');
+    }
+    
     console.log("Scheduling activity reminder:", {
       userId,
       title,
@@ -307,7 +317,7 @@ export const useNotifications = () => {
     // Deletion
     deleteNotificationsByEventId,
     
-    // Group helpers (NEW)
+    // Group helpers
     getGroupMemberIds,
     notifyGroupMembers,
     scheduleGroupReminder,
@@ -321,5 +331,6 @@ export const useNotifications = () => {
     // Generic helpers
     sendImmediate,
     scheduleForLater,
+    scheduleBatchNotification, // ✅ Export for direct use
   };
 };

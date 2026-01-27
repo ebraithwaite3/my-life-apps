@@ -44,8 +44,6 @@ const AppHeader = ({
     return isSyncable;
   });
 
-  console.log("🔄 Syncable Calendars:", syncableCalendars.length, syncableCalendars);
-
   const handleSyncCalendars = async () => {
     if (isSyncing) {
       Alert.alert("Sync in Progress", "Calendars are already syncing.");

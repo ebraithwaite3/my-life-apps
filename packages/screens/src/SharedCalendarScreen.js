@@ -17,6 +17,8 @@ const SharedCalendarScreen = ({
   filterActivitiesFor, 
   navigation, 
   route,
+  addingToEvent,
+  setAddingToEvent,
   
   // STATE: Passed from parent (ChecklistCalendarScreen)
   selectedView,
@@ -27,6 +29,7 @@ const SharedCalendarScreen = ({
   setShowOnlyFilteredActivities,
   showDeletedEvents,        // ← ADD
   setShowDeletedEvents,     // ← ADD
+  setSelectedChecklist,    // ← ADD
   
   // DATA: Passed from parent
   selectedDate,
@@ -102,8 +105,26 @@ const SharedCalendarScreen = ({
     {
       icon: "add",
       action: () => {
-        console.log("Add pressed");
-        setEventModalVisible(true);
+        if (addingToEvent.isActive) {
+          // Create checklist from items
+          const checklist = {
+            id: `checklist_${Date.now()}`,
+            name: "Checklist",
+            items: addingToEvent.itemsToMove.map((item, index) => ({
+              ...item,
+              id: item.id || `item_${Date.now()}_${index}`,
+              completed: false,
+            })),
+            createdAt: Date.now(),
+          };
+          
+          // Pre-populate and open modal
+          setSelectedChecklist(checklist);
+          setEventModalVisible(true);
+        } else {
+          // Normal flow
+          setEventModalVisible(true);
+        }
       },
     },
   ];
@@ -209,6 +230,8 @@ const SharedCalendarScreen = ({
         }
         subtext={dayViewSubtext}
         icons={icons}
+        addingToEvent={addingToEvent}
+        setAddingToEvent={setAddingToEvent}
       />
 
       {/* Filter Chips (directly under PageHeader) */}

@@ -23,11 +23,17 @@ const ChecklistContent = ({
   onItemToggle,
   onMoveItems,
   pinnedChecklists = [],
+  onCloseParentModal,
+  context = "pinned",
+  eventId = null,
+  selectedCalendarIdForMoving = null,
+  setSelectedCalendarIdForMoving,
+  groupId = null,
+  eventStartTime = null,
+  eventActivities = [],
 }) => {
   console.log(
-    "🔍 ChecklistContent received pinnedChecklists:",
-    pinnedChecklists
-  );
+    "🔍 ChecklistContent checklist:", checklist);
 
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const { isUserAdmin } = useData();
@@ -48,6 +54,7 @@ const ChecklistContent = ({
 
   // NEW: Move items modal state
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [itemsBeingMoved, setItemsBeingMoved] = useState([]);
 
   // Sort Modal State
   const [showSortModal, setShowSortModal] = useState(false);
@@ -663,17 +670,51 @@ const ChecklistContent = ({
 
       {/* Confirm Move Button */}
       {selectionMode && selectedItems.size > 0 && (
-        <TouchableOpacity
-          style={styles.confirmMoveButton}
-          onPress={() => setShowMoveModal(true)}
-        >
-          <Ionicons name="arrow-forward" size={20} color="#fff" />
-          <Text style={styles.confirmMoveButtonText}>
-            Move {getLogicalItemCount()}{" "}
-            {getLogicalItemCount() === 1 ? "item" : "items"}
-          </Text>
-        </TouchableOpacity>
-      )}
+  <TouchableOpacity
+    style={styles.confirmMoveButton}
+    onPress={() => {
+      // Calculate items to move
+      const itemsToMove = [];
+      
+      items.forEach((item) => {
+        if (selectedItems.has(item.id)) {
+          if (item.subItems && item.subItems.length > 0) {
+            itemsToMove.push(item);
+          } else {
+            itemsToMove.push(item);
+          }
+        } else if (item.subItems && item.subItems.length > 0) {
+          const selectedSubs = item.subItems.filter((sub) =>
+            selectedItems.has(sub.id)
+          );
+
+          if (selectedSubs.length > 0) {
+            const allSubsSelected = selectedSubs.length === item.subItems.length;
+
+            if (allSubsSelected) {
+              itemsToMove.push(item);
+            } else {
+              itemsToMove.push({
+                ...item,
+                id: generateUUID(),
+                subItems: selectedSubs,
+              });
+            }
+          }
+        }
+      });
+      
+      setItemsBeingMoved(itemsToMove);
+      setShowMoveModal(true);
+    }}
+  >
+    <Ionicons name="arrow-forward" size={20} color="#fff" />
+    <Text style={styles.confirmMoveButtonText}>
+      Move {getLogicalItemCount()}{" "}
+      {getLogicalItemCount() === 1 ? "item" : "items"}
+    </Text>
+  </TouchableOpacity>
+)}
 
       {/* Multiple Choice Selection Modal */}
       <MultipleChoiceSelectionModal
@@ -702,8 +743,22 @@ const ChecklistContent = ({
       <MoveItemsModal
         visible={showMoveModal}
         pinnedChecklists={pinnedChecklists}
+        itemsToMove={itemsBeingMoved}
+        selectedChecklist={checklist}
+        context={context}
+        eventId={eventId}
+        selectedCalendarIdForMoving={selectedCalendarIdForMoving}
+        setSelectedCalendarIdForMoving={setSelectedCalendarIdForMoving}
+        groupId={groupId}
+        eventStartTime={eventStartTime}
+        eventActivities={eventActivities}
         onConfirm={handleMoveItems}
-        onCancel={() => setShowMoveModal(false)}
+        onCancel={() => {
+          setShowMoveModal(false);
+          if (onCloseParentModal) {  // ✅ Close parent too
+            onCloseParentModal();
+          }
+        }}
       />
 
       {/* Sort Modal */}

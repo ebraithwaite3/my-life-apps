@@ -19,7 +19,9 @@ import EditChecklistContent from "../../content/checklists/EditChecklistContent"
 const AddChecklistToEventModal = ({
   visible,
   onClose,
+  onSuccess,
   selectedEvent,
+  preselectedChecklist = null,  // ✅ ADDED
   templates = [],
   onSaveChecklist,
   onSaveTemplate,
@@ -33,12 +35,20 @@ const AddChecklistToEventModal = ({
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [hasPickedTemplate, setHasPickedTemplate] = useState(false);
 
-  // Show template picker on mount if templates exist
+  // ✅ Initialize with preselected checklist
   React.useEffect(() => {
-    if (visible && templates.length > 0 && !hasPickedTemplate) {
+    if (visible && preselectedChecklist) {
+      setSelectedChecklist(preselectedChecklist);
+      setHasPickedTemplate(true);  // Skip template selector
+    }
+  }, [visible, preselectedChecklist]);
+
+  // Show template picker on mount if templates exist AND no preselected checklist
+  React.useEffect(() => {
+    if (visible && templates.length > 0 && !hasPickedTemplate && !preselectedChecklist) {  // ✅ UPDATED
       setShowTemplateModal(true);
     }
-  }, [visible, templates.length, hasPickedTemplate]);
+  }, [visible, templates.length, hasPickedTemplate, preselectedChecklist]);  // ✅ UPDATED
 
   // Build template options
   const templateOptions = [
@@ -98,6 +108,11 @@ const AddChecklistToEventModal = ({
       promptForContext(async (context) => {
         await onSaveTemplate(checklist, context);
       });
+    }
+
+    // Call onSuccess after saving checklist and template
+    if (onSuccess) {
+      onSuccess();
     }
   };
 

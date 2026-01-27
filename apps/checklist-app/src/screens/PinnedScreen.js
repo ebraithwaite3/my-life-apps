@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, FlatList, Alert, Keyboard, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -18,28 +18,40 @@ import {
   CustomOrderModal,
 } from "@my-apps/ui";
 import { Ionicons } from "@expo/vector-icons";
-import { useDeleteNotification, useChecklistTemplates, usePinnedChecklists } from "@my-apps/hooks";
+import { useDeleteNotification, useChecklistTemplates, usePinnedChecklists, useNotificationHandlers, useNotifications } from "@my-apps/hooks";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { showSuccessToast } from "@my-apps/utils";
 import { usePinnedSort } from "../hooks/usePinnedSort";
 import { usePinnedOperations } from "../hooks/usePinnedOperations";
 import { usePinnedChecklistModal } from "../hooks/usePinnedChecklistModal";
+import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
-  const { user, groups } = useData();
+  const { user, groups, addingToEvent } = useData();
   const { allPinned, checklistsLoading } = useChecklistData();
   const deleteNotification = useDeleteNotification();
   const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
   const { createPinnedChecklist, updatePinnedChecklist } = usePinnedChecklists();
+  const { scheduleGroupReminder } = useNotifications();
   const editContentRef = useRef(null);
   const tabBarHeight = useBottomTabBarHeight();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [checklistContext, setChecklistContext] = useState(null);
+
+  // Track initial state for change detection
+  const [initialChecklist, setInitialChecklist] = useState(null);
+  const [initialEditReminder, setInitialEditReminder] = useState(null);
+  const [initialViewReminder, setInitialViewReminder] = useState(null);
+  const [hasEditChanges, setHasEditChanges] = useState(false);
+  const [hasViewEditChanges, setHasViewEditChanges] = useState(false);
+
+  console.log('📍 PINNED SCREEN RENDER - showChecklistModal:', showChecklistModal);
+console.log('📍 PINNED SCREEN RENDER - showEditModal:', showEditModal);
 
   // Custom hooks
   const {
@@ -87,9 +99,90 @@ const PinnedScreen = () => {
     getActionDisabled,
   } = usePinnedChecklistModal((checklist) => saveChecklistOperation(checklist, checklistContext));
 
+  // Notification handlers for Edit/Create modal
+  const {
+    reminder: editReminder,
+    loading: editReminderLoading,
+    updateReminder: updateEditReminder,
+    deleteReminder: deleteEditReminder,
+  } = useNotificationHandlers(
+    showEditModal && selectedChecklist?.id ? selectedChecklist.id : null,
+    "checklist",
+    null
+  );
+
+  // Notification handlers for View/Complete modal (edit mode)
+  const {
+    reminder: viewReminder,
+    loading: viewReminderLoading,
+    updateReminder: updateViewReminder,
+    deleteReminder: deleteViewReminder,
+  } = useNotificationHandlers(
+    showChecklistModal && selectedChecklist?.id ? selectedChecklist.id : null,
+    "checklist",
+    null
+  );
+
+  // Initialize snapshots when Edit/Create modal opens
+useEffect(() => {
+  if (showEditModal) {
+    if (selectedChecklist) {
+      // Editing existing checklist
+      setInitialChecklist(JSON.parse(JSON.stringify(selectedChecklist)));
+      setInitialEditReminder(editReminder);
+    } else {
+      // ✅ Creating new checklist - set empty baseline
+      setInitialChecklist({ name: '', items: [] });
+      setInitialEditReminder(null);
+    }
+    setHasEditChanges(false);
+  }
+}, [showEditModal, selectedChecklist?.id]);
+
+// ✅ Put this back in PinnedScreen
+useEffect(() => {
+  console.log('🚨 ADDING TO EVENT CHANGED:', addingToEvent.isActive);
+  if (addingToEvent.isActive) {
+    console.log('🚨 FORCE CLOSING ALL MODALS');
+    setShowChecklistModal(false);
+    setShowEditModal(false);
+    setSelectedChecklist(null);
+    console.log('🚨 MODALS STATE SET TO FALSE');
+  }
+}, [addingToEvent.isActive]);
+
+  // Initialize snapshots when View/Complete modal opens in edit mode
+  useEffect(() => {
+    if (showChecklistModal && selectedChecklist && checklistMode === 'edit') {
+      setInitialChecklist(JSON.parse(JSON.stringify(selectedChecklist)));
+      setInitialViewReminder(viewReminder);
+      setHasViewEditChanges(false);
+    }
+  }, [showChecklistModal, selectedChecklist?.id, checklistMode]);
+
+  const cleanObjectForFirestore = (obj) => {
+    const cleaned = {};
+    Object.keys(obj).forEach(key => {
+      const value = obj[key];
+      // Only include defined values (null is OK, undefined is not)
+      if (value !== undefined) {
+        if (Array.isArray(value)) {
+          cleaned[key] = value;
+        } else if (value && typeof value === 'object' && !(value instanceof Date)) {
+          cleaned[key] = cleanObjectForFirestore(value);
+        } else {
+          cleaned[key] = value;
+        }
+      }
+    });
+    return cleaned;
+  };
+
   // Wrapper to pass checklistContext to save operation
   const handleSaveChecklist = async (checklist, onClose) => {
-    await saveChecklistOperation(checklist, checklistContext, onClose);
+    // ✅ Clean the checklist before saving
+    const cleanedChecklist = cleanObjectForFirestore(checklist);
+    await saveChecklistOperation(cleanedChecklist, checklistContext, onClose);
   };
 
   // Wrapper to pass additional state to move items
@@ -176,15 +269,36 @@ const PinnedScreen = () => {
   };
 
   const handleCloseModal = () => {
-    setShowEditModal(false);
-    setSelectedChecklist(null);
-    setChecklistContext(null);
+    if (hasEditChanges) {
+      Alert.alert(
+        "Unsaved Changes",
+        "You have unsaved changes. Are you sure you want to close?",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              setShowEditModal(false);
+              setSelectedChecklist(null);
+              setChecklistContext(null);
+              setHasEditChanges(false);
+            },
+          },
+        ]
+      );
+    } else {
+      setShowEditModal(false);
+      setSelectedChecklist(null);
+      setChecklistContext(null);
+    }
   };
 
   const closeChecklistModal = () => {
     closeModal(() => {
       setShowChecklistModal(false);
       setChecklistContext(null);
+      setHasViewEditChanges(false);
     });
   };
 
@@ -308,7 +422,9 @@ const PinnedScreen = () => {
           backgroundColor: "rgba(0, 0, 0, 0.5)",
           justifyContent: "center",
           alignItems: "center",
-        }}>
+        }}
+          pointerEvents="box-none"
+        >
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ width: "100%", height: "90%" }}
@@ -323,15 +439,89 @@ const PinnedScreen = () => {
               <ModalHeader
                 title={selectedChecklist ? "Edit Checklist" : "New Checklist"}
                 onCancel={handleCloseModal}
+                cancelText={hasEditChanges ? "Cancel" : "Close"}
                 onDone={() => editContentRef.current?.save()}
                 doneText={selectedChecklist ? "Update" : "Create"}
+                doneDisabled={!hasEditChanges}
               />
 
               <EditChecklistContent
                 ref={editContentRef}
                 checklist={selectedChecklist}
-                onSave={(checklist, shouldSaveAsTemplate) => {
-                  handleSaveChecklist(checklist, handleCloseModal);
+                onSave={async (checklist, shouldSaveAsTemplate) => {
+                  // Update reminder
+                  if (editContentRef.current) {
+                    const currentState = editContentRef.current.getCurrentState();
+                    const reminderToSave = currentState.reminderTime;
+                    
+                    // ✅ Check if this is a group checklist
+                    const isGroupChecklist = checklistContext?.type === "group";
+                    
+                    if (isGroupChecklist && checklistContext?.groupId) {
+                      // ✅ GROUP CHECKLIST: Create notifications for all group members
+                      if (reminderToSave) {
+                        console.log('⏰ Scheduling group pinned checklist reminder');
+                        
+                        await scheduleGroupReminder(
+                          checklistContext.groupId,
+                          `Reminder: ${checklist.name}`,
+                          "Checklist reminder",
+                          checklist.id,
+                          new Date(reminderToSave.scheduledFor),
+                          {
+                            screen: "Pinned",
+                            eventId: checklist.id,
+                            checklistId: checklist.id,
+                            app: "checklist-app",
+                            ...(reminderToSave.isRecurring && {
+                              isRecurring: true,
+                              recurringConfig: reminderToSave.recurringConfig,
+                            }),
+                          }
+                        );
+                        
+                        console.log('✅ Group pinned checklist reminder scheduled');
+                      } else {
+                        // ✅ DELETE all group notifications for this checklist
+                        console.log('🗑️ Deleting group pinned checklist reminders');
+                        
+                        try {
+                          const notificationsRef = collection(db, 'pendingNotifications');
+                          const q = query(
+                            notificationsRef,
+                            where('data.checklistId', '==', checklist.id)
+                          );
+                          
+                          const snapshot = await getDocs(q);
+                          const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                          await Promise.all(deletePromises);
+                          
+                          console.log(`✅ Deleted ${snapshot.docs.length} group notifications`);
+                        } catch (error) {
+                          console.error('❌ Error deleting group notifications:', error);
+                        }
+                      }
+                    } else {
+                      // ✅ PERSONAL CHECKLIST: Use normal single-user notification
+                      await updateEditReminder(
+                        reminderToSave,
+                        checklist.name,
+                        null
+                      );
+                    }
+                    
+                    // Update snapshot
+                    setInitialEditReminder(reminderToSave ? JSON.parse(JSON.stringify(reminderToSave)) : null);
+                  }
+
+                  await handleSaveChecklist(checklist, () => {
+                    setShowEditModal(false);
+                    setSelectedChecklist(null);
+                    setChecklistContext(null);
+                    setHasEditChanges(false);
+                  });
+                
+                  
                   if (shouldSaveAsTemplate) {
                     promptForContext(async (context) => {
                       const success = await saveTemplate(checklist, context);
@@ -341,6 +531,13 @@ const PinnedScreen = () => {
                     });
                   }
                 }}
+                reminder={editReminder}
+                reminderLoading={editReminderLoading}
+                updateReminder={updateEditReminder}
+                deleteReminder={deleteEditReminder}
+                onChangesDetected={(hasChanges) => setHasEditChanges(hasChanges)}
+                initialChecklist={initialChecklist}
+                initialReminder={initialEditReminder}
                 isUserAdmin={user?.admin === true}
                 addReminder={true}
                 eventStartTime={null}
@@ -362,7 +559,8 @@ const PinnedScreen = () => {
           backgroundColor: "rgba(0, 0, 0, 0.5)",
           justifyContent: "center",
           alignItems: "center",
-        }}>
+        }}
+          pointerEvents="box-none">
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ width: "100%", height: "90%" }}
@@ -376,7 +574,7 @@ const PinnedScreen = () => {
             }}>
               <ModalHeader
                 title={selectedChecklist?.name || "Checklist"}
-                subtitle={checklistMode === "complete" ? `${progress.completed}/${progress.total} Complete` : undefined}
+                subtitle={checklistMode === "complete" ? `${progress.completed}/${progress.total} Complete` : "Edit Mode"}
                 onCancel={closeChecklistModal}
                 cancelText={getCancelText()}
                 onDone={checklistMode === "complete" ? handleUpdateFromCompleteMode : () => editContentRef.current?.save()}
@@ -412,6 +610,7 @@ const PinnedScreen = () => {
                   pinnedChecklists={allPinned}
                   onUpdatePinnedChecklist={updatePinnedChecklist}
                   onCreatePinnedChecklist={createPinnedChecklist}
+                  onCloseParentModal={() => setShowChecklistModal(false)}  // ✅ Add this
                 />
               ) : (
                 <EditChecklistContent
@@ -421,8 +620,74 @@ const PinnedScreen = () => {
                     // Preserve the order field from the original checklist
                     const checklistToSave = {
                       ...checklist,
-                      order: workingChecklist?.order, // Preserve existing order
+                      order: workingChecklist?.order,
                     };
+
+                    // Update reminder
+                    if (editContentRef.current) {
+                      const currentState = editContentRef.current.getCurrentState();
+                      const reminderToSave = currentState.reminderTime;
+                      
+                      // ✅ Check if this is a group checklist
+                      const isGroupChecklist = checklistContext?.type === "group";
+                      
+                      if (isGroupChecklist && checklistContext?.groupId) {
+                        // ✅ GROUP CHECKLIST: Create notifications for all group members
+                        if (reminderToSave) {
+                          console.log('⏰ Scheduling group pinned checklist reminder');
+                          
+                          await scheduleGroupReminder(
+                            checklistContext.groupId,
+                            `Reminder: ${checklistToSave.name}`,
+                            "Checklist reminder",
+                            checklist.id,
+                            new Date(reminderToSave.scheduledFor),
+                            {
+                              screen: "Pinned",
+                              eventId: checklist.id,
+                              checklistId: checklist.id,
+                              app: "checklist-app",
+                              ...(reminderToSave.isRecurring && {
+                                isRecurring: true,
+                                recurringConfig: reminderToSave.recurringConfig,
+                              }),
+                            }
+                          );
+                          
+                          console.log('✅ Group pinned checklist reminder scheduled');
+                        } else {
+                          // ✅ DELETE all group notifications
+                          console.log('🗑️ Deleting group pinned checklist reminders');
+                          
+                          try {
+                            const notificationsRef = collection(db, 'pendingNotifications');
+                            const q = query(
+                              notificationsRef,
+                              where('data.checklistId', '==', checklistToSave.id)
+                            );
+                            
+                            const snapshot = await getDocs(q);
+                            const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                            await Promise.all(deletePromises);
+                            
+                            console.log(`✅ Deleted ${snapshot.docs.length} group notifications`);
+                          } catch (error) {
+                            console.error('❌ Error deleting group notifications:', error);
+                          }
+                        }
+                      } else {
+                        // ✅ PERSONAL CHECKLIST: Use normal single-user notification
+                        await updateViewReminder(
+                          reminderToSave,
+                          checklistToSave.name,
+                          null
+                        );
+                      }
+                      
+                      // Update snapshot
+                      setInitialViewReminder(reminderToSave ? JSON.parse(JSON.stringify(reminderToSave)) : null);
+                    }
+
                     await handleSaveChecklist(checklistToSave);
                     Keyboard.dismiss();
                     setTimeout(() => {
@@ -430,7 +695,9 @@ const PinnedScreen = () => {
                     }, 100);
                     setWorkingChecklist(checklistToSave);
                     setUpdatedItems(checklistToSave.items);
+                    setInitialChecklist(JSON.parse(JSON.stringify(checklistToSave)));
                     setIsDirtyComplete(false);
+                    
                     if (shouldSaveAsTemplate) {
                       promptForContext(async (context) => {
                         const success = await saveTemplate(checklistToSave, context);
@@ -440,6 +707,13 @@ const PinnedScreen = () => {
                       });
                     }
                   }}
+                  reminder={viewReminder}
+                  reminderLoading={viewReminderLoading}
+                  updateReminder={updateViewReminder}
+                  deleteReminder={deleteViewReminder}
+                  onChangesDetected={(hasChanges) => setHasViewEditChanges(hasChanges)}
+                  initialChecklist={initialChecklist}
+                  initialReminder={initialViewReminder}
                   isUserAdmin={user?.admin === true}
                   addReminder={true}
                   eventStartTime={null}

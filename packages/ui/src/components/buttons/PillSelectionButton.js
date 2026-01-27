@@ -14,32 +14,34 @@ const PillSelectionButton = ({
     container: {
       flexDirection: 'row',
       backgroundColor: theme.background,
-      borderRadius: 8, // The outer shape determines the curve
-      padding: 0,      // <--- CHANGED: Remove padding so children touch edges
-      borderWidth: 2,
+      borderRadius: getBorderRadius.md, 
+      padding: 3, // Slight padding to create the "inset" look for the pills
+      borderWidth: 1,
       borderColor: theme.border,
-      overflow: 'hidden', // <--- ADDED: Clips the child background to the border radius
+      overflow: 'hidden',
     },
     option: {
       flex: 1,
       paddingVertical: getSpacing.sm,
       paddingHorizontal: getSpacing.md,
-      // borderRadius: getBorderRadius.pill, // <--- REMOVED: Let the container handle the shape
+      borderRadius: getBorderRadius.md - 2, // Matches the container curve
       alignItems: 'center',
       justifyContent: 'center',
-      // Optional: Add a border right to separate unselected items visually
-      borderRightWidth: 0, 
     },
     selectedOption: {
-      backgroundColor: theme.primary,
+      // Soft tint background instead of solid primary
+      backgroundColor: theme.primary + "30", 
     },
     optionText: {
-      fontSize: getTypography.body.fontSize,
-      fontWeight: '600',
+      fontSize: 12, // Standardized for pill labels
+      fontWeight: '700',
       color: theme.text.secondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     selectedOptionText: {
-      color: '#FFFFFF',
+      // Primary color text for legibility against the tint
+      color: theme.primary, 
     },
   });
 
@@ -55,7 +57,7 @@ const PillSelectionButton = ({
               isSelected && styles.selectedOption,
             ]}
             onPress={() => onSelect(option.value)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
             <Text
               style={[

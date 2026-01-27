@@ -22,6 +22,7 @@ import TemplatesScreen from "../screens/TemplatesScreen";
 import MessagesScreen from "../screens/MessagesScreen";
 import PreferencesScreen from "../screens/PreferencesScreen";
 import LoginScreen from "../screens/LoginScreen";
+import { AddingToEventBar } from "@my-apps/ui";
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
@@ -169,10 +170,10 @@ const getTabBarIcon = (routeName, unreadCount = 0) => {
 };
 
 function TabNavigator({ theme, onLogout }) {
-  const { unreadMessagesCount } = useData();
+  const { unreadMessagesCount, addingToEvent } = useData();
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <HeaderWithNavigation onLogout={onLogout} />
 
       <Tab.Navigator
@@ -188,7 +189,7 @@ function TabNavigator({ theme, onLogout }) {
             marginHorizontal: 2,
             marginTop: -8
           },
-          tabBarStyle: {
+          tabBarStyle: addingToEvent.isActive ? { display: 'none' } : { // ✅ Hide tabs when adding
             backgroundColor: theme.card || theme.surface || "#fff",
             borderTopColor: theme.border || "#e0e0e0",
             borderTopWidth: 1,
@@ -229,7 +230,8 @@ function TabNavigator({ theme, onLogout }) {
           options={{ tabBarLabel: "Settings" }}
         />
       </Tab.Navigator>
-    </>
+      <AddingToEventBar />
+    </View>
   );
 }
 

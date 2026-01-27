@@ -10,6 +10,8 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
   const [notifyAdminOnCompletion, setNotifyAdminOnCompletion] = useState(false);
   const [defaultNotifyAdmin, setDefaultNotifyAdmin] = useState(false);
   const [defaultReminderTime, setDefaultReminderTime] = useState(null);
+  const [defaultIsRecurring, setDefaultIsRecurring] = useState(false);
+  const [defaultRecurringConfig, setDefaultRecurringConfig] = useState(null);
   const [saveAsTemplateEnabled, setSaveAsTemplateEnabled] = useState(false);
   const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -19,11 +21,11 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
   useEffect(() => {
     if (isEditing && checklist) {
       setChecklistName(checklist.name || prefilledTitle);
-      setReminderMinutes(checklist.reminderMinutes ?? null);
-      setReminderTime(checklist.reminderTime ?? null);
       setNotifyAdminOnCompletion(checklist.notifyAdmin ?? false);
       setDefaultNotifyAdmin(checklist.defaultNotifyAdmin ?? false);
       setDefaultReminderTime(checklist.defaultReminderTime ?? null);
+      setDefaultIsRecurring(checklist.defaultIsRecurring ?? false);
+      setDefaultRecurringConfig(checklist.defaultRecurringConfig ?? null);
     } else {
       setChecklistName(prefilledTitle);
       setReminderMinutes(null);
@@ -31,6 +33,8 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
       setNotifyAdminOnCompletion(false);
       setDefaultNotifyAdmin(false);
       setDefaultReminderTime(null);
+      setDefaultIsRecurring(false);
+      setDefaultRecurringConfig(null);
     }
 
     setSaveAsTemplateEnabled(false);
@@ -89,6 +93,8 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
     notifyAdmin: notifyAdminOnCompletion,
     defaultNotifyAdmin,
     defaultReminderTime,
+    defaultIsRecurring,
+    defaultRecurringConfig,
   });
 
   return {
@@ -105,6 +111,10 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
     setDefaultNotifyAdmin,
     defaultReminderTime,
     setDefaultReminderTime,
+    defaultIsRecurring,
+    setDefaultIsRecurring,
+    defaultRecurringConfig,
+    setDefaultRecurringConfig,
     saveAsTemplateEnabled,
     setSaveAsTemplateEnabled,
     showReminderPicker,

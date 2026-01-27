@@ -82,23 +82,76 @@ const PinnedChecklistCard = ({
   // Calculate progress using shared utility
   const { completed, total } = calculateChecklistProgress(checklist.items || []);
 
-  // Format reminder time
-  const formatReminderTime = (timeString) => {
-    if (!timeString) return null;
-    return new Date(timeString).toLocaleString('en-US', {
+  // ✅ Format reminder time - with recurring math
+const formatReminderTime = () => {
+  if (!checklist.reminderTime) return null;
+  
+  // Handle new object format
+  const { scheduledFor, isRecurring, recurringConfig } = checklist.reminderTime;
+  if (!scheduledFor) return null;
+  
+  const reminderDate = new Date(scheduledFor);
+  const now = new Date();
+  
+  // ✅ Check if recurring reminder is finished using math
+  if (isRecurring && recurringConfig) {
+    const { intervalSeconds, totalOccurrences } = recurringConfig;
+    
+    // If unlimited occurrences, always show
+    if (totalOccurrences === null) {
+      const timeString = reminderDate.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      return `${timeString} (Recurring)`;
+    }
+    
+    // Calculate when the LAST occurrence should fire
+    // First occurrence at scheduledFor (0 intervals)
+    // Last occurrence at scheduledFor + (intervalSeconds * (totalOccurrences - 1))
+    const intervalMs = intervalSeconds * 1000;
+    const lastOccurrenceTime = new Date(reminderDate.getTime() + (intervalMs * (totalOccurrences - 1)));
+    
+    // If we're past the last occurrence time, hide it
+    if (now > lastOccurrenceTime) {
+      return null;
+    }
+    
+    const timeString = reminderDate.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true
     });
-  };
+    return `${timeString} (Recurring)`;
+  }
+  
+  // ✅ Hide past non-recurring reminders
+  if (reminderDate < now && !isRecurring) {
+    return null;
+  }
+  
+  const timeString = reminderDate.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+  
+  return timeString;
+};
+
+  const reminderDisplay = formatReminderTime();
 
   // Render the 3-icon transfer visualization
   const renderTransferIcons = () => {
     const isGroup = checklist.isGroupChecklist;
     
-    // Icon configuration - show what transformation will happen
     const sourceIcon = isGroup ? "people" : "person";
     const targetIcon = isGroup ? "person" : "people";
     const arrowIcon = "arrow-forward";
@@ -242,7 +295,6 @@ const PinnedChecklistCard = ({
           {/* Header: Icon + Name + Move Button */}
           <View style={styles.cardContent}>
             <View style={styles.leftContent}>
-              {/* Small icon badge - just visual, not clickable */}
               <View
                 style={[
                   styles.iconBadge,
@@ -256,7 +308,6 @@ const PinnedChecklistCard = ({
                 />
               </View>
 
-              {/* Name and group name */}
               <View style={styles.nameAndInfo}>
                 <Text style={styles.checklistName} numberOfLines={1}>
                   {checklist.name}
@@ -269,7 +320,6 @@ const PinnedChecklistCard = ({
               </View>
             </View>
 
-            {/* Right: 3-Icon Move Button */}
             {availableMoveTargets.length > 0 && (
               <TouchableOpacity
                 ref={moveButtonRef}
@@ -288,11 +338,11 @@ const PinnedChecklistCard = ({
             total={total}
             showCount={true}
             height={6}
-            style={{ marginBottom: checklist.reminderTime ? getSpacing.sm : 0 }}
+            style={{ marginBottom: reminderDisplay ? getSpacing.sm : 0 }}
           />
 
-          {/* Reminder Display */}
-          {checklist.reminderTime && (
+          {/* ✅ Reminder Display - only show if reminderDisplay is not null */}
+          {reminderDisplay && (
             <View style={styles.reminderRow}>
               <Ionicons
                 name="notifications-outline"
@@ -300,7 +350,7 @@ const PinnedChecklistCard = ({
                 color={theme.text.secondary}
               />
               <Text style={styles.reminderText}>
-                {formatReminderTime(checklist.reminderTime)}
+                {reminderDisplay}
               </Text>
             </View>
           )}

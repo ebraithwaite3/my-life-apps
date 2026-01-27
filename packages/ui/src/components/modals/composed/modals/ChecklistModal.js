@@ -15,6 +15,15 @@ import ChecklistContent from "../../content/checklists/ChecklistContent";
 import EditChecklistContent from "../../content/checklists/EditChecklistContent";
 import PillSelectionButton from "../../../buttons/PillSelectionButton";
 import { generateUUID } from "@my-apps/utils";
+import { useNotificationHandlers, useNotifications } from "@my-apps/hooks";
+import { useAuth } from "@my-apps/contexts";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+} from "firebase/firestore";
 
 const ChecklistModal = ({
   // From calendarState
@@ -49,17 +58,37 @@ const ChecklistModal = ({
   pinnedChecklists = [],
   onUpdatePinnedChecklist, // Function to update a pinned checklist
   onCreatePinnedChecklist, // Function to create new pinned checklist
+
+  selectedCalendarIdForMoving,
+  setSelectedCalendarIdForMoving,
 }) => {
-  console.log("🔍 ChecklistModal received pinnedChecklists:", pinnedChecklists);
+  console.log("🔍 ChecklistModal selectedChecklist:", selectedChecklist, "selected checklist event", selectedChecklistEvent)
 
   const { theme, getSpacing } = useTheme();
+  const { db } = useAuth();
   const editContentRef = useRef(null);
+
+  const {
+    reminder,
+    loading: reminderLoading,
+    hasReminder,
+    updateReminder,
+    deleteReminder,
+  } = useNotificationHandlers(
+    selectedChecklist ? selectedChecklist.id : null,
+    "checklist",
+    selectedChecklistEvent ? selectedChecklistEvent.id : null
+  );
+
+  const { scheduleGroupReminder } = useNotifications();
 
   // Unified working state for the checklist
   const [workingChecklist, setWorkingChecklist] = useState(null);
 
   // Track initial state for comparison
   const [initialChecklist, setInitialChecklist] = useState(null);
+  const [initialReminder, setInitialReminder] = useState(null);
+  const [hasEditModeChanges, setHasEditModeChanges] = useState(false);
 
   // Initialize working checklist AND initial snapshot when modal opens
   useEffect(() => {
@@ -67,6 +96,7 @@ const ChecklistModal = ({
       setWorkingChecklist(selectedChecklist);
       setUpdatedItems(selectedChecklist.items || []);
       setInitialChecklist(JSON.parse(JSON.stringify(selectedChecklist)));
+      setInitialReminder(reminder);
       setIsDirtyComplete(false);
     }
   }, [showChecklistModal, selectedChecklist]);
@@ -85,31 +115,6 @@ const ChecklistModal = ({
 
     setIsDirtyComplete(hasChanges);
   }, [updatedItems, initialChecklist, checklistMode]);
-
-  // Check if Edit mode has changes
-  const hasEditChanges = () => {
-    if (
-      checklistMode !== "edit" ||
-      !editContentRef.current ||
-      !initialChecklist
-    ) {
-      return false;
-    }
-
-    const currentState = editContentRef.current.getCurrentState();
-
-    const nameChanged = currentState.name !== initialChecklist.name;
-    const itemsChanged =
-      JSON.stringify(currentState.items) !==
-      JSON.stringify(initialChecklist.items);
-    const reminderChanged =
-      currentState.reminderMinutes !== initialChecklist.reminderMinutes ||
-      currentState.reminderTime !== initialChecklist.reminderTime;
-    const notifyChanged =
-      currentState.notifyAdmin !== initialChecklist.notifyAdmin;
-
-    return nameChanged || itemsChanged || reminderChanged || notifyChanged;
-  };
 
   // NEW: Smart nesting - check if item should nest under existing group
   const findMatchingGroup = (itemName, destinationItems) => {
@@ -277,6 +282,7 @@ const ChecklistModal = ({
 
     setInitialChecklist(JSON.parse(JSON.stringify(updatedChecklist)));
     setIsDirtyComplete(false);
+    setInitialReminder(JSON.parse(JSON.stringify(reminder)));
   };
 
   // Internal handler for updating from Edit mode
@@ -295,6 +301,83 @@ const ChecklistModal = ({
 
     await handleUpdateChecklist(checklist, null);
 
+    // ✅ Update reminder - check if group event
+    if (editContentRef.current && selectedChecklist && selectedChecklistEvent) {
+      const currentState = editContentRef.current.getCurrentState();
+      const reminderToSave =
+        selectedChecklistEvent && !selectedChecklistEvent.isAllDay
+          ? currentState.reminderMinutes
+          : currentState.reminderTime;
+
+      const eventIdToUse =
+        selectedChecklistEvent.eventId || selectedChecklistEvent.id;
+
+      if (!eventIdToUse) {
+        console.warn("⚠️ No event ID found, cannot manage notifications");
+      } else {
+        const isGroupEvent = selectedChecklistEvent.groupId != null;
+
+        if (isGroupEvent && reminderToSave) {
+          console.log("⏰ Scheduling group checklist reminder");
+
+          await scheduleGroupReminder(
+            selectedChecklistEvent.groupId,
+            `Reminder: ${checklist.name}`,
+            "Checklist reminder",
+            eventIdToUse,
+            new Date(reminderToSave.scheduledFor),
+            {
+              screen: "Calendar",
+              eventId: eventIdToUse,
+              checklistId: selectedChecklist.id,
+              app: "checklist-app",
+              date: selectedChecklistEvent.startTime,
+              ...(reminderToSave.isRecurring && {
+                isRecurring: true,
+                recurringConfig: reminderToSave.recurringConfig,
+              }),
+            }
+          );
+
+          console.log("✅ Group checklist reminder scheduled");
+        } else if (isGroupEvent && !reminderToSave) {
+          console.log("🗑️ Deleting group checklist reminders");
+
+          try {
+            const notificationsRef = collection(db, "pendingNotifications");
+            const q = query(
+              notificationsRef,
+              where("data.checklistId", "==", selectedChecklist.id),
+              where("eventId", "==", eventIdToUse)
+            );
+
+            const snapshot = await getDocs(q);
+            const deletePromises = snapshot.docs.map((doc) =>
+              deleteDoc(doc.ref)
+            );
+            await Promise.all(deletePromises);
+
+            console.log(
+              `✅ Deleted ${snapshot.docs.length} group notifications`
+            );
+          } catch (error) {
+            console.error("❌ Error deleting group notifications:", error);
+          }
+        } else {
+          await updateReminder(
+            reminderToSave,
+            checklist.name,
+            selectedChecklistEvent?.startTime
+          );
+        }
+
+        // ✅ FIX: Set initialReminder to what we JUST SAVED, not the hook's stale state
+        setInitialReminder(
+          reminderToSave ? JSON.parse(JSON.stringify(reminderToSave)) : null
+        );
+      }
+    }
+
     Keyboard.dismiss();
     setTimeout(() => {
       showSuccessToast("Checklist saved", "", 2000, "top");
@@ -309,7 +392,7 @@ const ChecklistModal = ({
   // Internal handler for closing with confirmation if dirty
   const handleInternalClose = () => {
     const hasChanges =
-      checklistMode === "complete" ? isDirtyComplete : hasEditChanges();
+      checklistMode === "complete" ? isDirtyComplete : hasEditModeChanges;
 
     if (hasChanges) {
       Alert.alert(
@@ -332,7 +415,7 @@ const ChecklistModal = ({
   // Get cancel button text based on dirty state
   const getCancelText = () => {
     const hasChanges =
-      checklistMode === "complete" ? isDirtyComplete : hasEditChanges();
+      checklistMode === "complete" ? isDirtyComplete : hasEditModeChanges;
     return hasChanges ? "Cancel" : "Close";
   };
 
@@ -374,7 +457,7 @@ const ChecklistModal = ({
                 subtitle={
                   checklistMode === "complete"
                     ? `${progress.completed}/${progress.total} Complete`
-                    : undefined
+                    : 'Edit Mode'
                 }
                 onCancel={handleInternalClose}
                 cancelText={getCancelText()}
@@ -387,7 +470,7 @@ const ChecklistModal = ({
                 doneDisabled={
                   checklistMode === "complete"
                     ? !isDirtyComplete
-                    : !hasEditChanges()
+                    : !hasEditModeChanges
                 }
               />
 
@@ -406,19 +489,37 @@ const ChecklistModal = ({
                   selectedValue={checklistMode}
                   onSelect={(value) => {
                     if (checklistMode === "edit" && editContentRef.current) {
-                      const currentState = editContentRef.current.getCurrentState();
+                      // Switching FROM edit mode - preserve current state
+                      const currentState =
+                        editContentRef.current.getCurrentState();
                       const updatedChecklist = {
                         ...workingChecklist,
                         ...currentState,
                       };
                       setWorkingChecklist(updatedChecklist);
                       setUpdatedItems(currentState.items);
-                      setInitialChecklist(JSON.parse(JSON.stringify(updatedChecklist))); // ← ADD THIS LINE
+                      setInitialChecklist(
+                        JSON.parse(JSON.stringify(updatedChecklist))
+                      );
+                      // Update reminder snapshot too
+                      const currentReminderValue =
+                        selectedChecklistEvent &&
+                        !selectedChecklistEvent.isAllDay
+                          ? currentState.reminderMinutes
+                          : currentState.reminderTime;
+                      setInitialReminder(currentReminderValue);
                     } else if (checklistMode === "complete") {
-                      setWorkingChecklist((prev) => ({
-                        ...prev,
+                      // Switching FROM complete mode - update initial state
+                      const updatedChecklist = {
+                        ...workingChecklist,
                         items: updatedItems,
-                      }));
+                      };
+                      setWorkingChecklist(updatedChecklist);
+                      setInitialChecklist(
+                        JSON.parse(JSON.stringify(updatedChecklist))
+                      );
+                      // Update reminder snapshot to current loaded value
+                      setInitialReminder(reminder);
                     }
                     setChecklistMode(value);
                   }}
@@ -437,6 +538,13 @@ const ChecklistModal = ({
                   }}
                   onMoveItems={handleMoveItems}
                   pinnedChecklists={pinnedChecklists}
+                  context={'event'}
+                  eventId={selectedChecklistEvent?.eventId}
+                  selectedCalendarIdForMoving={selectedCalendarIdForMoving}
+                  setSelectedCalendarIdForMoving={setSelectedCalendarIdForMoving}
+                  groupId={selectedChecklistEvent?.groupId || null}
+                  eventStartTime={selectedChecklistEvent?.startTime}
+                  eventActivities={selectedChecklistEvent?.activities || []}
                 />
               ) : (
                 <EditChecklistContent
@@ -448,6 +556,10 @@ const ChecklistModal = ({
                       shouldSaveAsTemplate
                     );
                   }}
+                  reminder={reminder}
+                  reminderLoading={reminderLoading}
+                  onReminderUpdate={updateReminder}
+                  onReminderDelete={deleteReminder}
                   isUserAdmin={user?.admin === true}
                   addReminder={true}
                   eventStartTime={
@@ -458,6 +570,11 @@ const ChecklistModal = ({
                   templates={templates || []}
                   onSaveTemplate={onSaveTemplate}
                   promptForContext={promptForContext}
+                  onChangesDetected={(hasChanges) =>
+                    setHasEditModeChanges(hasChanges)
+                  }
+                  initialChecklist={initialChecklist}
+                  initialReminder={initialReminder}
                 />
               )}
             </View>

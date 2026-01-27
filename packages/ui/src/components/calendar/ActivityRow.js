@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 const ActivityRow = ({ activities, appName, event, onActivityPress, onActivityDelete, navigation }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
+  console.log('🔍 ActivityRow received event;', event);
 
   const handlePress = (activity) => {
     // Special case: Checklists are universal and work in all apps

@@ -4,3 +4,4 @@ export { default as TextInputRow } from './TextInputRow';
 export { default as DateTimeSelector } from './DateTimeSelector';
 export { default as ReminderSelector } from './ReminderSelector';
 export { default as SelectorRow } from './SelectorRow';
+export { default as SimpleDateTimeSelector } from './SimpleDateTimeSelector';

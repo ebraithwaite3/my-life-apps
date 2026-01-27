@@ -8,6 +8,8 @@ exports.sendScheduledNotifications = onSchedule(
 
       const db = admin.firestore();
       const now = admin.firestore.Timestamp.now();
+      console.log("Now is:", now.toDate().toISOString());
+      console.log("Now in timestamp as it will come back:", now);
 
       try {
         const snapshot = await db
@@ -25,12 +27,13 @@ exports.sendScheduledNotifications = onSchedule(
 
         let sent = 0;
         let failed = 0;
+        let rescheduled = 0;
 
         for (const doc of snapshot.docs) {
           try {
             const notification = doc.data();
 
-            // NEW: Get app from notification data
+            // Get app from notification data
             const targetApp = notification.data?.app || "organizer-app";
 
             const userDoc = await db
@@ -45,13 +48,14 @@ exports.sendScheduledNotifications = onSchedule(
               continue;
             }
 
-            // NEW: Get app-specific token
+            // Get app-specific token
             const userData = userDoc.data();
             const pushToken = userData.pushTokens?.[targetApp];
 
             if (!pushToken) {
               console.log(
-                  `⚠️  User ${notification.userId} doesn't have ${targetApp}`,
+                  `⚠️  User ${notification.userId} ` +
+                  `doesn't have ${targetApp}`,
               );
               await doc.ref.delete();
               failed++;
@@ -107,17 +111,72 @@ exports.sendScheduledNotifications = onSchedule(
 
             if (sendSuccess) {
               console.log(
-                  `✅ Sent ${targetApp} notification to ${notification.userId}`,
+                  `✅ Sent ${targetApp} notification to ` +
+                  `${notification.userId}`,
               );
               sent++;
+
+              // ✅ Handle recurring notifications
+              if (notification.isRecurring &&
+                  notification.recurringConfig) {
+                const config = notification.recurringConfig;
+                const isInfinite = config.totalOccurrences === null;
+                const hasMore =
+                    config.currentOccurrence < config.totalOccurrences;
+
+                if (isInfinite || hasMore) {
+                  // ✅ Calculate next time from ORIGINAL scheduled time
+                  const currentScheduledTime = notification.scheduledFor;
+                  const nextSeconds =
+                      currentScheduledTime.seconds + config.intervalSeconds;
+
+                  const nextScheduledFor = new admin.firestore.Timestamp(
+                      nextSeconds,
+                      0,
+                  );
+
+                  const nowIso = admin.firestore.Timestamp.now()
+                      .toDate().toISOString();
+
+                  await doc.ref.update({
+                    "recurringConfig.currentOccurrence":
+                        config.currentOccurrence + 1,
+                    "recurringConfig.lastSentAt": nowIso,
+                    "scheduledFor": nextScheduledFor,
+                  });
+
+                  const nextOccur = config.currentOccurrence + 1;
+                  const total = config.totalOccurrences || "∞";
+                  console.log(
+                      `🔁 Rescheduled recurring notification ` +
+                      `(occurrence ${nextOccur}/${total})`,
+                  );
+                  console.log(
+                      `   Next send: ` +
+                      `${nextScheduledFor.toDate().toISOString()}`,
+                  );
+                  rescheduled++;
+                } else {
+                  // ✅ Final occurrence reached
+                  await doc.ref.delete();
+                  const current = config.currentOccurrence;
+                  const total = config.totalOccurrences;
+                  console.log(
+                      `✅ Final recurring occurrence sent ` +
+                      `(${current}/${total}) - deleted`,
+                  );
+                }
+              } else {
+                // ✅ Non-recurring notification - delete as normal
+                await doc.ref.delete();
+              }
             } else {
               console.log(
                   `❌ Failed to send to ${notification.userId}`,
               );
               failed++;
+              await doc.ref.delete();
             }
-
-            await doc.ref.delete();
           } catch (error) {
             console.error(
                 `❌ Error processing notification:`,
@@ -134,7 +193,8 @@ exports.sendScheduledNotifications = onSchedule(
         }
 
         console.log(
-            `✅ Batch complete: ${sent} sent, ${failed} failed`,
+            `✅ Batch complete: ${sent} sent, ` +
+            `${failed} failed, ${rescheduled} rescheduled`,
         );
       } catch (error) {
         console.error("❌ Scheduler error:", error);

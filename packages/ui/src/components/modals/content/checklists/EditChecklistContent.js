@@ -4,6 +4,7 @@ import React, {
   useCallback,
   forwardRef,
   useImperativeHandle,
+  useRef,
 } from "react";
 import {
   View,
@@ -17,7 +18,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import ReminderSelector from "../../../forms/ReminderSelector";
-import TimePickerModal from "../../composed/modals/TimePickerModal";
 import FilterChips from "../../../general/FilterChips";
 import ChecklistEditingRow from "../../../checklists/ChecklistEditingRow";
 import ChecklistItemConfigModal from "../../composed/modals/ChecklistItemConfigModal";
@@ -28,6 +28,32 @@ import { KeyboardActionBar } from "../../../keyboard";
 import { useChecklistItems } from "@my-apps/hooks";
 import { useChecklistFormState } from "@my-apps/hooks";
 import { useChecklistSave } from "@my-apps/hooks";
+import CustomReminderModal from "../../composed/modals/CustomReminderModal";
+
+// ✅ Smart item comparison - ignores structure differences, only compares what matters
+const areItemsEqual = (items1, items2) => {
+  if (items1?.length !== items2?.length) return false;
+  return items1.every((item1, index) => {
+    const item2 = items2[index];
+    if (!item2) return false;
+
+    // Check core properties only (ignores itemType, requiredForScreenTime, etc.)
+    const coreChanged =
+      item1.id !== item2.id ||
+      item1.name !== item2.name ||
+      !!item1.completed !== !!item2.completed;
+
+    if (coreChanged) return false;
+
+    // Deep check sub-items
+    const sub1 = item1.subItems || [];
+    const sub2 = item2.subItems || [];
+    if (sub1.length !== sub2.length) return false;
+    if (sub1.length > 0) return areItemsEqual(sub1, sub2);
+
+    return true;
+  });
+};
 
 const EditChecklistContent = forwardRef(
   (
@@ -40,29 +66,55 @@ const EditChecklistContent = forwardRef(
       isUserAdmin = false,
       isTemplate = false,
       templates = [],
+      reminder = null,
+      reminderLoading = false,
+      updateReminder,
+      deleteReminder,
+      onChangesDetected,
+      initialChecklist,
+      initialReminder,
     },
     ref
   ) => {
     const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-    console.log("📝 EditChecklistContent - checklist:", checklist);
 
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const [errors, setErrors] = useState([]);
 
+    const isInitialMount = useRef(true);
+
     const isEditing = checklist !== null;
     const hasEventTime = eventStartTime != null;
 
-    // Check if already a template by ID match
     const isAlreadyTemplate =
       checklist?.id && templates.some((t) => t.id === checklist.id);
 
-    // HOOK 1: Form State Management
-    const formState = useChecklistFormState(checklist, prefilledTitle, isTemplate, isEditing);
+    const formState = useChecklistFormState(
+      checklist,
+      prefilledTitle,
+      isTemplate,
+      isEditing
+    );
+    const itemsHook = useChecklistItems(
+      formState.getInitialItems(),
+      isTemplate
+    );
 
-    // HOOK 2: Items Management
-    const itemsHook = useChecklistItems(formState.getInitialItems(), isTemplate);
+    // ✅ Simple access to current reminder display
+    const currentReminderDisplay = hasEventTime
+      ? formState.reminderMinutes
+      : formState.reminderTime;
+    console.log("Current Reminder Display: ", currentReminderDisplay);
+    console.log("Initial Reminder: ", initialReminder);
+    console.log(
+      "Has Event Time: ",
+      hasEventTime,
+      "Form State Reminder Minutes: ",
+      formState.reminderMinutes,
+      "Form State Reminder Time: ",
+      formState.reminderTime
+    );
 
-    // HOOK 3: Save Logic
     const { handleSave } = useChecklistSave({
       checklistName: formState.checklistName,
       items: itemsHook.items,
@@ -71,6 +123,8 @@ const EditChecklistContent = forwardRef(
       notifyAdminOnCompletion: formState.notifyAdminOnCompletion,
       defaultNotifyAdmin: formState.defaultNotifyAdmin,
       defaultReminderTime: formState.defaultReminderTime,
+      defaultIsRecurring: formState.defaultIsRecurring, // ✅ ADD
+      defaultRecurringConfig: formState.defaultRecurringConfig, // ✅ ADD
       isEditing,
       isTemplate,
       hasEventTime,
@@ -80,21 +134,28 @@ const EditChecklistContent = forwardRef(
       eventStartTime,
     });
 
-    // Auto-scroll functionality
     const { scrollViewRef, registerInput, scrollToInput, focusInput } =
       useAutoScrollOnFocus({ offset: 100 });
 
-    // Build current checklist state for tracking
     const currentChecklist = {
       name: formState.checklistName,
       items: itemsHook.items,
       notifyAdmin: formState.notifyAdminOnCompletion,
     };
 
-    // Track completion status changes
     const { wasJustCompleted } = useChecklistState(currentChecklist);
 
-    /* ---------------- Keyboard visibility ---------------- */
+    // ✅ Initialize form state from Firestore reminder ONCE when checklist loads
+    useEffect(() => {
+      if (reminder && checklist?.id) {
+        if (hasEventTime) {
+          formState.setReminderMinutes(reminder);
+        } else {
+          formState.setReminderTime(reminder);
+        }
+      }
+    }, [checklist?.id]); // Only run when checklist changes
+
     useEffect(() => {
       const show = Keyboard.addListener("keyboardDidShow", () =>
         setKeyboardVisible(true)
@@ -109,7 +170,6 @@ const EditChecklistContent = forwardRef(
       };
     }, []);
 
-    /* ---------------- Completion celebration ---------------- */
     useEffect(() => {
       if (wasJustCompleted) {
         console.log("🎉 Checklist just completed!");
@@ -118,38 +178,101 @@ const EditChecklistContent = forwardRef(
       }
     }, [wasJustCompleted]);
 
-    /* ---------------- Scroll to pending item ---------------- */
     useEffect(() => {
       if (!itemsHook.pendingScrollId) return;
-    
+
       const timeout = setTimeout(() => {
         scrollToInput(itemsHook.pendingScrollId);
         itemsHook.setPendingScrollId(null);
       }, 250);
-    
+
       return () => clearTimeout(timeout);
     }, [itemsHook.items, itemsHook.pendingScrollId, scrollToInput]);
 
-    /* ---------------- Config Modal Handlers ---------------- */
-    const handleToggleConfig = useCallback((itemId) => {
-      const item = itemsHook.items.find((i) => i.id === itemId);
-      formState.setSelectedItemForConfig(item);
-      formState.setShowConfigModal(true);
-    }, [itemsHook.items]);
+    // ✅ Change detection with smart comparison
+    useEffect(() => {
+      // Skip the very first run to avoid false positives during initialization
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
 
-    const handleSaveConfig = useCallback((updatedItem) => {
-      itemsHook.updateItemConfig(updatedItem);
-      formState.setShowConfigModal(false);
-      formState.setSelectedItemForConfig(null);
-    }, [itemsHook.updateItemConfig]);
+      if (!onChangesDetected || !initialChecklist) return;
+
+      const currentState = {
+        name: formState.checklistName,
+        items: itemsHook.items,
+        reminderMinutes: formState.reminderMinutes,
+        reminderTime: formState.reminderTime,
+        notifyAdmin: formState.notifyAdminOnCompletion,
+      };
+
+      const nameChanged = currentState.name !== initialChecklist.name;
+
+      // ✅ Use smart deep compare instead of JSON.stringify
+      const itemsChanged = !areItemsEqual(
+        currentState.items,
+        initialChecklist.items
+      );
+
+      const currentReminderValue = hasEventTime
+        ? currentState.reminderMinutes
+        : currentState.reminderTime;
+      const reminderChanged =
+        JSON.stringify(currentReminderValue) !==
+        JSON.stringify(initialReminder);
+
+      console.log("🔍 CHANGE DETECTION:", {
+        currentReminderValue,
+        initialReminder,
+        reminderChanged,
+        currentJSON: JSON.stringify(currentReminderValue),
+        initialJSON: JSON.stringify(initialReminder),
+      });
+
+      const notifyChanged =
+        (currentState.notifyAdmin || false) !==
+        (initialChecklist.notifyAdmin || false);
+
+      const hasChanges =
+        nameChanged || itemsChanged || reminderChanged || notifyChanged;
+
+      onChangesDetected(hasChanges);
+    }, [
+      formState.checklistName,
+      itemsHook.items,
+      formState.reminderMinutes,
+      formState.reminderTime,
+      formState.notifyAdminOnCompletion,
+      initialChecklist,
+      initialReminder,
+      hasEventTime,
+    ]);
+
+    const handleToggleConfig = useCallback(
+      (itemId) => {
+        const item = itemsHook.items.find((i) => i.id === itemId);
+        formState.setSelectedItemForConfig(item);
+        formState.setShowConfigModal(true);
+      },
+      [itemsHook.items]
+    );
+
+    const handleSaveConfig = useCallback(
+      (updatedItem) => {
+        itemsHook.updateItemConfig(updatedItem);
+        formState.setShowConfigModal(false);
+        formState.setSelectedItemForConfig(null);
+      },
+      [itemsHook.updateItemConfig]
+    );
 
     const handleCancelConfig = useCallback(() => {
       formState.setShowConfigModal(false);
       formState.setSelectedItemForConfig(null);
     }, []);
 
-    /* ---------------- Imperative Handle ---------------- */
-    useImperativeHandle(ref, () => ({ 
+    useImperativeHandle(ref, () => ({
       save: handleSave,
       getCurrentState: () => ({
         name: formState.checklistName,
@@ -159,21 +282,26 @@ const EditChecklistContent = forwardRef(
         notifyAdmin: formState.notifyAdminOnCompletion,
         defaultNotifyAdmin: formState.defaultNotifyAdmin,
         defaultReminderTime: formState.defaultReminderTime,
-      })
+        defaultIsRecurring: formState.defaultIsRecurring, // ✅ ADD
+        defaultRecurringConfig: formState.defaultRecurringConfig, // ✅ ADD
+      }),
     }));
 
-    /* ---------------- Build filter chips ---------------- */
     const buildFilters = () => {
       const filters = [];
 
       if (isUserAdmin) {
         filters.push({
           label: isTemplate ? "Default: Notify Admin" : "Notify Me",
-          active: isTemplate ? formState.defaultNotifyAdmin : formState.notifyAdminOnCompletion,
+          active: isTemplate
+            ? formState.defaultNotifyAdmin
+            : formState.notifyAdminOnCompletion,
           onPress: () =>
             isTemplate
               ? formState.setDefaultNotifyAdmin(!formState.defaultNotifyAdmin)
-              : formState.setNotifyAdminOnCompletion(!formState.notifyAdminOnCompletion),
+              : formState.setNotifyAdminOnCompletion(
+                  !formState.notifyAdminOnCompletion
+                ),
         });
       }
 
@@ -182,7 +310,10 @@ const EditChecklistContent = forwardRef(
           label: "Save as Template",
           icon: "bookmark-outline",
           active: formState.saveAsTemplateEnabled,
-          onPress: () => formState.setSaveAsTemplateEnabled(!formState.saveAsTemplateEnabled),
+          onPress: () =>
+            formState.setSaveAsTemplateEnabled(
+              !formState.saveAsTemplateEnabled
+            ),
         });
       }
 
@@ -191,15 +322,14 @@ const EditChecklistContent = forwardRef(
 
     const filterChips = buildFilters();
 
-    /* ---------------- Keyboard Action Bar Config ---------------- */
     const focusedItemInfo = itemsHook.getFocusedItemInfo();
-    const canAddSubItem = focusedItemInfo && 
-                          !focusedItemInfo.isSubItem && 
-                          focusedItemInfo.item.name.trim();
+    const canAddSubItem =
+      focusedItemInfo &&
+      !focusedItemInfo.isSubItem &&
+      focusedItemInfo.item.name.trim();
 
-    /* ---------------- Styles ---------------- */
     const styles = StyleSheet.create({
-      container: { 
+      container: {
         flex: 1,
         margin: 0,
         padding: 0,
@@ -266,7 +396,6 @@ const EditChecklistContent = forwardRef(
       },
     });
 
-    /* ---------------- Render ---------------- */
     return (
       <View style={styles.container}>
         <ScrollView
@@ -274,44 +403,47 @@ const EditChecklistContent = forwardRef(
           style={{ flex: 1 }}
           contentContainerStyle={[
             styles.scrollContainer,
-            keyboardVisible && { paddingBottom: 55 }
+            keyboardVisible && { paddingBottom: 55 },
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          {/* SECTION: Checklist Name */}
           <Text style={styles.sectionHeader}>
             {isTemplate ? "Template Name" : "Checklist Name"}
           </Text>
-  
+
           <TextInput
             style={styles.nameInput}
-            placeholder={`Enter ${isTemplate ? "template" : "checklist"} name...`}
+            placeholder={`Enter ${
+              isTemplate ? "template" : "checklist"
+            } name...`}
             placeholderTextColor={theme.text.tertiary}
             value={formState.checklistName}
             onChangeText={formState.setChecklistName}
             autoCapitalize="words"
-            onFocus={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+            onFocus={() =>
+              scrollViewRef.current?.scrollTo({ y: 0, animated: true })
+            }
           />
-  
+
           <FilterChips
             filters={filterChips}
             marginTop={-20}
             chipMarginBottom={4}
           />
 
-          {/* SECTION: Items List */}
           <Text style={styles.sectionHeader}>Items</Text>
-  
-          {!keyboardVisible && itemsHook.items.some(item => item.name.trim()) && (
-            <TouchableOpacity 
-              onPress={() => itemsHook.addItem(focusInput)} 
-              style={[styles.addButton, { marginBottom: getSpacing.md }]}
-            >
-              <Ionicons name="add" size={20} color={theme.primary} />
-              <Text style={styles.addButtonText}>Add Item</Text>
-            </TouchableOpacity>
-          )}
-  
+
+          {!keyboardVisible &&
+            itemsHook.items.some((item) => item.name.trim()) && (
+              <TouchableOpacity
+                onPress={() => itemsHook.addItem(focusInput)}
+                style={[styles.addButton, { marginBottom: getSpacing.md }]}
+              >
+                <Ionicons name="add" size={20} color={theme.primary} />
+                <Text style={styles.addButtonText}>Add Item</Text>
+              </TouchableOpacity>
+            )}
+
           {itemsHook.items.map((item, parentIndex) => (
             <View key={item.id}>
               <ChecklistEditingRow
@@ -322,39 +454,54 @@ const EditChecklistContent = forwardRef(
                 getTypography={getTypography}
                 getBorderRadius={getBorderRadius}
                 isUserAdmin={isUserAdmin}
-                onUpdateItem={(id, name) => itemsHook.updateItem(id, name, false)}
+                onUpdateItem={(id, name) =>
+                  itemsHook.updateItem(id, name, false)
+                }
                 onRemoveItem={(id) => itemsHook.removeItem(id, false)}
                 onToggleConfig={handleToggleConfig}
                 onFocus={(id) => itemsHook.handleFocus(id, scrollToInput)}
                 onBlur={(id) => itemsHook.handleBlur(id, false)}
-                onSubmitEditing={(id) => itemsHook.handleSubmitEditing(id, false, null, focusInput)}
+                onSubmitEditing={(id) =>
+                  itemsHook.handleSubmitEditing(id, false, null, focusInput)
+                }
                 registerInput={registerInput}
               />
-  
-              {item.subItems && item.subItems.map((subItem, subIndex) => (
-                <ChecklistEditingRow
-                  key={subItem.id}
-                  item={subItem}
-                  index={subIndex}
-                  theme={theme}
-                  getSpacing={getSpacing}
-                  getTypography={getTypography}
-                  getBorderRadius={getBorderRadius}
-                  isUserAdmin={false}
-                  isSubItem={true}
-                  onUpdateItem={(id, name) => itemsHook.updateItem(id, name, true, item.id)}
-                  onRemoveItem={(id) => itemsHook.removeItem(id, true, item.id)}
-                  onToggleConfig={() => {}}
-                  onFocus={(id) => itemsHook.handleFocus(id, scrollToInput)}
-                  onBlur={(id) => itemsHook.handleBlur(id, true, item.id)}
-                  onSubmitEditing={(id) => itemsHook.handleSubmitEditing(id, true, item.id, focusInput)}
-                  registerInput={registerInput}
-                />
-              ))}
+
+              {item.subItems &&
+                item.subItems.map((subItem, subIndex) => (
+                  <ChecklistEditingRow
+                    key={subItem.id}
+                    item={subItem}
+                    index={subIndex}
+                    theme={theme}
+                    getSpacing={getSpacing}
+                    getTypography={getTypography}
+                    getBorderRadius={getBorderRadius}
+                    isUserAdmin={false}
+                    isSubItem={true}
+                    onUpdateItem={(id, name) =>
+                      itemsHook.updateItem(id, name, true, item.id)
+                    }
+                    onRemoveItem={(id) =>
+                      itemsHook.removeItem(id, true, item.id)
+                    }
+                    onToggleConfig={() => {}}
+                    onFocus={(id) => itemsHook.handleFocus(id, scrollToInput)}
+                    onBlur={(id) => itemsHook.handleBlur(id, true, item.id)}
+                    onSubmitEditing={(id) =>
+                      itemsHook.handleSubmitEditing(
+                        id,
+                        true,
+                        item.id,
+                        focusInput
+                      )
+                    }
+                    registerInput={registerInput}
+                  />
+                ))}
             </View>
           ))}
 
-          {/* SECTION: Template Default Reminder */}
           {isTemplate && addReminder && (
             <View style={{ marginTop: getSpacing.lg }}>
               <Text style={styles.sectionHeader}>Default Reminder Time</Text>
@@ -362,7 +509,13 @@ const EditChecklistContent = forwardRef(
                 style={styles.templateTimeRow}
                 onPress={() => formState.setShowReminderPicker(true)}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
+                  }}
+                >
                   <Ionicons
                     name="time-outline"
                     size={20}
@@ -370,8 +523,10 @@ const EditChecklistContent = forwardRef(
                     style={{ marginRight: getSpacing.sm }}
                   />
                   <Text style={styles.templateTimeText}>
-                    {formState.defaultReminderTime 
-                      ? formState.formatTemplateTime(formState.defaultReminderTime) 
+                    {formState.defaultReminderTime
+                      ? formState.formatTemplateTime(
+                          formState.defaultReminderTime
+                        ) + (formState.defaultIsRecurring ? " (Recurring)" : "")
                       : "Set default time"}
                   </Text>
                 </View>
@@ -380,10 +535,16 @@ const EditChecklistContent = forwardRef(
                     onPress={(e) => {
                       e.stopPropagation();
                       formState.setDefaultReminderTime(null);
+                      formState.setDefaultIsRecurring(false);
+                      formState.setDefaultRecurringConfig(null);
                     }}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Ionicons name="close-circle" size={20} color={theme.error} />
+                    <Ionicons
+                      name="close-circle"
+                      size={20}
+                      color={theme.error}
+                    />
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -392,49 +553,99 @@ const EditChecklistContent = forwardRef(
               </Text>
             </View>
           )}
-
-          {/* SECTION: Event Reminder Selector */}
           {addReminder && !isTemplate && (
-            <ReminderSelector
-              reminder={hasEventTime ? formState.reminderMinutes : formState.reminderTime}
-              onReminderChange={(value) => {
-                if (hasEventTime) {
-                  formState.setReminderMinutes(value);
-                } else {
-                  formState.setReminderTime(value);
-                }
-              }}
-              eventStartDate={eventStartTime || new Date()}
-              isAllDay={!hasEventTime}
-            />
+            <>
+              {reminderLoading ? (
+                <View style={{ padding: getSpacing.lg, alignItems: "center" }}>
+                  <Text style={{ color: theme.text.tertiary }}>
+                    Loading reminder...
+                  </Text>
+                </View>
+              ) : (
+                <ReminderSelector
+                  reminder={currentReminderDisplay}
+                  onReminderChange={(value) => {
+                    if (hasEventTime) {
+                      formState.setReminderMinutes(value);
+                    } else {
+                      formState.setReminderTime(value);
+                    }
+                  }}
+                  eventStartDate={eventStartTime || new Date()}
+                  isAllDay={!hasEventTime}
+                />
+              )}
+            </>
           )}
         </ScrollView>
 
-        {/* Keyboard Action Bar */}
         <KeyboardActionBar
           visible={keyboardVisible}
           onWillDismiss={() => setKeyboardVisible(false)}
-          leftButton={canAddSubItem ? {
-            text: 'Sub-item',
-            icon: 'add-circle-outline',
-            onPress: () => itemsHook.addSubItem(itemsHook.focusedItemId, focusInput)
-          } : undefined}
+          leftButton={
+            canAddSubItem
+              ? {
+                  text: "Sub-item",
+                  icon: "add-circle-outline",
+                  onPress: () =>
+                    itemsHook.addSubItem(itemsHook.focusedItemId, focusInput),
+                }
+              : undefined
+          }
         />
 
-        {/* Template Time Picker Modal */}
         {addReminder && isTemplate && (
-          <TimePickerModal
+          <CustomReminderModal
             visible={formState.showReminderPicker}
             onClose={() => formState.setShowReminderPicker(false)}
-            initialTime={formState.defaultReminderTime}
-            onConfirm={(timeString) => {
+            hideDate={true}
+            reminder={
+              formState.defaultReminderTime
+                ? {
+                    scheduledFor: (() => {
+                      const [hours, minutes] =
+                        formState.defaultReminderTime.split(":");
+                      const date = new Date();
+                      date.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                      return date.toISOString();
+                    })(),
+                    isRecurring: formState.defaultIsRecurring,
+                    recurringConfig: formState.defaultRecurringConfig,
+                  }
+                : null
+            }
+            eventStartDate={new Date()}
+            onConfirm={(reminderData) => {
+              // Extract HH:mm from the ISO timestamp
+              const date = new Date(reminderData.scheduledFor);
+              const hours = date.getHours().toString().padStart(2, "0");
+              const minutes = date.getMinutes().toString().padStart(2, "0");
+              const timeString = `${hours}:${minutes}`;
+
               formState.setDefaultReminderTime(timeString);
+              formState.setDefaultIsRecurring(
+                reminderData.isRecurring || false
+              );
+
+              // ✅ SANITIZE: Only store config, not runtime state
+              if (reminderData.isRecurring && reminderData.recurringConfig) {
+                formState.setDefaultRecurringConfig({
+                  intervalSeconds: reminderData.recurringConfig.intervalSeconds,
+                  totalOccurrences:
+                    reminderData.recurringConfig.totalOccurrences,
+                  completedCancelsRecurring:
+                    reminderData.recurringConfig.completedCancelsRecurring,
+                  // ❌ DON'T store: currentOccurrence, nextScheduledFor, lastSentAt
+                });
+              } else {
+                formState.setDefaultRecurringConfig(null);
+              }
+
               formState.setShowReminderPicker(false);
             }}
           />
         )}
 
-        {/* Item Config Modal */}
         <ChecklistItemConfigModal
           visible={formState.showConfigModal}
           item={formState.selectedItemForConfig}

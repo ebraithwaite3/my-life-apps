@@ -6,7 +6,7 @@ import { useDeleteNotification } from "../useDeleteNotification";
 import { useNotifications } from "../notificationHooks/useNotifications";
 
 /**
- * Remove undefined values from object (Firestore doesn't allow undefined)
+ * Remove undefined values from object
  */
 const cleanUndefined = (obj) => {
   const cleaned = {};
@@ -19,22 +19,30 @@ const cleanUndefined = (obj) => {
 };
 
 /**
+ * Extract scheduled time from reminder object
+ */
+const getReminderTime = (reminder) => {
+  if (!reminder) return null;
+  if (typeof reminder === "string") return reminder;
+  return reminder.scheduledFor;
+};
+
+/**
  * useEventUpdate - Shared event update logic
- * 
- * Handles updating events in internal, group, and Google calendars
- * Manages reminder updates (delete old, schedule new)
- * Used by ALL app EventModals
+ *
+ * NOTE: reminderMinutes is now an object: { scheduledFor: ISO, isRecurring: bool, recurringConfig?: {...} }
  */
 export const useEventUpdate = ({ user, db }) => {
   const updateInternalEvent = useUpdateInternalEvent();
   const updateGoogleEvent = useUpdateGoogleCalendarEvent();
   const deleteNotification = useDeleteNotification();
-  
-  const { scheduleActivityReminder, scheduleBatchNotification } = useNotifications();
+
+  const { scheduleActivityReminder, scheduleBatchNotification } =
+    useNotifications();
 
   const updateEvent = async ({
     eventId,
-    originalStartTime, // Original start time to find the shard
+    originalStartTime,
     title,
     description,
     startDate,
@@ -42,25 +50,24 @@ export const useEventUpdate = ({ user, db }) => {
     isAllDay,
     selectedCalendarId,
     selectedCalendar,
-    reminderMinutes,
+    reminderMinutes, // Now: { scheduledFor, isRecurring, recurringConfig? } or null
     activities = [],
     appName = "app",
     membersToNotify = [],
+    event = null,
   }) => {
     console.log("Updating event:", eventId);
+    console.log("Reminder data:", reminderMinutes);
 
-    // Build event data
     const eventData = {
       summary: title.trim(),
       description: description.trim(),
       calendarId: selectedCalendarId,
     };
 
-    // Convert ISO string dates to Date objects
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
 
-    // Handle all-day vs timed events
     if (isAllDay) {
       eventData.start = {
         date: DateTime.fromJSDate(startDateObj).toFormat("yyyy-MM-dd"),
@@ -81,7 +88,6 @@ export const useEventUpdate = ({ user, db }) => {
       };
     }
 
-    // Clean activities
     const cleanedActivities = activities.map(cleanUndefined);
 
     try {
@@ -93,6 +99,20 @@ export const useEventUpdate = ({ user, db }) => {
         selectedCalendarId === "internal" ||
         selectedCalendar?.calendarType === "group"
       ) {
+        // ✅ Extract groupId - handle both ways
+        let groupId = null;
+
+        if (selectedCalendar?.groupId) {
+          // Group ID stored directly on calendar object
+          groupId = selectedCalendar.groupId;
+        } else if (selectedCalendarId?.startsWith("group-")) {
+          // Group ID encoded in the calendar ID
+          groupId = selectedCalendarId.replace("group-", "");
+        }
+
+        console.log("📝 Updating with groupId:", groupId);
+
+        // ✅ Pass groupId to update
         result = await updateInternalEvent({
           eventId,
           startTime: originalStartTime,
@@ -102,49 +122,94 @@ export const useEventUpdate = ({ user, db }) => {
           end: eventData.end,
           activities: cleanedActivities,
           reminderMinutes,
+          groupId, // ✅ NOW SAFELY EXTRACTED
         });
 
         if (result.success) {
           console.log(`✅ Event updated: ${eventId}`);
-
-          // Update reminders: Delete old, schedule new
-          await deleteNotification(eventId);
-
-          if (reminderMinutes != null) {
-            const reminderTime = new Date(reminderMinutes);
-            if (reminderTime > new Date()) {
-              if (isSharedEvent) {
-                await scheduleBatchNotification(
-                  membersToNotify,
-                  `Reminder: ${title.trim()}`,
-                  description.trim() || "Event reminder",
-                  reminderTime,
-                  {
-                    screen: "Calendar",
+        
+          // ✅ ONLY delete/recreate if reminder CHANGED
+          const oldReminderISO = event.reminderMinutes?.scheduledFor || null;
+          const newReminderISO = reminderMinutes?.scheduledFor || null;
+          const reminderChanged = oldReminderISO !== newReminderISO;
+          
+          console.log("🔍 Reminder comparison:", {
+            old: oldReminderISO,
+            new: newReminderISO,
+            changed: reminderChanged
+          });
+        
+          if (reminderChanged) {
+            console.log("⚠️ Reminder changed, updating notifications");
+            
+            // Delete ONLY event-level notifications (no activity IDs)
+            const notificationsRef = collection(db, 'pendingNotifications');
+            const q = query(notificationsRef, where('eventId', '==', eventId));
+            const snapshot = await getDocs(q);
+            
+            // Filter to event-level only (no checklistId, workoutId, etc)
+            const eventLevelDocs = snapshot.docs.filter(doc => {
+              const data = doc.data();
+              return !data.data?.checklistId && !data.data?.workoutId && !data.data?.golfId;
+            });
+            
+            if (eventLevelDocs.length > 0) {
+              await Promise.all(eventLevelDocs.map(doc => deleteDoc(doc.ref)));
+              console.log(`🗑️ Deleted ${eventLevelDocs.length} old event-level notifications`);
+            }
+        
+            // Schedule new reminder if set
+            if (reminderMinutes != null) {
+              const reminderTimeISO = getReminderTime(reminderMinutes);
+              const reminderTime = new Date(reminderTimeISO);
+              console.log("⏰ Rescheduling reminder for:", reminderTime);
+              console.log("   Recurring:", reminderMinutes.isRecurring);
+        
+              if (reminderTime > new Date()) {
+                if (isSharedEvent) {
+                  await scheduleBatchNotification(
+                    membersToNotify,
+                    `Reminder: ${title.trim()}`,
+                    description.trim() || "Event reminder",
+                    reminderTime,
+                    {
+                      screen: "Calendar",
+                      eventId,
+                      app: `${appName}-app`,
+                      ...(reminderMinutes.isRecurring && {
+                        isRecurring: true,
+                        recurringConfig: reminderMinutes.recurringConfig,
+                      }),
+                    }
+                  );
+                } else {
+                  await scheduleActivityReminder(
+                    {
+                      id: eventId,
+                      name: title.trim(),
+                      reminderTime: reminderTimeISO,
+                    },
+                    "Event",
                     eventId,
-                    app: `${appName}-app`,
-                  }
-                );
-              } else {
-                await scheduleActivityReminder(
-                  {
-                    id: eventId,
-                    name: title.trim(),
-                    reminderTime: reminderTime.toISOString(),
-                  },
-                  "Event",
-                  eventId,
-                  null,
-                  {
-                    screen: "Calendar",
-                    eventId,
-                    app: `${appName}-app`,
-                  }
-                );
+                    null,
+                    {
+                      screen: "Calendar",
+                      eventId,
+                      app: `${appName}-app`,
+                      ...(reminderMinutes.isRecurring && {
+                        isRecurring: true,
+                        recurringConfig: reminderMinutes.recurringConfig,
+                      }),
+                    }
+                  );
+                }
               }
             }
+          } else {
+            console.log("✅ Reminder unchanged, keeping existing notifications");
           }
-
+        
+          // ✅ Alert OUTSIDE the if block - always show success
           Alert.alert("Success", "Event updated successfully");
           return { success: true, eventId };
         } else {
@@ -160,49 +225,95 @@ export const useEventUpdate = ({ user, db }) => {
           selectedCalendarId,
           eventData,
           cleanedActivities,
-          originalStartTime
+          originalStartTime,
+          reminderMinutes
         );
-
+      
         if (result.success) {
           console.log(`✅ Google Calendar event updated: ${eventId}`);
-
-          // Update reminders
-          await deleteNotification(eventId);
-
-          if (reminderMinutes != null) {
-            const reminderTime = new Date(reminderMinutes);
-            if (reminderTime > new Date()) {
-              if (isSharedEvent) {
-                const { scheduleBatchNotification: scheduleBatch } = await import("@my-apps/services");
-                await scheduleBatch(
-                  membersToNotify,
-                  `Reminder: ${title.trim()}`,
-                  description.trim() || "Event reminder",
-                  reminderTime,
-                  {
-                    screen: "Calendar",
+      
+          // ✅ ONLY delete/recreate if reminder CHANGED
+          const oldReminderISO = event.reminderMinutes?.scheduledFor || null;
+          const newReminderISO = reminderMinutes?.scheduledFor || null;
+          const reminderChanged = oldReminderISO !== newReminderISO;
+          
+          console.log("🔍 Reminder comparison:", {
+            old: oldReminderISO,
+            new: newReminderISO,
+            changed: reminderChanged
+          });
+      
+          if (reminderChanged) {
+            console.log("⚠️ Reminder changed, updating notifications");
+            
+            // Delete ONLY event-level notifications (no activity IDs)
+            const notificationsRef = collection(db, 'pendingNotifications');
+            const q = query(notificationsRef, where('eventId', '==', eventId));
+            const snapshot = await getDocs(q);
+            
+            // Filter to event-level only (no checklistId, workoutId, etc)
+            const eventLevelDocs = snapshot.docs.filter(doc => {
+              const data = doc.data();
+              return !data.data?.checklistId && !data.data?.workoutId && !data.data?.golfId;
+            });
+            
+            if (eventLevelDocs.length > 0) {
+              await Promise.all(eventLevelDocs.map(doc => deleteDoc(doc.ref)));
+              console.log(`🗑️ Deleted ${eventLevelDocs.length} old event-level notifications`);
+            }
+      
+            // Schedule new reminder if set
+            if (reminderMinutes != null) {
+              const reminderTimeISO = getReminderTime(reminderMinutes);
+              const reminderTime = new Date(reminderTimeISO);
+              console.log("⏰ Rescheduling reminder for:", reminderTime);
+              console.log("   Recurring:", reminderMinutes.isRecurring);
+      
+              if (reminderTime > new Date()) {
+                if (isSharedEvent) {
+                  const { scheduleBatchNotification: scheduleBatch } =
+                    await import("@my-apps/services");
+                  await scheduleBatch(
+                    membersToNotify,
+                    `Reminder: ${title.trim()}`,
+                    description.trim() || "Event reminder",
+                    reminderTime,
+                    {
+                      screen: "Calendar",
+                      eventId,
+                      app: `${appName}-app`,
+                      ...(reminderMinutes.isRecurring && {
+                        isRecurring: true,
+                        recurringConfig: reminderMinutes.recurringConfig,
+                      }),
+                    }
+                  );
+                } else {
+                  const { scheduleNotification } = await import("@my-apps/services");
+                  await scheduleNotification(
+                    user.userId,
+                    `Reminder: ${title.trim()}`,
+                    description.trim() || "Event reminder",
                     eventId,
-                    app: `${appName}-app`,
-                  }
-                );
-              } else {
-                const { scheduleNotification } = await import("@my-apps/services");
-                await scheduleNotification(
-                  user.userId,
-                  `Reminder: ${title.trim()}`,
-                  description.trim() || "Event reminder",
-                  eventId,
-                  reminderTime,
-                  {
-                    screen: "Calendar",
-                    eventId,
-                    app: `${appName}-app`,
-                  }
-                );
+                    reminderTime,
+                    {
+                      screen: "Calendar",
+                      eventId,
+                      app: `${appName}-app`,
+                      ...(reminderMinutes.isRecurring && {
+                        isRecurring: true,
+                        recurringConfig: reminderMinutes.recurringConfig,
+                      }),
+                    }
+                  );
+                }
               }
             }
+          } else {
+            console.log("✅ Reminder unchanged, keeping existing notifications");
           }
-
+      
+          // ✅ Alert OUTSIDE the if block
           Alert.alert("Success", "Event updated successfully");
           return { success: true, eventId };
         } else {
@@ -211,8 +322,8 @@ export const useEventUpdate = ({ user, db }) => {
         }
       }
     } catch (error) {
-      console.error("Error updating event:", error);
-      Alert.alert("Error", "Unexpected error while updating event");
+      console.error("❌ Error updating event:", error);
+      Alert.alert("Error", "An unexpected error occurred: " + error.message);
       return { success: false, error: error.message };
     }
   };
