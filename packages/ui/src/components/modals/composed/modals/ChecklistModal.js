@@ -412,6 +412,20 @@ const ChecklistModal = ({
     }
   };
 
+  // NEW: Wrapper that saves AND shows toast (for Clear button)
+const handleSaveWithToast = async (checklist) => {
+  await handleUpdateChecklist(checklist, null);
+  
+  Keyboard.dismiss();
+  setTimeout(() => {
+    showSuccessToast("Checklist saved", "", 2000, "top");
+  }, 100);
+  
+  // Update local state
+  setInitialChecklist(JSON.parse(JSON.stringify(checklist)));
+  setIsDirtyComplete(false);
+};
+
   // Get cancel button text based on dirty state
   const getCancelText = () => {
     const hasChanges =
@@ -536,6 +550,7 @@ const ChecklistModal = ({
                       items: newItems,
                     }));
                   }}
+                  onSaveChecklist={handleSaveWithToast}
                   onMoveItems={handleMoveItems}
                   pinnedChecklists={pinnedChecklists}
                   context={'event'}

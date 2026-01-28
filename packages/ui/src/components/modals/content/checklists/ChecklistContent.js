@@ -5,6 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Touchable,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
@@ -21,6 +23,7 @@ import { useData } from "@my-apps/contexts";
 const ChecklistContent = ({
   checklist,
   onItemToggle,
+  onSaveChecklist,
   onMoveItems,
   pinnedChecklists = [],
   onCloseParentModal,
@@ -447,6 +450,43 @@ const ChecklistContent = ({
     setShowSortModal(true);
   };
 
+  // Handler for Clear button
+  // Should produce an Alert cofirming "Are you sure you want to clear ALL completed items?  This CANNOT be undone."
+  // Upon confirmation, remove all completed items from the checklist (console.log for now)
+  // If no, close the alert and do nothing
+  const handleClearCompleted = () => {
+    Alert.alert(
+      "Clear Completed Items",
+      "Are you sure you want to clear ALL completed items? This CANNOT be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Yes, Clear", 
+          style: "destructive", 
+          onPress: async () => {
+            const remainingItems = items.filter((item) => !item.completed);
+            
+            // Update local state first
+            setItems(remainingItems);
+            if (onItemToggle) {
+              onItemToggle(remainingItems);
+            }
+            
+            // ✅ Call the save function to persist and show toast
+            if (onSaveChecklist) {
+              console.log("Clearing completed items, saving checklist...");
+              await onSaveChecklist({
+                ...checklist,
+                items: remainingItems,
+                updatedAt: new Date().toISOString(),
+              }, null, false, true); // silent mode
+            }
+          }
+        },
+      ]
+    );
+  };
+
   // Update handleDrillDown
   const handleDrillDown = (parentItem) => {
     setSortModalStack((prev) => [
@@ -595,6 +635,14 @@ const ChecklistContent = ({
             <Text style={styles.sortButtonText}>Sort</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+  style={styles.sortButton}
+  onPress={handleClearCompleted}
+>
+  <Ionicons name="checkmark-done" size={20} color={theme.primary} />
+  <Text style={styles.sortButtonText}>Clear</Text>
+</TouchableOpacity>
+
           {/* Only show Move Items if user is admin */}
           {isUserAdmin && (
             <TouchableOpacity
@@ -614,7 +662,7 @@ const ChecklistContent = ({
                 color={selectionMode ? "#fff" : theme.primary}
               />
               <Text style={styles.moveButtonText}>
-                {selectionMode ? "Cancel" : "Move Items"}
+                {selectionMode ? "Cancel" : "Move"}
               </Text>
             </TouchableOpacity>
           )}

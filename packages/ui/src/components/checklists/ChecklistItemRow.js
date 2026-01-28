@@ -129,6 +129,12 @@ const handlePress = () => {
       borderRadius: getBorderRadius.sm,
       backgroundColor: `${theme.primary}10`,
     },
+    completedIndicator: {
+      marginLeft: getSpacing.sm,
+      backgroundColor: theme.success || theme.primary,
+      borderRadius: 12,
+      padding: getSpacing.xs,
+    },
     yesNoButtons: {
       flexDirection: 'row',
       gap: getSpacing.sm,
@@ -219,6 +225,13 @@ const handlePress = () => {
               >
                 {displayText}
               </Text>
+
+              {/* ✅ Show checkmark for completed items in selection mode */}
+              {selectionMode && item.completed && (
+                <View style={styles.completedIndicator}>
+                  <Ionicons name="checkmark" size={14} color="#fff" />
+                </View>
+              )}
 
               {!selectionMode && item.requiredForScreenTime && (
                 <View style={styles.screenTimeIcon}>
@@ -359,6 +372,13 @@ const handlePress = () => {
           >
             {displayText}
           </Text>
+
+          {/* ✅ Show checkmark for completed items in selection mode */}
+          {selectionMode && item.completed && (
+            <View style={styles.completedIndicator}>
+              <Ionicons name="checkmark" size={14} color="#fff" />
+            </View>
+          )}
 
           {!selectionMode && item.requiredForScreenTime && (
             <View style={styles.screenTimeIcon}>

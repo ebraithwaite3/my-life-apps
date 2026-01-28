@@ -302,6 +302,23 @@ useEffect(() => {
     });
   };
 
+  // NEW: Wrapper that saves AND shows toast (for Clear button)
+const handleSaveWithToast = async (checklist) => {
+  const cleanedChecklist = cleanObjectForFirestore(checklist);
+  await saveChecklistOperation(cleanedChecklist, checklistContext);
+  
+  Keyboard.dismiss();
+  setTimeout(() => {
+    showSuccessToast("Checklist saved", "", 2000, "top");
+  }, 100);
+  
+  // Update local state
+  setWorkingChecklist(checklist);
+  setUpdatedItems(checklist.items);
+  setSelectedChecklist(checklist);
+  setIsDirtyComplete(false);
+};
+
   const renderChecklist = ({ item }) => (
     <PinnedChecklistCard
       checklist={item}
@@ -606,6 +623,7 @@ useEffect(() => {
                     setUpdatedItems(newItems);
                     setWorkingChecklist(prev => ({ ...prev, items: newItems }));
                   }}
+                  onSaveChecklist={handleSaveWithToast}  // NEW: Use wrapper with toast
                   onMoveItems={handleMoveItems}
                   pinnedChecklists={allPinned}
                   onUpdatePinnedChecklist={updatePinnedChecklist}

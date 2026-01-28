@@ -265,7 +265,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         navigation.navigate(returnPath);
         
         setTimeout(() => {
-          Alert.alert("Success", `Moved ${itemCount} items`);
+          Alert.alert("Success", `Moved ${itemCount} items to "${checklistName}"`);
         }, 100);
       }
       
@@ -306,7 +306,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         navigation.navigate(returnPath);
         
         setTimeout(() => {
-          Alert.alert("Success", `Added ${itemCount} items`);
+          Alert.alert("Success", `Added ${itemCount} items to "${checklistName}"`);
         }, 100);
       }
     }
