@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "MyStudying",
+    "slug": "my-studying",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/MyStudyingIcon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "mystudying",
+    "splash": {
+      "image": "./assets/MyStudyingIcon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ebraithwaite3.mystudying",
+      "buildNumber": "1",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.ebraithwaite3.mystudying",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/MyStudyingIcon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
+    "owner": "ebraithwaite3",
+    "extra": {
+      "eas": {
+        "projectId": "598271a6-9d37-4879-b7a3-70879175d9f0"
+      }
+    }
+  }
+}
