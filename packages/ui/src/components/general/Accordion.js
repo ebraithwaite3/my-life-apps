@@ -8,6 +8,7 @@ import { useTheme } from '@my-apps/contexts';
  * 
  * @param {Array} sections - Array of section objects
  * @param {Function} renderHeader - Custom header renderer (section, isExpanded, selectedCount)
+ * @param {Function} renderHeaderRight - Custom right side content in header (section, isExpanded)
  * @param {Function} renderSectionHeader - Optional header for section content (section)
  * @param {Function} renderItem - Custom item renderer (item, itemIndex, section) OR (item, isSelected, onToggle) for selection mode
  * @param {Function} renderFooter - Optional footer for each section (section)
@@ -20,6 +21,7 @@ import { useTheme } from '@my-apps/contexts';
 const Accordion = ({
   sections = [],
   renderHeader,
+  renderHeaderRight,
   renderSectionHeader,
   renderItem,
   renderFooter,
@@ -85,6 +87,11 @@ const Accordion = ({
       alignItems: 'center',
       gap: getSpacing.sm,
     },
+    sectionHeaderRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: getSpacing.sm,
+    },
     sectionTitle: {
       fontSize: getTypography.body.fontSize,
       fontWeight: '600',
@@ -141,7 +148,19 @@ const Accordion = ({
     );
   };
 
-  const headerRenderer = renderHeader || (isSelectionMode ? defaultRenderHeader : null);
+  // Default header for non-selection mode
+  const defaultSimpleHeader = (section) => {
+    return (
+      <View style={styles.sectionHeaderContent}>
+        <Text style={styles.sectionTitle}>{section.title}</Text>
+        {section.count !== undefined && (
+          <Text style={styles.sectionCount}>({section.count})</Text>
+        )}
+      </View>
+    );
+  };
+
+  const headerRenderer = renderHeader || (isSelectionMode ? defaultRenderHeader : defaultSimpleHeader);
 
   return (
     <View style={styles.container}>
@@ -161,18 +180,20 @@ const Accordion = ({
               onPress={() => toggleSection(section.id)}
               activeOpacity={0.7}
             >
-              {headerRenderer ? (
-                headerRenderer(section, isExpanded, selectedCount)
-              ) : (
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-              )}
+              {headerRenderer(section, isExpanded, selectedCount)}
               
-              <Ionicons
-                name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color={theme.text.secondary}
-                style={styles.chevronIcon}
-              />
+              <View style={styles.sectionHeaderRight}>
+                {/* Custom right content (e.g., add button) */}
+                {renderHeaderRight && renderHeaderRight(section, isExpanded)}
+                
+                {/* Chevron */}
+                <Ionicons
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={theme.text.secondary}
+                  style={styles.chevronIcon}
+                />
+              </View>
             </TouchableOpacity>
 
             {/* Section Content */}

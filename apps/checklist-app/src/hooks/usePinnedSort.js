@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { doc, getDoc, writeBatch } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
-import { applySorting } from '@my-apps/utils';
+import { applySorting, showSuccessToast, showErrorToast } from '@my-apps/utils';
 
 const SORT_KEY = '@pinned_checklists_sort';
 
 export const usePinnedSort = (allPinned, db, user) => {
   const [currentSort, setCurrentSort] = useState('a-z');
+  const [originalSort, setOriginalSort] = useState('a-z'); // ✅ Track original
   const [showSortModal, setShowSortModal] = useState(false);
   const [showCustomOrderModal, setShowCustomOrderModal] = useState(false);
   const [hasSortBeenChanged, setHasSortBeenChanged] = useState(false);
@@ -26,6 +26,14 @@ export const usePinnedSort = (allPinned, db, user) => {
   useEffect(() => {
     loadSortPreference();
   }, []);
+
+  // ✅ Track original when modal opens
+  useEffect(() => {
+    if (showSortModal) {
+      setOriginalSort(currentSort);
+      setHasSortBeenChanged(false);
+    }
+  }, [showSortModal]);
 
   const loadSortPreference = async () => {
     try {
@@ -51,9 +59,16 @@ export const usePinnedSort = (allPinned, db, user) => {
     if (sortType === 'edit-custom') {
       setShowCustomOrderModal(true);
     } else {
-      saveSortPreference(sortType);
+      setCurrentSort(sortType); // ✅ Just update local state, don't save yet
       setHasSortBeenChanged(true);
     }
+  };
+
+  // ✅ NEW: Commit sort changes
+  const handleCommitSort = async () => {
+    await saveSortPreference(currentSort);
+    setShowSortModal(false);
+    setHasSortBeenChanged(false);
   };
 
   const handleSaveCustomOrder = async (newOrder) => {
@@ -114,19 +129,30 @@ export const usePinnedSort = (allPinned, db, user) => {
       }
       
       await batch.commit();
-      saveSortPreference('custom');
+      await saveSortPreference('custom'); // ✅ Save to AsyncStorage
       setShowCustomOrderModal(false);
-      Alert.alert("Success", "Custom order saved");
+      return true;
     } catch (error) {
       console.error('Error saving custom order:', error);
-      Alert.alert("Error", "Failed to save custom order");
+      return false;
     }
   };
 
+  // ✅ UPDATED: Handle cancel - revert to original
   const handleCloseSortModal = () => {
+    if (hasSortBeenChanged) {
+      // Revert to original
+      setCurrentSort(originalSort);
+    }
     setShowSortModal(false);
     setHasSortBeenChanged(false);
   };
+
+  const handleCloseCustomOrderModal = () => {
+    setShowCustomOrderModal(false);
+    // Don't change any sort preferences - just close the modal
+  };
+  
 
   // Apply sorting
   const sortedPinned = applySorting(allPinned, currentSort);
@@ -144,7 +170,9 @@ export const usePinnedSort = (allPinned, db, user) => {
     
     // Handlers
     handleSortChange,
+    handleCommitSort, // ✅ NEW
     handleSaveCustomOrder,
     handleCloseSortModal,
+    handleCloseCustomOrderModal,
   };
 };

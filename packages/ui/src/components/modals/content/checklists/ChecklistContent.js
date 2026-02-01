@@ -499,9 +499,11 @@ const ChecklistContent = ({
 
   // Update handleSaveSort
   const handleSaveSort = (reorderedItems) => {
+    let newItems;
+  
     if (sortingParent) {
-      // We were sorting sub-items - update the parent's subItems
-      const updatedItems = items.map((item) => {
+      // Sorting sub-items
+      newItems = items.map((item) => {
         if (item.id === sortingParent.id) {
           return {
             ...item,
@@ -510,38 +512,29 @@ const ChecklistContent = ({
         }
         return item;
       });
-
-      setItems(updatedItems);
-      if (onItemToggle) {
-        onItemToggle(updatedItems); // Immediate update!
-      }
-
-      // Go back to parent level if there's a stack
-      if (sortModalStack.length > 0) {
-        const previous = sortModalStack[sortModalStack.length - 1];
-        setSortingItems(previous.items);
-        setSortingParent(previous.parent);
-        setSortModalStack((prev) => prev.slice(0, -1)); // Pop stack
-        // Modal stays open!
-      } else {
-        // No stack - close modal
-        setShowSortModal(false);
-        setSortingParent(null);
-      }
     } else {
-      // We were sorting top-level items - merge with completed items at bottom
+      // Sorting top-level items
       const completedItems = items.filter((item) => item.completed);
-      const mergedItems = [...reorderedItems, ...completedItems];
-
-      setItems(mergedItems);
-      if (onItemToggle) {
-        onItemToggle(mergedItems); // Immediate update!
-      }
-
-      // Close modal
-      setShowSortModal(false);
+      newItems = [...reorderedItems, ...completedItems];
     }
+  
+    setItems(newItems);
+  
+    const updatedChecklist = {
+      ...checklist,
+      items: newItems,
+      updatedAt: new Date().toISOString(),
+    };
+  
+    // 🔥 THIS IS THE KEY
+    if (onSaveChecklist) {
+      onSaveChecklist(updatedChecklist);
+    }
+  
+    setShowSortModal(false);
+    setSortingParent(null);
   };
+  
 
   const styles = StyleSheet.create({
     container: {

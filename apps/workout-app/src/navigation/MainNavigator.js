@@ -220,11 +220,11 @@ function TabNavigator({ theme, onLogout }) {
           component={WorkoutHistoryStackScreen}
           options={{ tabBarLabel: "History" }}
         />
-        <Tab.Screen
+        {/* <Tab.Screen
           name="Messages"
           component={MessagesStackScreen}
           options={{ tabBarLabel: "Messages" }}
-        />
+        /> */}
         <Tab.Screen
           name="Preferences"
           component={PreferencesStackScreen}
@@ -301,11 +301,11 @@ const MainNavigator = ({ onLogout }) => {
                 WorkoutHistoryHome: "history",
               },
             },
-            Messages: {
-              screens: {
-                MessagesHome: "messages",
-              },
-            },
+            // Messages: {
+            //   screens: {
+            //     MessagesHome: "messages",
+            //   },
+            // },
             Preferences: {
               screens: {
                 PreferencesHome: "preferences",

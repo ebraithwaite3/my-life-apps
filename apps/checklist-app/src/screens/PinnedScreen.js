@@ -21,7 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useDeleteNotification, useChecklistTemplates, usePinnedChecklists, useNotificationHandlers, useNotifications } from "@my-apps/hooks";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { showSuccessToast } from "@my-apps/utils";
+import { showSuccessToast, showErrorToast } from "@my-apps/utils";
 import { usePinnedSort } from "../hooks/usePinnedSort";
 import { usePinnedOperations } from "../hooks/usePinnedOperations";
 import { usePinnedChecklistModal } from "../hooks/usePinnedChecklistModal";
@@ -65,7 +65,9 @@ console.log('📍 PINNED SCREEN RENDER - showEditModal:', showEditModal);
     handleSortChange,
     handleSaveCustomOrder,
     handleCloseSortModal,
+    handleCloseCustomOrderModal,
   } = usePinnedSort(allPinned, db, user);
+  console.log("SHOW SORT MODAL:", showSortModal);
 
   const {
     handleSaveChecklist: saveChecklistOperation,
@@ -400,33 +402,43 @@ const handleSaveWithToast = async (checklist) => {
         )}
       </View>
 
-      {/* Sort Selection Modal */}
-      <SortModal
-        visible={showSortModal}
-        onClose={handleCloseSortModal}
-        options={sortOptions}
-        currentSort={currentSort}
-        onSelectSort={handleSortChange}
-        headerRightContent={
-          <TouchableOpacity onPress={handleCloseSortModal}>
-            <Ionicons 
-              name={hasSortBeenChanged ? "checkmark" : "close"} 
-              size={24} 
-              color={hasSortBeenChanged ? theme.success : theme.text.secondary} 
-            />
-          </TouchableOpacity>
-        }
+<SortModal
+  visible={showSortModal}
+  onClose={handleCloseSortModal}
+  options={sortOptions}
+  currentSort={currentSort}
+  onSelectSort={handleSortChange}
+  headerRightContent={
+    <TouchableOpacity onPress={hasSortBeenChanged ? handleCommitSort : handleCloseSortModal}>
+      <Ionicons 
+        name={hasSortBeenChanged ? "checkmark" : "close"} 
+        size={24} 
+        color={hasSortBeenChanged ? theme.success : theme.text.secondary} 
       />
+    </TouchableOpacity>
+  }
+/>
 
-      {/* Custom Order Modal */}
-      <CustomOrderModal
-        visible={showCustomOrderModal}
-        items={sortedPinned}
-        onSave={handleSaveCustomOrder}
-        onClose={() => handleCloseSortModal()}
-        keyExtractor={(item) => item.id}
-        getItemName={(item) => item.name}
-      />
+{/* Custom Order Modal - add delay before toast */}
+<CustomOrderModal
+  visible={showCustomOrderModal}
+  items={sortedPinned}
+  onSave={async (newOrder) => {
+    const success = await handleSaveCustomOrder(newOrder);
+    console.log('🚨 Custom order save result:', success);
+  
+    setTimeout(() => {
+      if (success) {
+        showSuccessToast("Custom order saved", "", 2000, "top");
+      } else {
+        showErrorToast("Failed to save custom order", "", 2000, "top");
+      }
+    }, 300);
+  }}
+  onClose={() => handleCloseCustomOrderModal()}
+  keyExtractor={(item) => item.id}
+  getItemName={(item) => item.name}
+/>
 
       {/* Edit/Create Checklist Modal */}
       <ModalWrapper visible={showEditModal} onClose={handleCloseModal}>
@@ -543,7 +555,7 @@ const handleSaveWithToast = async (checklist) => {
                     promptForContext(async (context) => {
                       const success = await saveTemplate(checklist, context);
                       if (success) {
-                        Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                        showSuccessToast("Template saved successfully", "", 2000, "top");
                       }
                     });
                   }
@@ -720,7 +732,7 @@ const handleSaveWithToast = async (checklist) => {
                       promptForContext(async (context) => {
                         const success = await saveTemplate(checklistToSave, context);
                         if (success) {
-                          Alert.alert("Success", `Template "${checklist.name}" saved successfully`);
+                          showSuccessToast("Template saved successfully", "", 2000, "top");
                         }
                       });
                     }

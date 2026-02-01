@@ -19,6 +19,8 @@ const modules = [
   require("./src/schedules/updateNCAABSchedule"),
   require("./src/notifications/sendPushNotifications"),
   require("./src/notifications/scheduledNotifications"),
+  require("./src/shortcuts/addGroceryItems"),
+  require("./src/shortcuts/addWorkout"),
   // Add more as you create them
 ];
 
