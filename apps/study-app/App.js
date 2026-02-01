@@ -11,8 +11,6 @@ import { useAppRegistration } from "@my-apps/hooks";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MainNavigator from "./src/navigation/MainNavigator";
 import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
-import { StudyProvider } from "./src/components/contexts/StudyContext";
-import { UserSettingsProvider } from "./src/components/contexts/UserSettingsContext";
 
 // Toast configuration
 const toastConfig = {
@@ -54,11 +52,15 @@ const toastConfig = {
   ),
 };
 
-// Main app component (inside providers)
-const MainApp = () => {
+// App content component (after auth is ready)
+const AppContent = () => {
   const { isDarkMode } = useTheme();
-  const { logout, db, user } = useAuth();
+  const { logout, db, user, authLoading } = useAuth();
 
+  console.log('🔥 APP CONTENT - authLoading:', authLoading);
+  console.log('🔥 APP CONTENT - user:', user?.uid || 'none');
+
+  // Register this app when user logs in
   useAppRegistration(db, user?.uid, "study-app");
 
   const handleLogout = async () => {
@@ -68,7 +70,7 @@ const MainApp = () => {
 
   return (
     <>
-      <MainNavigator onLogout={handleLogout} />
+      <MainNavigator onLogout={handleLogout} user={user} authLoading={authLoading} />
       <StatusBar style={isDarkMode ? "light" : "dark"} />
       <Toast config={toastConfig} />
     </>
@@ -81,11 +83,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <CustomThemeProvider>
         <AuthProvider>
-          <UserSettingsProvider>
-            <StudyProvider>
-              <MainApp />
-            </StudyProvider>
-          </UserSettingsProvider>
+          <AppContent />
         </AuthProvider>
       </CustomThemeProvider>
     </GestureHandlerRootView>

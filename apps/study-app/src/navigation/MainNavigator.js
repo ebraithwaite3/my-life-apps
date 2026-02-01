@@ -4,8 +4,12 @@ import { NavigationContainer, useNavigation } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
 
-import { useTheme, useAuth, NotificationProvider } from "@my-apps/contexts";
+import { useTheme, NotificationProvider } from "@my-apps/contexts";
 import { AppHeader, LoadingScreen } from "@my-apps/ui";
+
+// Contexts
+import { StudyProvider } from "../components/contexts/StudyContext";
+import { UserSettingsProvider } from "../components/contexts/UserSettingsContext";
 
 // Screens
 import StudyingHomeScreen from "../screens/StudyingHomeScreen";
@@ -109,10 +113,9 @@ function TabNavigator({ onLogout }) {
 
 /* -------------------- ROOT -------------------- */
 
-function RootNavigator({ onLogout }) {
-  const { user, authLoading } = useAuth();
-
+function RootNavigator({ onLogout, user, authLoading }) {
   if (authLoading) {
+    console.log('🔥 SHOWING LOADING SCREEN');
     return (
       <LoadingScreen
         icon={require("../../assets/MyStudyingIcon.png")}
@@ -126,7 +129,14 @@ function RootNavigator({ onLogout }) {
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         <RootStack.Screen name="Main">
-          {() => <TabNavigator onLogout={onLogout} />}
+          {() => (
+            // ✅ Only wrap authenticated content with study providers
+            <UserSettingsProvider>
+              <StudyProvider>
+                <TabNavigator onLogout={onLogout} />
+              </StudyProvider>
+            </UserSettingsProvider>
+          )}
         </RootStack.Screen>
       ) : (
         <RootStack.Screen name="Login" component={LoginScreen} />
@@ -137,7 +147,7 @@ function RootNavigator({ onLogout }) {
 
 /* -------------------- MAIN -------------------- */
 
-const MainNavigator = ({ onLogout }) => {
+const MainNavigator = ({ onLogout, user, authLoading }) => {
   const linking = {
     prefixes: ["mystudying://"],
     config: {
@@ -175,7 +185,7 @@ const MainNavigator = ({ onLogout }) => {
   return (
     <NavigationContainer linking={linking}>
       <NotificationProvider>
-        <RootNavigator onLogout={onLogout} />
+        <RootNavigator onLogout={onLogout} user={user} authLoading={authLoading} />
       </NotificationProvider>
     </NavigationContainer>
   );
