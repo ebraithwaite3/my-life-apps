@@ -1,6 +1,6 @@
 const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const { parseDateTime } = require('../utils/dateTimeHelpers');
+//  const admin = require("firebase-admin");
+const {parseDateTime} = require("../utils/dateTimeHelpers");
 
 exports.addWorkout = functions.https.onRequest(async (req, res) => {
   // Enable CORS
@@ -16,41 +16,41 @@ exports.addWorkout = functions.https.onRequest(async (req, res) => {
   console.log("Method:", req.method);
   console.log("Body:", JSON.stringify(req.body, null, 2));
 
-  const {date, time, workout, addChecklist} = req.body;
+  const {day, time, workout, checklist} = req.body;
 
-  console.log("📅 Date:", date);
+  console.log("📅 Day:", day);
   console.log("⏰ Time:", time);
   console.log("🏋️‍♂️ Workout:", workout);
-  console.log("✅ Checklist:", addChecklist);
+  console.log("✅ Checklist:", checklist);
 
   // Validate required fields
-  if (!date || !time || !workout) {
-    return res.status(400).json({error: "Date, Time, and Workout are required"});
+  if (!day || !time || !workout) {
+    return res.status(400).json({error: "Date, Time & Workout are required"});
   }
 
   try {
     // 🎯 Parse the date and time into a Luxon DateTime
-    const workoutDateTime = parseDateTime(date, time, 'America/New_York');
-    
+    const workoutDateTime = parseDateTime(day, time, "America/New_York");
+
     console.log("🗓️  Parsed DateTime:", workoutDateTime.toISO());
     console.log("📍 Human readable:", workoutDateTime.toLocaleString({
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
     }));
 
     return res.status(200).json({
       message: "Workout added successfully",
       parsedDateTime: workoutDateTime.toISO(),
       readable: workoutDateTime.toLocaleString({
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
       }),
     });
   } catch (error) {

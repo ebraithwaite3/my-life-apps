@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/MyStudyingIcon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "scheme": "mystudying",
     "splash": {
       "image": "./assets/MyStudyingIcon.png",
@@ -27,8 +27,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ebraithwaite3.mystudying",
-      "edgeToEdgeEnabled": true
+      "package": "com.ebraithwaite3.mystudying"
     },
     "web": {
       "favicon": "./assets/favicon.png"
