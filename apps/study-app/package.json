@@ -11,8 +11,8 @@
   "dependencies": {
     "@my-apps/config": "*",
     "@my-apps/contexts": "*",
-    "@my-apps/ui": "*",
     "@my-apps/screens": "*",
+    "@my-apps/ui": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-picker/picker": "2.11.1",
@@ -22,6 +22,7 @@
     "expo": "~54.0.0",
     "expo-clipboard": "~8.0.7",
     "expo-crypto": "~15.0.7",
+    "expo-notifications": "~0.32.16",
     "expo-status-bar": "~3.0.8",
     "firebase": "^12.2.1",
     "luxon": "^3.7.1",
