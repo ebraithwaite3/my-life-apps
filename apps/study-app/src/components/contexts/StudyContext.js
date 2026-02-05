@@ -183,6 +183,8 @@ export const StudyProvider = ({ children }) => {
         2: Array.isArray(banks[2]) ? banks[2] : [],
         3: Array.isArray(banks[3]) ? banks[3] : [],
       });
+      console.log(`✅ Loaded module content for ${moduleId}`,
+        { summary, banks });
     } catch (e) {
       console.error("loadModule error:", e);
       setModuleContentError(e?.message || "Failed to load module content");

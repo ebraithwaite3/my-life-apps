@@ -57,6 +57,8 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
     getActivitiesForDay,
     preferences,
     groups,
+    addingToEvent,
+    setAddingToEvent,
   } = useData();
 
   const { db } = useAuth();
@@ -350,6 +352,9 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         filterActivitiesFor="workout"
         navigation={navigation}
         route={route}
+        addingToEvent={addingToEvent}
+        setAddingToEvent={setAddingToEvent}
+        setSelectedChecklist={setSelectedChecklist}
         // STATE: Pass from calendarState
         selectedView={calendarState.selectedView}
         setSelectedView={calendarState.setSelectedView}
