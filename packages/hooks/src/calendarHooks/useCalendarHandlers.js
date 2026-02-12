@@ -386,13 +386,13 @@ export const useCalendarHandlers = ({
     silent,
   ) => {
     const eventRef = selectedChecklistEvent;
-
+  
     if (!eventRef) {
       console.error("❌ No event reference available");
       Alert.alert("Error", "Event reference lost. Please try again.");
       return;
     }
-
+  
     try {
       const currentActivities = eventRef.activities || [];
       const updatedActivities = currentActivities.map((activity) => {
@@ -404,15 +404,15 @@ export const useCalendarHandlers = ({
             items: updatedChecklist.items,
             createdAt: activity.createdAt,
           };
-
+  
           if (updatedChecklist.notifyAdmin !== undefined) {
             updated.notifyAdmin = updatedChecklist.notifyAdmin;
           }
-
+  
           if (updatedChecklist.completedAt) {
             updated.completedAt = updatedChecklist.completedAt;
           }
-
+  
           if (eventRef.isAllDay) {
             if (updatedChecklist.reminderTime) {
               updated.reminderTime = updatedChecklist.reminderTime;
@@ -422,14 +422,14 @@ export const useCalendarHandlers = ({
               updated.reminderMinutes = updatedChecklist.reminderMinutes;
             }
           }
-
+  
           return cleanUndefined(updated);
         }
         return cleanUndefined(activity);
       });
-
+  
       const { isInternal, isGroup, groupId } = getCalendarType(eventRef);
-
+  
       let result;
       if (isInternal || isGroup) {
         result = await updateInternalActivities(
@@ -446,39 +446,48 @@ export const useCalendarHandlers = ({
           updatedActivities
         );
       }
-
+  
       if (result.success) {
-        if (!silent) {  // ← Only show Alert if not silent
+        if (!silent) {
           Alert.alert("Success", `Checklist "${updatedChecklist.name}" updated`);
         }
-
+  
         if (wasJustCompleted && updatedChecklist.notifyAdmin) {
-          console.log("📢 Notifying admin of checklist completion");
-          try {
-            const { sendNotification } = await import("@my-apps/services");
-            await sendNotification(
-              adminUserId,
-              `✅ Checklist Completed: ${updatedChecklist.name}`,
-              `"${updatedChecklist.name}" was completed for "${eventRef.title}"`,
-              {
-                screen: "Calendar",
-                eventId: eventRef.eventId,
-                checklistId: updatedChecklist.id,
-                app: "checklist-app",
-                date: eventRef.startTime,
-              }
-            );
-          } catch (error) {
-            console.error("❌ Failed to notify admin:", error);
+          // Double-check: ensure checklist wasn't already completed
+          const currentActivity = currentActivities.find(
+            (a) => a.id === updatedChecklist.id
+          );
+          const alreadyCompleted = currentActivity?.completedAt != null;
+        
+          if (!alreadyCompleted) {
+            console.log("📢 Notifying admin of checklist completion");
+            try {
+              const { sendNotification } = await import("@my-apps/services");
+              await sendNotification(
+                adminUserId,
+                `✅ Checklist Completed: ${updatedChecklist.name}`,
+                `"${updatedChecklist.name}" was completed for "${eventRef.title}"`,
+                {
+                  screen: "Calendar",
+                  eventId: eventRef.eventId,
+                  checklistId: updatedChecklist.id,
+                  app: "checklist-app",
+                  date: eventRef.startTime,
+                }
+              );
+            } catch (error) {
+              console.error("❌ Failed to notify admin:", error);
+            }
+          } else {
+            console.log("⚠️ Checklist already marked complete, skipping duplicate notification");
           }
         }
-
+  
         // Determine if this is a shared event
         let subscribers = [];
         let isSharedEvent = false;
-
+  
         if (isGroup && groupId) {
-          // Internal group event - get members from group
           const group = groups?.find(
             (g) => g.groupId === groupId || g.id === groupId
           );
@@ -487,22 +496,49 @@ export const useCalendarHandlers = ({
             isSharedEvent = subscribers.length > 1;
           }
         } else {
-          // External calendar or personal internal - get subscribers from calendar
           const fullCalendar = allCalendars[eventRef.calendarId];
           subscribers = fullCalendar?.subscribingUsers || [];
           isSharedEvent = subscribers.length > 1;
         }
-
-        const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
-        await deleteNotification(notificationId);
-
-        const hasReminder =
-          (eventRef.isAllDay && updatedChecklist.reminderTime) ||
-          (!eventRef.isAllDay && updatedChecklist.reminderMinutes != null);
-
-        if (hasReminder) {
+  
+        // Determine if we need to manage notifications
+        const hadReminder = (eventRef.isAllDay && selectedChecklist.reminderTime) ||
+                            (!eventRef.isAllDay && selectedChecklist.reminderMinutes != null);
+                            
+        const hasReminder = (eventRef.isAllDay && updatedChecklist.reminderTime) ||
+                            (!eventRef.isAllDay && updatedChecklist.reminderMinutes != null);
+  
+        const reminderRemoved = hadReminder && !hasReminder;
+        const reminderChanged = hadReminder && hasReminder && (
+          selectedChecklist.reminderTime !== updatedChecklist.reminderTime ||
+          selectedChecklist.reminderMinutes !== updatedChecklist.reminderMinutes
+        );
+  
+        // Check if reminder is recurring
+        const isRecurringReminder = eventRef.reminder?.isRecurring === true;
+  
+        // Only delete/reschedule based on specific conditions
+        if (reminderRemoved) {
+          console.log('🗑️ Reminder removed - deleting notifications');
+          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
+          await deleteNotification(notificationId);
+        } else if (wasJustCompleted && !isRecurringReminder) {
+          // Only delete on completion if reminder is NOT recurring
+          console.log('🗑️ Checklist completed (non-recurring reminder) - deleting notifications');
+          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
+          await deleteNotification(notificationId);
+        } else if (wasJustCompleted && isRecurringReminder) {
+          console.log('✅ Checklist completed but reminder is recurring - keeping notifications');
+        } else if (reminderChanged) {
+          console.log('⏰ Reminder settings changed, rescheduling...');
+          
+          // Delete old notifications
+          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
+          await deleteNotification(notificationId);
+  
+          // Reschedule with new time
           let reminderTime;
-
+  
           if (eventRef.isAllDay) {
             reminderTime = new Date(updatedChecklist.reminderTime);
           } else {
@@ -512,7 +548,7 @@ export const useCalendarHandlers = ({
               reminderTime.getMinutes() - updatedChecklist.reminderMinutes
             );
           }
-
+  
           if (reminderTime > new Date()) {
             try {
               if (isSharedEvent) {
@@ -558,11 +594,13 @@ export const useCalendarHandlers = ({
               console.error("❌ Failed to reschedule reminder:", error);
             }
           }
+        } else {
+          console.log('✅ No notification changes needed');
         }
       } else {
         Alert.alert("Error", `Error updating checklist: ${result.error}`);
       }
-
+  
       if (onClose) onClose();
     } catch (error) {
       console.error("Unexpected error updating checklist:", error);

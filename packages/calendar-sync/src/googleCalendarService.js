@@ -91,3 +91,34 @@ export const deleteGoogleCalendarEvent = async (app, eventId, calendarId = 'prim
     return { success: false, error: error.message };
   }
 };
+
+/**
+ * Apply schedule template to a week
+ */
+export const applyScheduleTemplate = async (app, templateName) => {
+  console.log('🔍 SERVICE: Received templateName:', templateName, typeof templateName); // ← ADD THIS
+
+  try {
+    const functions = getFunctionsInstance(app);
+    const applyTemplate = httpsCallable(functions, 'applyScheduleTemplate');
+    
+    console.log('📅 Calling applyScheduleTemplate with:', templateName);
+    
+    const dataToSend = { templateName };
+    console.log('🔍 SERVICE: Sending data:', dataToSend); // ← ADD THIS
+    
+    const result = await applyTemplate(dataToSend);
+    
+    if (result.data.success) {
+      return { 
+        success: true,
+        ...result.data,
+      };
+    } else {
+      return { success: false, error: result.data.error };
+    }
+  } catch (error) {
+    console.error('❌ Apply schedule template error:', error);
+    return { success: false, error: error.message };
+  }
+};

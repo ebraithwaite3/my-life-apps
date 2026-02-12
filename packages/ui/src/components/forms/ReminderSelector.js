@@ -9,15 +9,27 @@ const ReminderSelector = ({
   onReminderChange, 
   eventStartDate,
   isAllDay = false,
+  isTemplateMode = false, // ← NEW PROP (defaults to false)
 }) => {
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [customModalVisible, setCustomModalVisible] = useState(false);
 
-  // ✅ Always show the actual time, handle both string and object formats
+  // ✅ Handle both runtime format AND template format
   const formatReminderDisplay = () => {
     if (!reminder) return "None";
     
-    // ✅ Handle both string and object formats
+    // ✅ TEMPLATE MODE: reminder has { time: "HH:mm", isRecurring, recurringConfig }
+    if (isTemplateMode && typeof reminder === 'object' && reminder.time) {
+      const [hours, minutes] = reminder.time.split(':').map(Number);
+      const recurringText = reminder.isRecurring ? " (Recurring)" : "";
+      
+      // Format for display
+      const period = hours < 12 ? 'AM' : 'PM';
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}${recurringText}`;
+    }
+    
+    // ✅ RUNTIME MODE: existing logic (handles ISO strings and {scheduledFor} objects)
     let reminderTimeISO = reminder;
     let isRecurring = false;
     

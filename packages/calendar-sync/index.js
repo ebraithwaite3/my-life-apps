@@ -9,5 +9,6 @@ export {
   export {
     writeToGoogleCalendar,
     updateGoogleCalendarEvent,
-    deleteGoogleCalendarEvent
+    deleteGoogleCalendarEvent,
+    applyScheduleTemplate
 } from './src/googleCalendarService';

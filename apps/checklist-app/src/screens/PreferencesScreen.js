@@ -6,100 +6,42 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@my-apps/contexts";
-import { SelectModal, CommunicationPreferences, PageHeader } from "@my-apps/ui";
+import { SelectModal, PageHeader, ScheduleTemplateEditor, ChecklistSelector, EditChecklistContent } from "@my-apps/ui";
 import { useData } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { updateDocument } from "@my-apps/services";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { useChecklistTemplates } from "@my-apps/hooks";
 
 const defaultPreferences = {
-  workoutPreferences: {
-    syncWorkoutsToCalendar: false,
-    addChecklistToWorkout: false,
-    checklistId: "",
-  },
   defaultCalendarView: "day",
-  // --- NEW DEFAULT PREFERENCE ---
-  defaultCalendarId: "", 
-  // ------------------------------
-  communicationPreferences: {
-    notifications: {
-      active: true,
-      notifyFor: {
-        creation: {
-          events: true,
-          activities: true,
-        },
-        edits: {
-          events: true,
-          activities: true,
-        },
-        deletions: {
-          events: true,
-          activities: true,
-        },
-        reminders: {
-          events: true,
-          activities: true,
-        },
-        messages: {
-          events: true,
-          activities: true,
-        },
-      },
-    },
-    messages: {
-      active: true,
-      notifyFor: {
-        creation: {
-          events: true,
-          activities: true,
-        },
-        edits: {
-          events: true,
-          activities: true,
-        },
-        deletions: {
-          events: true,
-          activities: true,
-        },
-        reminders: {
-          events: true,
-          activities: true,
-        },
-        messages: {
-          events: true,
-          activities: true,
-        },
-      },
-    },
-  },
+  defaultCalendarId: "",
 };
 
 const PreferencesScreen = ({ navigation, route }) => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
-  const { preferences, user, groups } = useData();
+  const { 
+    preferences, 
+    user, 
+    groups,
+    templates,              // ← FROM HOOK
+    templatesLoading,       // ← FROM HOOK
+  } = useData();
 
-  // Use Memo to see if the user is just a 'member' role in any groups
-  const isMemberInAnyGroup = useMemo(() => {
-    if (!user || !groups) return false;
+  // View state management
+  const [currentView, setCurrentView] = useState("preferences");
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
 
-    return groups.some((group) => {
-      const member = group.members.find((m) => m.userId === user.userId);
-      return member && member.role === "member";
-    });
-  }, [user, groups]);
-  
-  // --- NEW: Generate options for the Default Calendar SelectModal ---
+  // Generate options for the Default Calendar SelectModal
   const defaultCalendarOptions = useMemo(() => {
-    // 1. Start with the "None" option
     const options = [{ label: "None", value: "" }];
 
-    // 2. Add Group Calendars
+    // Add Group Calendars
     groups.forEach((group) => {
       options.push({
         label: `${group.name} Calendar`,
@@ -107,17 +49,17 @@ const PreferencesScreen = ({ navigation, route }) => {
       });
     });
 
-    // 3. Add Google Calendars
+    // Add Google Calendars
     user?.calendars
       ?.filter((cal) => cal.calendarType === "google")
       .forEach((cal) => {
         options.push({
-          label: cal.name, // Use the calendar's actual name
+          label: cal.name,
           value: cal.calendarId,
         });
       });
-      
-    // 4. Add the Internal Calendar (Personal)
+
+    // Add Internal Calendar (Personal)
     options.push({
       label: "Personal Calendar",
       value: "internal",
@@ -125,7 +67,6 @@ const PreferencesScreen = ({ navigation, route }) => {
 
     return options;
   }, [groups, user?.calendars]);
-  // ------------------------------------------------------------------
 
   // Merge saved preferences with defaults
   const initialPrefs = useMemo(() => {
@@ -133,36 +74,33 @@ const PreferencesScreen = ({ navigation, route }) => {
       ? {
           ...defaultPreferences,
           ...preferences,
-          // Ensure defaultCalendarId is merged if it exists on saved preferences
-          defaultCalendarId: preferences.defaultCalendarId ?? "", 
-          communicationPreferences: {
-            ...defaultPreferences.communicationPreferences,
-            ...preferences.communicationPreferences,
-          },
+          defaultCalendarId: preferences.defaultCalendarId ?? "",
         }
       : defaultPreferences;
   }, [preferences]);
 
+  // Add checklist templates hook
+  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
+  
+  // Add state for selected checklist
+  const [selectedChecklist, setSelectedChecklist] = useState(null);
 
   const [updatedPreferences, setUpdatedPreferences] = useState(initialPrefs);
   const [hasChanges, setHasChanges] = useState(false);
-  
-  // Update state when initialPrefs changes (e.g., data loads)
+
+  // Update state when initialPrefs changes
   useEffect(() => {
     setUpdatedPreferences(initialPrefs);
   }, [initialPrefs]);
 
-
   // Detect changes
   useEffect(() => {
-    // Use initialPrefs as the baseline for comparison
     const changesMade =
       JSON.stringify(initialPrefs) !== JSON.stringify(updatedPreferences);
     setHasChanges(changesMade);
   }, [initialPrefs, updatedPreferences]);
 
-
-  // 📅 Calendar View Handler
+  // Calendar View Handler
   const handleCalendarViewChange = (value) => {
     setUpdatedPreferences((prev) => ({
       ...prev,
@@ -170,7 +108,7 @@ const PreferencesScreen = ({ navigation, route }) => {
     }));
   };
 
-  // 📅 Default Calendar ID Handler (NEW)
+  // Default Calendar ID Handler
   const handleDefaultCalendarIdChange = (value) => {
     setUpdatedPreferences((prev) => ({
       ...prev,
@@ -178,119 +116,77 @@ const PreferencesScreen = ({ navigation, route }) => {
     }));
   };
 
-  // 🔔 Communication Preferences Handler
-  const handleCommunicationUpdate = (newCommPrefs) => {
-    setUpdatedPreferences((prev) => ({
-      ...prev,
-      communicationPreferences: newCommPrefs,
-    }));
-  };
-
-  // 💾 Save
+  // Save preferences
   const handleSave = async () => {
     if (!db || !user || !hasChanges) {
-      console.warn(
-        "Cannot save: missing db/user or no changes.",
-        db,
-        user,
-        hasChanges
-      );
+      console.warn("Cannot save: missing db/user or no changes.");
       return;
     }
 
     try {
-      // 1. Update user preferences
       await updateDocument("users", user.userId, {
         preferences: updatedPreferences,
       });
-      console.log("User preferences updated successfully!");
-
-      // 2. Update communication preferences in all groups the user belongs to
-      if (user.groups && user.groups.length > 0) {
-        console.log("Updating preferences in groups:", user.groups);
-
-        const groupUpdatePromises = user.groups.map(async (groupId) => {
-          try {
-            // Get fresh group data from Firestore
-            const groupDocRef = doc(db, "groups", groupId);
-            const groupDocSnap = await getDoc(groupDocRef);
-
-            if (groupDocSnap.exists()) {
-              const groupData = groupDocSnap.data();
-
-              if (groupData.members) {
-                // Update the member's preferences in the group
-                const updatedMembers = groupData.members.map((member) => {
-                  if (member.userId === user.userId) {
-                    return {
-                      ...member,
-                      preferences: updatedPreferences.communicationPreferences,
-                    };
-                  }
-                  return member;
-                });
-
-                // Update the group document
-                await updateDoc(groupDocRef, { members: updatedMembers });
-                console.log(
-                  `Updated preferences in group: ${groupData.name || groupId}`
-                );
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to update group ${groupId}:`, error);
-          }
-        });
-
-        await Promise.all(groupUpdatePromises);
-        console.log("All group preferences updated successfully!");
-      }
 
       Alert.alert("Success", "Preferences saved successfully!");
+      setHasChanges(false);
     } catch (error) {
       console.error("Failed to save preferences:", error);
       Alert.alert("Error", "Failed to save preferences. Please try again.");
     }
   };
 
-  // ❌ Cancel
+  // Cancel changes
   const handleCancel = () => {
     setUpdatedPreferences(initialPrefs);
   };
 
-  // Custom categories for organizer app
-  const categories = [
-    {
-      key: "creation",
-      label: "Created",
-      description: "New events or activities",
-    },
-    {
-      key: "edits",
-      label: "Edited",
-      description: "Changes to events or activities",
-    },
-    {
-      key: "deletions",
-      label: "Deleted",
-      description: "Removed events or activities",
-    },
-    {
-      key: "reminders",
-      label: "Reminders",
-      description: "Upcoming event reminders",
-    },
-    {
-      key: "messages",
-      label: "Messages",
-      description: "Notes and messages on items",
-    },
-  ];
+  // Switch to template editor (new template)
+  const handleCreateTemplate = () => {
+    setSelectedTemplate(null);
+    setCurrentView("templateEditor");
+  };
 
-  const itemTypes = [
-    { key: "events", label: "Calendar Events" },
-    { key: "activities", label: "Group Activities" },
-  ];
+  // Switch to template editor (existing template)
+  const handleTemplatePress = (template) => {
+    setSelectedTemplate(template);
+    setCurrentView("templateEditor");
+  };
+
+  // Return to preferences view
+  const handleBackToPreferences = () => {
+    setCurrentView("preferences");
+    setSelectedTemplate(null);
+    // No need to manually refresh - hook handles it!
+  };
+
+  const activities = useMemo(() => [
+    {
+      type: "checklist",
+      label: "Checklist",
+      required: false, // Optional in template events
+      SelectorComponent: ChecklistSelector,
+      EditorComponent: EditChecklistContent,
+      selectedActivity: selectedChecklist,
+      onSelectActivity: setSelectedChecklist,
+      transformTemplate: (template) => ({
+        id: `checklist_${Date.now()}`,
+        name: template.name,
+        items: template.items.map((item, index) => ({
+          ...item,
+          id: item.id || `item_${Date.now()}_${index}`,
+          completed: false,
+        })),
+        createdAt: Date.now(),
+      }),
+      editorProps: {
+        templates: allTemplates,
+        onSaveTemplate: saveTemplate,
+        promptForContext,
+        isUserAdmin: user?.admin === true,
+      },
+    },
+  ], [selectedChecklist, allTemplates, user?.admin]);
 
   const styles = StyleSheet.create({
     container: {
@@ -308,20 +204,76 @@ const PreferencesScreen = ({ navigation, route }) => {
       paddingHorizontal: getSpacing.md,
       marginBottom: getSpacing.xl,
     },
-    // Used for the main section headers (e.g., "Communication")
     sectionHeaderText: {
-        ...getTypography.body,
-        fontWeight: "700", // Bolder style
-        color: theme.text.primary,
-        marginBottom: getSpacing.sm,
+      ...getTypography.body,
+      fontWeight: "700",
+      color: theme.text.primary,
+      marginBottom: getSpacing.sm,
     },
-    // Used for the field labels above the input boxes (e.g., "Default Calendar")
     subHeaderText: {
       ...getTypography.body,
       color: theme.text.secondary,
       marginBottom: getSpacing.sm,
       marginTop: getSpacing.sm,
-      // Removed marginBottom here, will add it to the SelectModal for spacing
+    },
+    // Template list styles
+    templateListContainer: {
+      marginTop: getSpacing.md,
+    },
+    templateCard: {
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      padding: getSpacing.md,
+      marginBottom: getSpacing.sm,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    iconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.primary + "20",
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: getSpacing.sm,
+    },
+    templateInfo: {
+      flex: 1,
+    },
+    templateName: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.text.primary,
+      marginBottom: 2,
+    },
+    templateDetails: {
+      fontSize: 13,
+      color: theme.text.secondary,
+    },
+    addButton: {
+      backgroundColor: theme.primary,
+      borderRadius: 8,
+      padding: getSpacing.md,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: getSpacing.sm,
+    },
+    addButtonText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "600",
+      marginLeft: getSpacing.xs,
+    },
+    emptyState: {
+      alignItems: "center",
+      padding: getSpacing.lg,
+    },
+    emptyText: {
+      fontSize: 14,
+      color: theme.text.secondary,
+      textAlign: "center",
+      marginTop: getSpacing.sm,
     },
     stickyFooter: {
       position: "absolute",
@@ -374,90 +326,150 @@ const PreferencesScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <PageHeader
-        showBackButton={false}
-        showNavArrows={false}
-        title="Preferences"
-        subtext="Customize your app experience"
-        icons={[]}
-      />
-
-      <ScrollView
-        showsVerticalScrollIndicator
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* 📅 Calendar Preferences */}
-        <View style={styles.settingContainer}>
-          
-          {/* SECTION HEADER: BOLD, like Communication */}
-          <Text style={styles.sectionHeaderText}>Calendar Preferences</Text> 
-          
-          {/* Default Calendar View FIELD */}
-          <Text style={styles.subHeaderText}>Default Calendar Screen View</Text>
-          <SelectModal
-            // Add margin to the bottom to separate it from the next label/field
-            style={{ marginBottom: getSpacing.md }} 
-            title="Default Calendar View"
-            value={updatedPreferences.defaultCalendarView || "day"}
-            options={[
-              { label: "Day View", value: "day" },
-              { label: "Month View", value: "month" },
-            ]}
-            getLabel={(option) => option.label}
-            getValue={(option) => option.value}
-            onSelect={handleCalendarViewChange}
-          />
-          
-          {/* Default Calendar FIELD */}
-          <Text style={styles.subHeaderText}>Default Calendar</Text>
-          <SelectModal
-            // This modal is the last element in the section, no extra margin needed here
-            title="Default Calendar"
-            value={updatedPreferences.defaultCalendarId || ""}
-            options={defaultCalendarOptions}
-            getLabel={(option) => option.label}
-            getValue={(option) => option.value}
-            onSelect={handleDefaultCalendarIdChange}
-            placeholder="None"
+      {currentView === "preferences" ? (
+        <>
+          {/* PREFERENCES VIEW */}
+          <PageHeader
+            showBackButton={false}
+            showNavArrows={false}
+            title="Preferences"
+            subtext="Customize your app experience"
+            icons={[]}
           />
 
-        </View>
-
-        {/* 🔔 Communication Preferences 
-        <View style={styles.settingContainer}>
-          <CommunicationPreferences
-            preferences={updatedPreferences.communicationPreferences}
-            onUpdate={handleCommunicationUpdate}
-            categories={categories}
-            itemTypes={itemTypes}
-            isMemberInAnyGroup={isMemberInAnyGroup}
-          />
-        </View> */}
-
-        {/* Add bottom padding when buttons are showing */}
-        {hasChanges && <View style={{ height: 100 }} />}
-      </ScrollView>
-
-      {/* Sticky Save/Cancel Footer */}
-      {hasChanges && (
-        <View style={styles.stickyFooter}>
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
-            onPress={handleCancel}
+          <ScrollView
+            showsVerticalScrollIndicator
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text style={[styles.buttonText, styles.cancelButtonText]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.saveButton]}
-            onPress={handleSave}
-            disabled={!hasChanges}
-          >
-            <Text style={styles.buttonText}>Save</Text>
-          </TouchableOpacity>
-        </View>
+            {/* 📅 Calendar Preferences */}
+            <View style={styles.settingContainer}>
+              <Text style={styles.sectionHeaderText}>Calendar Preferences</Text>
+
+              <Text style={styles.subHeaderText}>Default Calendar Screen View</Text>
+              <SelectModal
+                style={{ marginBottom: getSpacing.md }}
+                title="Default Calendar View"
+                value={updatedPreferences.defaultCalendarView || "day"}
+                options={[
+                  { label: "Day View", value: "day" },
+                  { label: "Month View", value: "month" },
+                ]}
+                getLabel={(option) => option.label}
+                getValue={(option) => option.value}
+                onSelect={handleCalendarViewChange}
+              />
+
+              <Text style={styles.subHeaderText}>Default Calendar</Text>
+              <SelectModal
+                title="Default Calendar"
+                value={updatedPreferences.defaultCalendarId || ""}
+                options={defaultCalendarOptions}
+                getLabel={(option) => option.label}
+                getValue={(option) => option.value}
+                onSelect={handleDefaultCalendarIdChange}
+                placeholder="None"
+              />
+            </View>
+
+            {/* 📋 Schedule Templates (Admin Only) */}
+            {user?.admin && (
+              <View style={styles.settingContainer}>
+                <Text style={styles.sectionHeaderText}>Schedule Templates</Text>
+
+                {templatesLoading ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : templates.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Icon
+                      name="calendar-blank"
+                      size={48}
+                      color={theme.text.secondary}
+                    />
+                    <Text style={styles.emptyText}>
+                      No schedule templates yet.{"\n"}Create your first one!
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.templateListContainer}>
+                    {templates.map((template) => (
+                      <TouchableOpacity
+                        key={template.id}
+                        style={styles.templateCard}
+                        onPress={() => handleTemplatePress(template)}
+                      >
+                        <View style={styles.iconContainer}>
+                          <Icon
+                            name={template.icon || "calendar-week"}
+                            size={20}
+                            color={theme.primary}
+                          />
+                        </View>
+                        <View style={styles.templateInfo}>
+                          <Text style={styles.templateName}>{template.name}</Text>
+                          <Text style={styles.templateDetails}>
+                            {template.events?.length || 0} events
+                          </Text>
+                        </View>
+                        <Icon
+                          name="chevron-right"
+                          size={20}
+                          color={theme.text.secondary}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={handleCreateTemplate}
+                >
+                  <Icon name="plus" size={20} color="#FFFFFF" />
+                  <Text style={styles.addButtonText}>Create New Template</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Add bottom padding when buttons are showing */}
+            {hasChanges && <View style={{ height: 100 }} />}
+          </ScrollView>
+
+          {/* Sticky Save/Cancel Footer */}
+          {hasChanges && (
+            <View style={styles.stickyFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={handleCancel}
+              >
+                <Text style={[styles.buttonText, styles.cancelButtonText]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.saveButton]}
+                onPress={handleSave}
+                disabled={!hasChanges}
+              >
+                <Text style={styles.buttonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      ) : (
+        <>
+        {console.log('🎨 Rendering TEMPLATE EDITOR view')}
+        {console.log('Selected template:', selectedTemplate)}
+          <View style={{ flex: 1 }}>
+    {/* TEMPLATE EDITOR VIEW */}
+    <ScheduleTemplateEditor
+      template={selectedTemplate}
+      userCalendars={user?.calendars || []}
+      activities={activities}
+      onClose={handleBackToPreferences}
+    />
+  </View>
+        </>
       )}
     </SafeAreaView>
   );

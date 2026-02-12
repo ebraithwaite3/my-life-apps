@@ -14,6 +14,7 @@ import {
   useGroupDocs,
   useCalendarDocs,
   useActivityDocs,
+  useScheduleTemplates,
 } from "@my-apps/data-sync";
 import {
   navigateNextDay,
@@ -78,7 +79,7 @@ export const DataProvider = ({ children }) => {
   const groupIds = useMemo(() => {
     if (!user?.groups) return [];
     return [...user.groups]; // Create new array only when content changes
-  }, [user?.groups?.length, user?.groups?.join(',')]);
+  }, [user?.groups?.length, user?.groups?.join(",")]);
 
   // Calendar shards hook
   const {
@@ -102,6 +103,17 @@ export const DataProvider = ({ children }) => {
     getActivitiesForEntity,
     getActivitiesForEvent,
   } = useActivityDocs(db, user?.userId, groupIds, selectedMonth, selectedYear);
+
+  // Schedule templates hook (admin only for now)
+  const {
+    templates,
+    activeTemplate,
+    activeTemplateId,
+    setActiveTemplateId,
+    getTemplateEventsForWeek,
+    templatesLoading,
+    error: templatesError,
+  } = useScheduleTemplates(db, user?.userId, user?.admin);
 
   console.log("👤 User:", user?.userId, "Loading:", loading, "Full User", user);
   if (userError) console.error("❌ User error:", userError);
@@ -145,7 +157,6 @@ export const DataProvider = ({ children }) => {
     allActivities
   );
   if (activitiesError) console.error("❌ Activities error:", activitiesError);
-
 
   console.log("📊 DataContext State:", {
     loading,
@@ -206,14 +217,13 @@ export const DataProvider = ({ children }) => {
     setSelectedMonth(month);
     setSelectedYear(year);
   }, [selectedDate]);
-  
+
   const navigateToPreviousMonth = useCallback(() => {
     const { date, month, year } = navigatePreviousMonth(selectedDate); // ← Pass date
     setSelectedDate(date); // ← Update date too!
     setSelectedMonth(month);
     setSelectedYear(year);
   }, [selectedDate]);
-
 
   const navigateToDate = useCallback((dateISO) => {
     console.log("📅 Navigating to date:", dateISO);
@@ -222,17 +232,71 @@ export const DataProvider = ({ children }) => {
     setSelectedMonth(dt.monthLong);
     setSelectedYear(dt.year);
   }, []);
-console.log("All Calendars:", allCalendars);
+
+  const navigateToNextWeek = useCallback(() => {
+    const dt = DateTime.fromISO(selectedDate);
+    const nextWeek = dt.plus({ weeks: 1 });
+    console.log("➡️ Navigating to next week:", nextWeek.toISODate());
+    setSelectedDate(nextWeek.toISODate());
+    setSelectedMonth(nextWeek.monthLong);
+    setSelectedYear(nextWeek.year);
+  }, [selectedDate]);
+
+  const navigateToPreviousWeek = useCallback(() => {
+    const dt = DateTime.fromISO(selectedDate);
+    const prevWeek = dt.minus({ weeks: 1 });
+    console.log("⬅️ Navigating to previous week:", prevWeek.toISODate());
+    setSelectedDate(prevWeek.toISODate());
+    setSelectedMonth(prevWeek.monthLong);
+    setSelectedYear(prevWeek.year);
+  }, [selectedDate]);
+
+  const getEventsForWeek = useCallback(
+    (dateISO) => {
+      const dt = DateTime.fromISO(dateISO);
+
+      // US-style week: Sunday (start) to Saturday (end)
+      const weekStart = dt.minus({ days: dt.weekday % 7 }); // Go back to Sunday
+      const weekEnd = weekStart.plus({ days: 6 }); // Saturday
+
+      console.log(
+        "📅 Week range:",
+        weekStart.toISODate(),
+        "to",
+        weekEnd.toISODate()
+      );
+
+      // Get all events for the week
+      const weekEvents = [];
+      let currentDay = weekStart;
+
+      while (currentDay <= weekEnd) {
+        const dayISO = currentDay.toISODate();
+        const dayEvents = getEventsForDay(dayISO);
+        weekEvents.push({
+          date: dayISO,
+          dayNumber: currentDay.day,
+          isToday: currentDay.toISODate() === DateTime.local().toISODate(),
+          events: dayEvents,
+        });
+        currentDay = currentDay.plus({ days: 1 });
+      }
+
+      return weekEvents;
+    },
+    [getEventsForDay]
+  );
+  console.log("All Calendars:", allCalendars);
 
   // ===== CONTEXT VALUE =====
-const value = useMemo(
+  const value = useMemo(
     () => ({
       // Core user data
       user,
       userLoading: loading,
       isUserAdmin,
       adminUserId,
-  
+
       // Date states
       currentDate,
       selectedDate,
@@ -241,7 +305,7 @@ const value = useMemo(
       setSelectedMonth,
       selectedYear,
       setSelectedYear,
-  
+
       // Counts
       unreadMessagesCount,
       unacceptedChecklistsCount,
@@ -250,47 +314,57 @@ const value = useMemo(
       // Add Event States
       addingToEvent,
       setAddingToEvent,
-  
+
       // Data from hooks
       groups,
       messages,
       allCalendars,
       allActivities,
-  
+
       // Loading states - Individual
       calendarsLoading,
       groupsLoading,
       messagesLoading,
       activitiesLoading,
-  
+
       // Loading states - Combined
-      dataLoading: calendarsLoading || groupsLoading || messagesLoading || activitiesLoading,
-      isAnyLoading: loading || calendarsLoading || groupsLoading || messagesLoading || activitiesLoading,
-  
+      dataLoading:
+        calendarsLoading ||
+        groupsLoading ||
+        messagesLoading ||
+        activitiesLoading,
+      isAnyLoading:
+        loading ||
+        calendarsLoading ||
+        groupsLoading ||
+        messagesLoading ||
+        activitiesLoading,
+
       // Computed properties
       isDataLoaded: !loading && !!user,
       hasGroups: groups?.length > 0,
-  
+
       // Legacy compatibility (from user doc)
       calendarsInfo: user?.calendars || [],
       groupsInfo: user?.groups || [],
       preferences: user?.preferences || {},
       myUsername: user?.username || "",
       myUserId: user?.userId || "",
-  
+
       // Calendar helpers
       getEventsForCalendar,
       getEventsForMonth,
       getEventsForDay,
       getCurrentMonthEvents,
-  
+      getEventsForWeek,
+
       // Activity helpers
       getActivitiesForMonth,
       getActivitiesForDay,
       getCurrentMonthActivities,
       getActivitiesForEntity,
       getActivitiesForEvent,
-  
+
       // Date navigation methods
       navigateToNextDay,
       navigateToPreviousDay,
@@ -298,6 +372,16 @@ const value = useMemo(
       navigateToNextMonth,
       navigateToPreviousMonth,
       navigateToDate,
+      navigateToNextWeek,
+      navigateToPreviousWeek,
+
+      // Schedule template helpers (admin only for now)
+      templates,
+      activeTemplate,
+      activeTemplateId,
+      setActiveTemplateId,
+      getTemplateEventsForWeek,
+      templatesLoading,
     }),
     [
       user,
@@ -323,6 +407,7 @@ const value = useMemo(
       getEventsForCalendar,
       getEventsForMonth,
       getEventsForDay,
+      getEventsForWeek,
       getCurrentMonthEvents,
       getActivitiesForMonth,
       getActivitiesForDay,
@@ -335,6 +420,13 @@ const value = useMemo(
       navigateToNextMonth,
       navigateToPreviousMonth,
       navigateToDate,
+      navigateToNextWeek,
+      navigateToPreviousWeek,
+      templates,
+      activeTemplate,
+      activeTemplateId,
+      getTemplateEventsForWeek,
+      templatesLoading,
     ]
   );
 

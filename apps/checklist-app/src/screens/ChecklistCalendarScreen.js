@@ -43,7 +43,10 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     navigateToNextMonth,
     navigateToDate,
     navigateToToday,
+    navigateToNextWeek,
+    navigateToPreviousWeek,
     getEventsForDay,
+    getEventsForWeek,
     getActivitiesForDay,
     preferences,
     groups,
@@ -341,6 +344,9 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         navigateToNextMonth={navigateToNextMonth}
         navigateToDate={navigateToDate}
         navigateToToday={navigateToToday}
+        navigateToNextWeek={navigateToNextWeek}
+        navigateToPreviousWeek={navigateToPreviousWeek}
+        getEventsForWeek={getEventsForWeek}
         filteredTodaysEvents={calendarEvents.filteredTodaysEvents}
         deletedEventsCount={calendarEvents.deletedEventsCount}
         allEventsForMonth={calendarEvents.allEventsForMonth}

@@ -53,7 +53,10 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
     navigateToNextMonth,
     navigateToDate,
     navigateToToday,
+    navigateToNextWeek,
+    navigateToPreviousWeek,
     getEventsForDay,
+    getEventsForWeek,
     getActivitiesForDay,
     preferences,
     groups,
@@ -377,6 +380,9 @@ const WorkoutsCalendarScreen = ({ navigation, route }) => {
         navigateToNextMonth={navigateToNextMonth}
         navigateToDate={navigateToDate}
         navigateToToday={navigateToToday}
+        navigateToNextWeek={navigateToNextWeek}
+        navigateToPreviousWeek={navigateToPreviousWeek}
+        getEventsForWeek={getEventsForWeek}
         filteredTodaysEvents={calendarEvents.filteredTodaysEvents}
         deletedEventsCount={calendarEvents.deletedEventsCount}
         allEventsForMonth={calendarEvents.allEventsForMonth}
