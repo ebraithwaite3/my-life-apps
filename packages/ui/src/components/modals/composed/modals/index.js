@@ -7,3 +7,4 @@ export { default as MultipleChoiceSelectionModal } from './MultipleChoiceSelecti
 export { default as FillInSelectionModal } from './FillInSelectionModal';
 export { default as AddChecklistToEventModal } from './AddChecklistToEventModal';
 export { default as ScheduleDefaultEventModal } from './ScheduleDefaultEventModal';
+export { default as QuickSendModal } from './QuickSendModal';

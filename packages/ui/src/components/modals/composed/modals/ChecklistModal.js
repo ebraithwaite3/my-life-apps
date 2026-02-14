@@ -89,6 +89,7 @@ const ChecklistModal = ({
   const [initialChecklist, setInitialChecklist] = useState(null);
   const [initialReminder, setInitialReminder] = useState(null);
   const [hasEditModeChanges, setHasEditModeChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Initialize working checklist AND initial snapshot when modal opens
   useEffect(() => {
@@ -259,6 +260,8 @@ const ChecklistModal = ({
 
   // Internal handler for updating from Complete mode
   const handleInternalUpdateFromCompleteMode = async () => {
+    setSaving(true);
+    try {
     const updatedChecklist = {
       ...selectedChecklist,
       items: updatedItems,
@@ -283,6 +286,9 @@ const ChecklistModal = ({
     setInitialChecklist(JSON.parse(JSON.stringify(updatedChecklist)));
     setIsDirtyComplete(false);
     setInitialReminder(JSON.parse(JSON.stringify(reminder)));
+  } finally {
+    setSaving(false);
+  }
   };
 
   // Internal handler for updating from Edit mode
@@ -290,6 +296,9 @@ const ChecklistModal = ({
     checklist,
     shouldSaveAsTemplate
   ) => {
+    setSaving(true);
+
+    try {
     if (shouldSaveAsTemplate && onSaveTemplate && promptForContext) {
       await new Promise((resolve) => {
         promptForContext(async (context) => {
@@ -387,6 +396,9 @@ const ChecklistModal = ({
     setUpdatedItems(checklist.items);
     setInitialChecklist(JSON.parse(JSON.stringify(checklist)));
     setIsDirtyComplete(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Internal handler for closing with confirmation if dirty
@@ -482,9 +494,10 @@ const handleSaveWithToast = async (checklist) => {
                 }
                 doneText="Update"
                 doneDisabled={
-                  checklistMode === "complete"
+                  saving || // ← ADD THIS
+                  (checklistMode === "complete"
                     ? !isDirtyComplete
-                    : !hasEditModeChanges
+                    : !hasEditModeChanges)
                 }
               />
 

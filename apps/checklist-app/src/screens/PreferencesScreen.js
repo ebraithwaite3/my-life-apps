@@ -7,15 +7,26 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@my-apps/contexts";
-import { SelectModal, PageHeader, ScheduleTemplateEditor, ChecklistSelector, EditChecklistContent } from "@my-apps/ui";
+import {
+  SelectModal,
+  PageHeader,
+  ScheduleTemplateEditor,
+  ChecklistSelector,
+  EditChecklistContent,
+  StandAloneReminderEditor,
+  QuickSendModal,
+} from "@my-apps/ui";
 import { useData } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { updateDocument } from "@my-apps/services";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useChecklistTemplates } from "@my-apps/hooks";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { collection, addDoc } from "firebase/firestore";
 
 const defaultPreferences = {
   defaultCalendarView: "day",
@@ -25,17 +36,26 @@ const defaultPreferences = {
 const PreferencesScreen = ({ navigation, route }) => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { db } = useAuth();
-  const { 
-    preferences, 
-    user, 
+  const {
+    preferences,
+    user,
     groups,
-    templates,              // ← FROM HOOK
-    templatesLoading,       // ← FROM HOOK
+    templates,
+    templatesLoading,
+    reminders,
+    remindersLoading,
+    toggleReminderActive,
+    saveReminder,
+    deleteReminder,
   } = useData();
 
   // View state management
   const [currentView, setCurrentView] = useState("preferences");
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [selectedReminder, setSelectedReminder] = useState(null);
+  const [showReminderEditor, setShowReminderEditor] = useState(false); // ← NEW
+  const [showQuickSend, setShowQuickSend] = useState(false); // ← NEW
+  const [quickSendMode, setQuickSendMode] = useState("now"); // 'now' or 'schedule'
 
   // Generate options for the Default Calendar SelectModal
   const defaultCalendarOptions = useMemo(() => {
@@ -80,8 +100,9 @@ const PreferencesScreen = ({ navigation, route }) => {
   }, [preferences]);
 
   // Add checklist templates hook
-  const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
-  
+  const { allTemplates, saveTemplate, promptForContext } =
+    useChecklistTemplates();
+
   // Add state for selected checklist
   const [selectedChecklist, setSelectedChecklist] = useState(null);
 
@@ -157,36 +178,123 @@ const PreferencesScreen = ({ navigation, route }) => {
   const handleBackToPreferences = () => {
     setCurrentView("preferences");
     setSelectedTemplate(null);
-    // No need to manually refresh - hook handles it!
   };
 
-  const activities = useMemo(() => [
-    {
-      type: "checklist",
-      label: "Checklist",
-      required: false, // Optional in template events
-      SelectorComponent: ChecklistSelector,
-      EditorComponent: EditChecklistContent,
-      selectedActivity: selectedChecklist,
-      onSelectActivity: setSelectedChecklist,
-      transformTemplate: (template) => ({
-        id: `checklist_${Date.now()}`,
-        name: template.name,
-        items: template.items.map((item, index) => ({
-          ...item,
-          id: item.id || `item_${Date.now()}_${index}`,
-          completed: false,
-        })),
-        createdAt: Date.now(),
-      }),
-      editorProps: {
-        templates: allTemplates,
-        onSaveTemplate: saveTemplate,
-        promptForContext,
-        isUserAdmin: user?.admin === true,
+  // UPDATED: Reminder handlers use modal state instead of view switching
+  const handleCreateReminder = () => {
+    setSelectedReminder(null);
+    setShowReminderEditor(true); // ← Changed
+  };
+
+  const handleReminderPress = (reminder) => {
+    setSelectedReminder(reminder);
+    setShowReminderEditor(true); // ← Changed
+  };
+
+  const handleToggleReminder = async (reminderId, isActive) => {
+    console.log('🔄 Toggle called:', reminderId, 'to', isActive);
+    try {
+      await toggleReminderActive(reminderId, isActive);
+      console.log('✅ Toggle successful');
+    } catch (error) {
+      console.error('❌ Toggle failed:', error);
+      Alert.alert('Error', 'Failed to update reminder status.');
+    }
+  };
+
+  const handleQuickSendNow = () => {
+    setQuickSendMode('now');
+    setShowQuickSend(true);
+  };
+  
+  const handleQuickSendSchedule = () => {
+    setQuickSendMode('schedule');
+    setShowQuickSend(true);
+  };
+
+  const handleQuickSend = async (notificationData, mode) => {
+    try {
+      if (mode === 'now') {
+        // SEND IMMEDIATELY - Call cloud function directly
+        const functions = getFunctions();
+        const sendBatch = httpsCallable(functions, 'sendBatchPushNotification');
+        
+        await sendBatch({
+          userIds: notificationData.recipients,
+          title: notificationData.title,
+          body: notificationData.message,
+          data: notificationData.data,
+        });
+  
+        Alert.alert('Sent!', 'Notifications sent immediately to all recipients.');
+      } else {
+        // SCHEDULE FOR LATER - Create pendingNotifications
+        const { recipients, schedule, title, message, data, isRecurring } = notificationData;
+        const scheduledFor = new Date(schedule.scheduledFor);
+  
+        const promises = recipients.map(async (recipientId) => {
+          const payload = {
+            userId: recipientId,
+            title,
+            body: message,
+            scheduledFor,
+            createdAt: new Date(),
+            type: 'quick_send',
+            data,
+          };
+  
+          if (isRecurring) {
+            payload.isRecurring = true;
+            payload.recurringConfig = schedule.recurringConfig;
+          }
+  
+          const notificationsRef = collection(db, 'pendingNotifications');
+          await addDoc(notificationsRef, payload);
+        });
+  
+        await Promise.all(promises);
+  
+        const recurringText = isRecurring ? 'recurring ' : '';
+        Alert.alert('Scheduled!', `${recurringText}Notification scheduled for all recipients.`);
+      }
+  
+      setShowQuickSend(false);
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+      Alert.alert('Error', 'Failed to send notification. Please try again.');
+    }
+  };
+
+  const activities = useMemo(
+    () => [
+      {
+        type: "checklist",
+        label: "Checklist",
+        required: false,
+        SelectorComponent: ChecklistSelector,
+        EditorComponent: EditChecklistContent,
+        selectedActivity: selectedChecklist,
+        onSelectActivity: setSelectedChecklist,
+        transformTemplate: (template) => ({
+          id: `checklist_${Date.now()}`,
+          name: template.name,
+          items: template.items.map((item, index) => ({
+            ...item,
+            id: item.id || `item_${Date.now()}_${index}`,
+            completed: false,
+          })),
+          createdAt: Date.now(),
+        }),
+        editorProps: {
+          templates: allTemplates,
+          onSaveTemplate: saveTemplate,
+          promptForContext,
+          isUserAdmin: user?.admin === true,
+        },
       },
-    },
-  ], [selectedChecklist, allTemplates, user?.admin]);
+    ],
+    [selectedChecklist, allTemplates, user?.admin]
+  );
 
   const styles = StyleSheet.create({
     container: {
@@ -216,7 +324,6 @@ const PreferencesScreen = ({ navigation, route }) => {
       marginBottom: getSpacing.sm,
       marginTop: getSpacing.sm,
     },
-    // Template list styles
     templateListContainer: {
       marginTop: getSpacing.md,
     },
@@ -322,6 +429,39 @@ const PreferencesScreen = ({ navigation, route }) => {
       ...getTypography.button,
       color: theme.text.primary,
     },
+    reminderCard: {
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      padding: getSpacing.md,
+      marginBottom: getSpacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    quickSendButtonsContainer: {
+      flexDirection: 'row',
+      gap: getSpacing.sm,
+      marginTop: getSpacing.md,
+    },
+    quickSendButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: getSpacing.md,
+      borderRadius: 8,
+      gap: getSpacing.xs,
+    },
+    sendNowButton: {
+      backgroundColor: theme.error || theme.primary,
+    },
+    scheduleButton: {
+      backgroundColor: theme.primary,
+    },
+    quickSendButtonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '600',
+    },
   });
 
   return (
@@ -346,7 +486,9 @@ const PreferencesScreen = ({ navigation, route }) => {
             <View style={styles.settingContainer}>
               <Text style={styles.sectionHeaderText}>Calendar Preferences</Text>
 
-              <Text style={styles.subHeaderText}>Default Calendar Screen View</Text>
+              <Text style={styles.subHeaderText}>
+                Default Calendar Screen View
+              </Text>
               <SelectModal
                 style={{ marginBottom: getSpacing.md }}
                 title="Default Calendar View"
@@ -406,7 +548,9 @@ const PreferencesScreen = ({ navigation, route }) => {
                           />
                         </View>
                         <View style={styles.templateInfo}>
-                          <Text style={styles.templateName}>{template.name}</Text>
+                          <Text style={styles.templateName}>
+                            {template.name}
+                          </Text>
                           <Text style={styles.templateDetails}>
                             {template.events?.length || 0} events
                           </Text>
@@ -430,6 +574,99 @@ const PreferencesScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* 🔔 Standalone Reminders (Admin Only) */}
+            {user?.admin && (
+              <View style={styles.settingContainer}>
+                <Text style={styles.sectionHeaderText}>Standalone Reminders</Text>
+                <Text style={[styles.subHeaderText, { marginTop: 0 }]}>
+                  Create recurring or one-time reminders for yourself and others
+                </Text>
+
+                {remindersLoading ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : reminders.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Icon
+                      name="bell-outline"
+                      size={48}
+                      color={theme.text.secondary}
+                    />
+                    <Text style={styles.emptyText}>
+                      No standalone reminders yet.{"\n"}Create your first one!
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.templateListContainer}>
+                    {reminders.map((reminder) => (
+                      <TouchableOpacity
+                        key={reminder.id}
+                        style={styles.templateCard}
+                        onPress={() => handleReminderPress(reminder)}
+                      >
+                        <View style={styles.iconContainer}>
+                          <Icon
+                            name={reminder.schedule?.isRecurring ? "bell-ring" : "bell"}
+                            size={20}
+                            color={reminder.isActive ? theme.primary : theme.text.secondary}
+                          />
+                        </View>
+                        <View style={styles.templateInfo}>
+                          <Text style={styles.templateName}>
+                            {reminder.title}
+                          </Text>
+                          <Text style={styles.templateDetails}>
+                            {reminder.recipients?.length || 0} recipient(s) • {reminder.schedule?.isRecurring ? 'Recurring' : 'One-time'}
+                          </Text>
+                        </View>
+                        <Switch
+                          value={reminder.isActive}
+                          onValueChange={(val) => handleToggleReminder(reminder.id, val)}
+                          trackColor={{ false: theme.border, true: theme.primary + '40' }}
+                          thumbColor={reminder.isActive ? theme.primary : theme.text.secondary}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={handleCreateReminder}
+                >
+                  <Icon name="plus" size={20} color="#FFFFFF" />
+                  <Text style={styles.addButtonText}>Create New Reminder</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* 🚀 Quick Send (Admin Only) */}
+{user?.admin && (
+  <View style={styles.settingContainer}>
+    <Text style={styles.sectionHeaderText}>Quick Notifications</Text>
+    <Text style={[styles.subHeaderText, { marginTop: 0 }]}>
+      Send one-time notifications immediately or scheduled
+    </Text>
+
+    <View style={styles.quickSendButtonsContainer}>
+      <TouchableOpacity
+        style={[styles.quickSendButton, styles.sendNowButton]}
+        onPress={handleQuickSendNow}
+      >
+        <Icon name="send" size={20} color="#FFFFFF" />
+        <Text style={styles.quickSendButtonText}>Send Now</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.quickSendButton, styles.scheduleButton]}
+        onPress={handleQuickSendSchedule}
+      >
+        <Icon name="calendar-clock" size={20} color="#FFFFFF" />
+        <Text style={styles.quickSendButtonText}>Schedule</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
 
             {/* Add bottom padding when buttons are showing */}
             {hasChanges && <View style={{ height: 100 }} />}
@@ -456,21 +693,70 @@ const PreferencesScreen = ({ navigation, route }) => {
             </View>
           )}
         </>
-      ) : (
-        <>
-        {console.log('🎨 Rendering TEMPLATE EDITOR view')}
-        {console.log('Selected template:', selectedTemplate)}
-          <View style={{ flex: 1 }}>
-    {/* TEMPLATE EDITOR VIEW */}
-    <ScheduleTemplateEditor
-      template={selectedTemplate}
-      userCalendars={user?.calendars || []}
-      activities={activities}
-      onClose={handleBackToPreferences}
-    />
-  </View>
-        </>
-      )}
+      ) : currentView === "templateEditor" ? (
+        <View style={{ flex: 1 }}>
+          {/* TEMPLATE EDITOR VIEW */}
+          <ScheduleTemplateEditor
+            template={selectedTemplate}
+            userCalendars={user?.calendars || []}
+            activities={activities}
+            onClose={handleBackToPreferences}
+          />
+        </View>
+      ) : null}
+
+      {/* ⬇️⬇️⬇️ MODAL ALWAYS RENDERED - CONTROLLED BY visible PROP ⬇️⬇️⬇️ */}
+      <StandAloneReminderEditor
+        visible={showReminderEditor}
+        onClose={() => {
+          setShowReminderEditor(false);
+          setSelectedReminder(null);
+        }}
+        reminder={selectedReminder}
+        onSave={async (reminderData) => {
+          try {
+            await saveReminder(reminderData);
+            Alert.alert('Success', 'Reminder saved successfully!');
+            setShowReminderEditor(false);
+            setSelectedReminder(null);
+          } catch (error) {
+            console.error('Failed to save reminder:', error);
+            Alert.alert('Error', 'Failed to save reminder.');
+          }
+        }}
+        onDelete={async (reminderId) => {
+          try {
+            await deleteReminder(reminderId);
+            Alert.alert('Success', 'Reminder deleted successfully!');
+            setShowReminderEditor(false);
+            setSelectedReminder(null);
+          } catch (error) {
+            console.error('Failed to delete reminder:', error);
+            Alert.alert('Error', 'Failed to delete reminder.');
+          }
+        }}
+        allUsers={[
+          // { userId: user?.userId, name: user?.username || 'You' },
+          { userId: 'LCqH5hKx2bP8Q5gDGPmzRd65PB32', name: 'Me' },
+          { userId: 'CjW9bPGIjrgEqkjE9HxNF6xuxfA3', name: 'Ellie' },
+          { userId: 'ObqbPOKgzwYr2SmlN8UQOaDbkzE2', name: 'Jack' },
+          { userId: 'iSI29yZ4OKQTSHONKPRxibrHZYx2', name: 'Sarah' },
+        ]}
+      />
+
+<QuickSendModal
+  visible={showQuickSend}
+  mode={quickSendMode}
+  onClose={() => setShowQuickSend(false)}
+  onSend={handleQuickSend}
+  allUsers={[
+    // { userId: user?.userId, name: user?.username || 'You' },
+    { userId: 'LCqH5hKx2bP8Q5gDGPmzRd65PB32', name: 'Me' },
+    { userId: 'CjW9bPGIjrgEqkjE9HxNF6xuxfA3', name: 'Ellie' },
+    { userId: 'ObqbPOKgzwYr2SmlN8UQOaDbkzE2', name: 'Jack' },
+    { userId: 'iSI29yZ4OKQTSHONKPRxibrHZYx2', name: 'Sarah' },
+  ]}
+/>
     </SafeAreaView>
   );
 };

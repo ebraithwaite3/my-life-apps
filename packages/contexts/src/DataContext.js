@@ -15,6 +15,7 @@ import {
   useCalendarDocs,
   useActivityDocs,
   useScheduleTemplates,
+  useStandAloneReminders,
 } from "@my-apps/data-sync";
 import {
   navigateNextDay,
@@ -46,7 +47,7 @@ export const DataProvider = ({ children }) => {
   );
   const [selectedYear, setSelectedYear] = useState(DateTime.local().year);
   const [currentDate, setCurrentDate] = useState(DateTime.local().toISODate());
-  console.log("Selected Date:", selectedDate, selectedMonth, selectedYear);
+  //console.log("Selected Date:", selectedDate, selectedMonth, selectedYear);
 
   // State for adding a checklist to an event
   const [addingToEvent, setAddingToEvent] = useState({
@@ -115,56 +116,27 @@ export const DataProvider = ({ children }) => {
     error: templatesError,
   } = useScheduleTemplates(db, user?.userId, user?.admin);
 
+  // Stand-alone reminders hook (admin only for now)
+  const {
+    reminders,
+    remindersLoading,
+    remindersError,
+    saveReminder,
+    deleteReminder,
+    toggleReminderActive,
+  } = useStandAloneReminders(db, user?.userId, user?.admin);
+  console.log("📬 Reminders:", reminders, "Loading:", remindersLoading);
+
   console.log("👤 User:", user?.userId, "Loading:", loading, "Full User", user);
   if (userError) console.error("❌ User error:", userError);
 
-  console.log(
-    "💬 Messages:",
-    messages?.messages?.length,
-    "Loading:",
-    messagesLoading,
-    "Full Messages",
-    messages
-  );
   if (messagesError) console.error("❌ Messages error:", messagesError);
 
-  console.log(
-    "👥 Groups:",
-    groups?.length,
-    "Loading:",
-    groupsLoading,
-    "Full Groups",
-    groups
-  );
   if (groupsError) console.error("❌ Groups error:", groupsError);
 
-  console.log(
-    "📅 Calendar shards:",
-    Object.keys(allCalendars || {}).length,
-    "Loading:",
-    calendarsLoading,
-    "Full Calendars",
-    allCalendars
-  );
   if (calendarsError) console.error("❌ Calendars error:", calendarsError);
 
-  console.log(
-    "🏃 Activities loaded:",
-    Object.keys(allActivities || {}).length,
-    "Loading:",
-    activitiesLoading,
-    "Full Activities",
-    allActivities
-  );
   if (activitiesError) console.error("❌ Activities error:", activitiesError);
-
-  console.log("📊 DataContext State:", {
-    loading,
-    userLoaded: !!user,
-    groupsCount: groups?.length,
-    messagesCount: messages?.messages?.length,
-    unreadMessagesCount: messages?.messages?.filter((m) => !m.read).length || 0,
-  });
 
   // Hardcoded admin Id (for now testing but will change to MY user Id once ready for production)
   const adminUserId = "LCqH5hKx2bP8Q5gDGPmzRd65PB32";
@@ -191,7 +163,7 @@ export const DataProvider = ({ children }) => {
   // ===== DATE NAVIGATION METHODS =====
   const navigateToNextDay = useCallback(() => {
     const { date, month, year } = navigateNextDay(selectedDate);
-    console.log("➡️ Navigating to next day:", date);
+    //console.log("➡️ Navigating to next day:", date);
     setSelectedDate(date);
     setSelectedMonth(month);
     setSelectedYear(year);
@@ -226,7 +198,7 @@ export const DataProvider = ({ children }) => {
   }, [selectedDate]);
 
   const navigateToDate = useCallback((dateISO) => {
-    console.log("📅 Navigating to date:", dateISO);
+    //console.log("📅 Navigating to date:", dateISO);
     const dt = DateTime.fromISO(dateISO);
     setSelectedDate(dt.toISODate());
     setSelectedMonth(dt.monthLong);
@@ -236,7 +208,7 @@ export const DataProvider = ({ children }) => {
   const navigateToNextWeek = useCallback(() => {
     const dt = DateTime.fromISO(selectedDate);
     const nextWeek = dt.plus({ weeks: 1 });
-    console.log("➡️ Navigating to next week:", nextWeek.toISODate());
+    //console.log("➡️ Navigating to next week:", nextWeek.toISODate());
     setSelectedDate(nextWeek.toISODate());
     setSelectedMonth(nextWeek.monthLong);
     setSelectedYear(nextWeek.year);
@@ -245,7 +217,7 @@ export const DataProvider = ({ children }) => {
   const navigateToPreviousWeek = useCallback(() => {
     const dt = DateTime.fromISO(selectedDate);
     const prevWeek = dt.minus({ weeks: 1 });
-    console.log("⬅️ Navigating to previous week:", prevWeek.toISODate());
+    //console.log("⬅️ Navigating to previous week:", prevWeek.toISODate());
     setSelectedDate(prevWeek.toISODate());
     setSelectedMonth(prevWeek.monthLong);
     setSelectedYear(prevWeek.year);
@@ -258,13 +230,6 @@ export const DataProvider = ({ children }) => {
       // US-style week: Sunday (start) to Saturday (end)
       const weekStart = dt.minus({ days: dt.weekday % 7 }); // Go back to Sunday
       const weekEnd = weekStart.plus({ days: 6 }); // Saturday
-
-      console.log(
-        "📅 Week range:",
-        weekStart.toISODate(),
-        "to",
-        weekEnd.toISODate()
-      );
 
       // Get all events for the week
       const weekEvents = [];
@@ -286,7 +251,7 @@ export const DataProvider = ({ children }) => {
     },
     [getEventsForDay]
   );
-  console.log("All Calendars:", allCalendars);
+  //console.log("All Calendars:", allCalendars);
 
   // ===== CONTEXT VALUE =====
   const value = useMemo(
@@ -382,6 +347,13 @@ export const DataProvider = ({ children }) => {
       setActiveTemplateId,
       getTemplateEventsForWeek,
       templatesLoading,
+
+      // Stand-alone reminders (admin only for now)
+      reminders,
+      remindersLoading,
+      saveReminder,
+      deleteReminder,
+      toggleReminderActive,
     }),
     [
       user,
@@ -427,6 +399,11 @@ export const DataProvider = ({ children }) => {
       activeTemplateId,
       getTemplateEventsForWeek,
       templatesLoading,
+      reminders,
+      remindersLoading,
+      saveReminder,
+      deleteReminder,
+      toggleReminderActive,
     ]
   );
 
