@@ -118,30 +118,31 @@ exports.applyScheduleTemplate = onCall(
       secrets: [googleClientId, googleClientSecret, googleRefreshToken],
     },
     async (request) => {
-      const {templateName} = request.data;
+      const {templateId, templateName} = request.data;
       const userId = request.auth.uid;
 
-      console.log("🎯 applyScheduleTemplate called:", {templateName, userId});
+      console.log("🎯 applyScheduleTemplate called:", {templateId, templateName, userId});
 
       try {
-        // 1. Find template
-        const templatesSnapshot = await admin
+        // 1. Get template by ID (direct lookup - faster and more reliable)
+        const templateRef = admin
             .firestore()
             .collection("users")
             .doc(userId)
             .collection("scheduleTemplates")
-            .where("name", "==", templateName)
-            .limit(1)
-            .get();
+            .doc(templateId);
 
-        if (templatesSnapshot.empty) {
+        const templateDoc = await templateRef.get();
+
+        if (!templateDoc.exists) {
+          console.error("❌ Template not found:", {templateId, userId});
           throw new functions.https.HttpsError(
               "not-found",
-              `Template "${templateName}" not found`,
+              `Template "${templateName}" (ID: ${templateId}) not found for user ${userId}`,
           );
         }
 
-        const template = templatesSnapshot.docs[0].data();
+        const template = templateDoc.data();
         console.log(
             "✅ Template found:",
             template.name,

@@ -18,6 +18,7 @@ import { useTheme } from "@my-apps/contexts";
 import { useWorkoutData } from "../../contexts/WorkoutDataContext";
 import WorkoutRow from "../workout/WorkoutRow";
 import { KeyboardActionBar, TimerBanner } from "@my-apps/ui";
+import YouTubeVideoModal from "./YouTubeVideoModal";
 
 const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
@@ -27,6 +28,9 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
   const [keyboardVisible, setKeyboardVisible] = React.useState(false);
   const [focusedInput, setFocusedInput] = React.useState(null);
   const [isTimerEditing, setIsTimerEditing] = React.useState(false); // NEW: Track timer editing
+  const [youTubeModalVisible, setYouTubeModalVisible] = React.useState(false);
+  const [selectedYouTubeUrl, setSelectedYouTubeUrl] = React.useState(null);
+  const [selectedExerciseName, setSelectedExerciseName] = React.useState('');
   
   const rowRefs = React.useRef({});
   const scrollViewRef = React.useRef(null);
@@ -149,6 +153,18 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
     const updatedExercises = JSON.parse(JSON.stringify(workout.exercises));
     updatedExercises[exerciseIndex].sets.splice(setIndex, 1);
     onExerciseUpdate(updatedExercises);
+  };
+
+  const handlePlayYouTube = (youTubeUrl, exerciseName) => {
+    setSelectedYouTubeUrl(youTubeUrl);
+    setSelectedExerciseName(exerciseName);
+    setYouTubeModalVisible(true);
+  };
+
+  const handleCloseYouTube = () => {
+    setYouTubeModalVisible(false);
+    setSelectedYouTubeUrl(null);
+    setSelectedExerciseName('');
   };
 
   const getCurrentRowInputs = () => {
@@ -277,6 +293,10 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
       fontWeight: "500",
     },
     setsProgressComplete: { color: theme.success },
+    youTubeButton: {
+      padding: getSpacing.sm,
+      marginRight: getSpacing.xs,
+    },
     chevronButton: { padding: getSpacing.sm },
     columnHeaders: {
       flexDirection: "row",
@@ -426,6 +446,24 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
                       {completedSets}/{totalSets} sets complete
                     </Text>
                   </View>
+
+                  {exercise?.youTubeUrl && (
+                    <TouchableOpacity
+                      style={styles.youTubeButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handlePlayYouTube(exercise.youTubeUrl, exercise.name);
+                      }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons
+                        name="logo-youtube"
+                        size={24}
+                        color="#FF0000"
+                      />
+                    </TouchableOpacity>
+                  )}
+
                   <View style={styles.chevronButton}>
                     <Ionicons
                       name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -512,6 +550,13 @@ const WorkoutContent = ({ workout, onExerciseUpdate, selectedDate }) => {
             </View>
           ) : undefined
         }
+      />
+
+      <YouTubeVideoModal
+        visible={youTubeModalVisible}
+        onClose={handleCloseYouTube}
+        youTubeUrl={selectedYouTubeUrl}
+        exerciseName={selectedExerciseName}
       />
     </KeyboardAvoidingView>
   );

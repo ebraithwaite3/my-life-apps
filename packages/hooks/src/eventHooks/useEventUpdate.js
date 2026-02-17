@@ -141,21 +141,11 @@ export const useEventUpdate = ({ user, db }) => {
         
           if (reminderChanged) {
             console.log("⚠️ Reminder changed, updating notifications");
-            
-            // Delete ONLY event-level notifications (no activity IDs)
-            const notificationsRef = collection(db, 'pendingNotifications');
-            const q = query(notificationsRef, where('eventId', '==', eventId));
-            const snapshot = await getDocs(q);
-            
-            // Filter to event-level only (no checklistId, workoutId, etc)
-            const eventLevelDocs = snapshot.docs.filter(doc => {
-              const data = doc.data();
-              return !data.data?.checklistId && !data.data?.workoutId && !data.data?.golfId;
-            });
-            
-            if (eventLevelDocs.length > 0) {
-              await Promise.all(eventLevelDocs.map(doc => deleteDoc(doc.ref)));
-              console.log(`🗑️ Deleted ${eventLevelDocs.length} old event-level notifications`);
+
+            // Delete old event notifications using the hook
+            const deleteResult = await deleteNotification(eventId);
+            if (deleteResult.success && deleteResult.deletedCount > 0) {
+              console.log(`🗑️ Deleted ${deleteResult.deletedCount} old notification(s)`);
             }
         
             // Schedule new reminder if set
@@ -245,21 +235,11 @@ export const useEventUpdate = ({ user, db }) => {
       
           if (reminderChanged) {
             console.log("⚠️ Reminder changed, updating notifications");
-            
-            // Delete ONLY event-level notifications (no activity IDs)
-            const notificationsRef = collection(db, 'pendingNotifications');
-            const q = query(notificationsRef, where('eventId', '==', eventId));
-            const snapshot = await getDocs(q);
-            
-            // Filter to event-level only (no checklistId, workoutId, etc)
-            const eventLevelDocs = snapshot.docs.filter(doc => {
-              const data = doc.data();
-              return !data.data?.checklistId && !data.data?.workoutId && !data.data?.golfId;
-            });
-            
-            if (eventLevelDocs.length > 0) {
-              await Promise.all(eventLevelDocs.map(doc => deleteDoc(doc.ref)));
-              console.log(`🗑️ Deleted ${eventLevelDocs.length} old event-level notifications`);
+
+            // Delete old event notifications using the hook
+            const deleteResult = await deleteNotification(eventId);
+            if (deleteResult.success && deleteResult.deletedCount > 0) {
+              console.log(`🗑️ Deleted ${deleteResult.deletedCount} old notification(s)`);
             }
       
             // Schedule new reminder if set

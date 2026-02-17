@@ -159,12 +159,12 @@ const SharedCalendarScreen = ({
     }
   };
 
-  const handleAddSchedule = async (templateName) => {
-    console.log('📅 Applying schedule:', templateName);
-    
+  const handleAddSchedule = async (template) => {
+    console.log('📅 Applying schedule:', template.name, 'ID:', template.id);
+
     try {
-      const result = await applyScheduleTemplate(app, templateName);
-      
+      const result = await applyScheduleTemplate(app, template.id, template.name);
+
       if (result.success) {
         console.log('✅ Result:', result);
         Alert.alert('Success', result.message);
@@ -187,7 +187,7 @@ const SharedCalendarScreen = ({
     const buttons = [
       ...templates.map(template => ({
         text: template.name,
-        onPress: () => handleAddSchedule(template.name)
+        onPress: () => handleAddSchedule(template)
       })),
       {
         text: 'Cancel',

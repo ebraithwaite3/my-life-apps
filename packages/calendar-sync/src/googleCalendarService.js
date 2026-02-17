@@ -95,18 +95,18 @@ export const deleteGoogleCalendarEvent = async (app, eventId, calendarId = 'prim
 /**
  * Apply schedule template to a week
  */
-export const applyScheduleTemplate = async (app, templateName) => {
-  console.log('🔍 SERVICE: Received templateName:', templateName, typeof templateName); // ← ADD THIS
+export const applyScheduleTemplate = async (app, templateId, templateName) => {
+  console.log('🔍 SERVICE: Received templateId:', templateId, 'templateName:', templateName);
 
   try {
     const functions = getFunctionsInstance(app);
     const applyTemplate = httpsCallable(functions, 'applyScheduleTemplate');
-    
-    console.log('📅 Calling applyScheduleTemplate with:', templateName);
-    
-    const dataToSend = { templateName };
-    console.log('🔍 SERVICE: Sending data:', dataToSend); // ← ADD THIS
-    
+
+    console.log('📅 Calling applyScheduleTemplate with ID:', templateId, 'Name:', templateName);
+
+    const dataToSend = { templateId, templateName };
+    console.log('🔍 SERVICE: Sending data:', dataToSend);
+
     const result = await applyTemplate(dataToSend);
     
     if (result.data.success) {
