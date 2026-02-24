@@ -73,8 +73,22 @@ const ChecklistContent = ({
   }, [checklist]);
 
   const reorderItems = (itemsToReorder) => {
-    const incomplete = itemsToReorder.filter((i) => !i.completed);
-    const completed = itemsToReorder.filter((i) => i.completed);
+    // Sort sub-items first (if they exist)
+    const itemsWithSortedSubs = itemsToReorder.map((item) => {
+      if (item.subItems && item.subItems.length > 0) {
+        const incompleteSubs = item.subItems.filter((sub) => !sub.completed);
+        const completedSubs = item.subItems.filter((sub) => sub.completed);
+        return {
+          ...item,
+          subItems: [...incompleteSubs, ...completedSubs],
+        };
+      }
+      return item;
+    });
+
+    // Then sort top-level items
+    const incomplete = itemsWithSortedSubs.filter((i) => !i.completed);
+    const completed = itemsWithSortedSubs.filter((i) => i.completed);
     return [...incomplete, ...completed];
   };
 

@@ -1,5 +1,5 @@
-const { google } = require("googleapis");
-const { defineSecret } = require("firebase-functions/params");
+const {google} = require("googleapis");
+const {defineSecret} = require("firebase-functions/params");
 
 // Define the secrets (same ones writeToCalendar uses)
 const googleClientId = defineSecret("GOOGLE_CLIENT_ID");
@@ -8,6 +8,8 @@ const googleRefreshToken = defineSecret("GOOGLE_REFRESH_TOKEN");
 
 /**
  * Helper to strip timezone offset from ISO string
+ * @param {string} isoString - ISO timestamp string
+ * @return {string} Timestamp without timezone offset
  */
 function stripOffset(isoString) {
   return isoString.split(/[+-]Z/)[0];
@@ -15,19 +17,20 @@ function stripOffset(isoString) {
 
 /**
  * Get authenticated Google Calendar client
+ * @return {object} Authenticated Google Calendar API client
  */
 function getCalendarClient() {
   const oauth2Client = new google.auth.OAuth2(
-    googleClientId.value(),
-    googleClientSecret.value(),
-    "urn:ietf:wg:oauth:2.0:oob",
+      googleClientId.value(),
+      googleClientSecret.value(),
+      "urn:ietf:wg:oauth:2.0:oob",
   );
 
   oauth2Client.setCredentials({
     refresh_token: googleRefreshToken.value(),
   });
 
-  return google.calendar({ version: "v3", auth: oauth2Client });
+  return google.calendar({version: "v3", auth: oauth2Client});
 }
 
 /**
@@ -37,9 +40,9 @@ async function createCalendarEvent({
   title,
   startTime,
   endTime,
-  description = '',
-  location = '',
-  calendarId = 'primary',
+  description = "",
+  location = "",
+  calendarId = "primary",
 }) {
   const calendar = getCalendarClient();
 

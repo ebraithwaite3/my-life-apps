@@ -20,6 +20,7 @@ const modules = [
   require("./src/notifications/sendPushNotifications"),
   require("./src/notifications/scheduledNotifications"),
   require("./src/shortcuts/addGroceryItems"),
+  require("./src/shortcuts/addToPinnedList"),
   require("./src/shortcuts/addWorkout"),
   require("./src/calendar/applyScheduleTemplate"),
   // Add more as you create them

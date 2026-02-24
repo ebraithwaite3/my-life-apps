@@ -1,6 +1,8 @@
 const {onCall} = require("firebase-functions/v2/https");
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const {Timestamp} = require("firebase-admin/firestore");
+const {DateTime} = require("luxon");
 const {
   createCalendarEvent,
   googleClientId,
@@ -57,15 +59,17 @@ const findFirestoreCalendarId = async (googleCalendarId) => {
 };
 
 // Helper: Convert template reminder to runtime format
-const convertTemplateReminder = (templateReminder, eventDate) => {
+const convertTemplateReminder = (templateReminder, eventDate, timezone) => {
   if (!templateReminder || !templateReminder.time) return null;
 
   const [hours, minutes] = templateReminder.time.split(":").map(Number);
-  const reminderDate = new Date(eventDate);
-  reminderDate.setHours(hours, minutes, 0, 0);
+
+  // Parse eventDate in the specified timezone and set reminder time
+  const eventDateTime = DateTime.fromJSDate(eventDate, {zone: timezone});
+  const reminderDateTime = eventDateTime.set({hour: hours, minute: minutes, second: 0, millisecond: 0});
 
   const runtimeReminder = {
-    scheduledFor: reminderDate.toISOString(),
+    scheduledFor: Timestamp.fromDate(reminderDateTime.toJSDate()),
     isRecurring: templateReminder.isRecurring || false,
   };
 
@@ -102,7 +106,7 @@ const convertTemplateReminder = (templateReminder, eventDate) => {
       intervalSeconds,
       ...(totalOccurrences && {totalOccurrences}),
       currentOccurrence: 1,
-      nextScheduledFor: reminderDate.toISOString(),
+      nextScheduledFor: reminderDateTime.toISO(),
       lastSentAt: null,
       ...(completedCancelsRecurring !== undefined && {
         completedCancelsRecurring,
@@ -116,14 +120,36 @@ const convertTemplateReminder = (templateReminder, eventDate) => {
 exports.applyScheduleTemplate = onCall(
     {
       secrets: [googleClientId, googleClientSecret, googleRefreshToken],
+      timeoutSeconds: 300,
     },
     async (request) => {
-      const {templateId, templateName} = request.data;
-      const userId = request.auth.uid;
-
-      console.log("🎯 applyScheduleTemplate called:", {templateId, templateName, userId});
+      console.log("🚀 FUNCTION STARTED");
 
       try {
+        console.log("📦 Has request.data:", !!request.data);
+        console.log("📦 Has request.auth:", !!request.auth);
+
+        const {
+          templateId,
+          templateName,
+          startDate,
+          timezone = "America/New_York",
+        } = request.data || {};
+
+        if (!request.auth || !request.auth.uid) {
+          throw new functions.https.HttpsError(
+              "unauthenticated",
+              "Authentication required",
+          );
+        }
+
+        const userId = request.auth.uid;
+
+        console.log(
+            "🎯 applyScheduleTemplate called:",
+            {templateId, templateName, startDate, timezone, userId},
+        );
+        console.log("📦 DateTime available:", typeof DateTime);
         // 1. Get template by ID (direct lookup - faster and more reliable)
         const templateRef = admin
             .firestore()
@@ -138,7 +164,8 @@ exports.applyScheduleTemplate = onCall(
           console.error("❌ Template not found:", {templateId, userId});
           throw new functions.https.HttpsError(
               "not-found",
-              `Template "${templateName}" (ID: ${templateId}) not found for user ${userId}`,
+              `Template "${templateName}" (ID: ${templateId}) ` +
+              `not found for user ${userId}`,
           );
         }
 
@@ -151,16 +178,27 @@ exports.applyScheduleTemplate = onCall(
             "events",
         );
 
-        // 2. Calculate next Sunday
-        const now = new Date();
-        const dayOfWeek = now.getDay();
-        const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+        // 2. Validate and parse start date
+        if (!startDate) {
+          throw new functions.https.HttpsError(
+              "invalid-argument",
+              "startDate is required",
+          );
+        }
 
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() + daysUntilSunday);
-        weekStart.setHours(0, 0, 0, 0);
+        // Parse the start date in the user's timezone
+        const weekStart = DateTime.fromISO(startDate, {zone: timezone});
 
-        console.log("📅 Week starts:", weekStart.toISOString());
+        if (!weekStart.isValid) {
+          console.error("❌ Invalid start date:", weekStart.invalidReason);
+          throw new functions.https.HttpsError(
+              "invalid-argument",
+              `Invalid start date: ${weekStart.invalidReason}`,
+          );
+        }
+
+        const weekStartDay = weekStart.startOf("day");
+        console.log("📅 Week starts:", weekStartDay.toISO());
 
         // 3. CREATE ALL EVENTS
         if (!template.events || template.events.length === 0) {
@@ -173,19 +211,31 @@ exports.applyScheduleTemplate = onCall(
           try {
             console.log("🚀 Creating event:", templateEvent.title);
 
-            // Calculate dates
-            const eventDate = new Date(weekStart);
-            eventDate.setDate(weekStart.getDate() + templateEvent.dayOfWeek);
-            const [hours, minutes] = templateEvent.startTime
+            // Calculate dates using Luxon with timezone
+            const [startHours, startMinutes] = templateEvent.startTime
                 .split(":")
                 .map(Number);
-            eventDate.setHours(hours, minutes, 0, 0);
-
             const [endHours, endMinutes] = templateEvent.endTime
                 .split(":")
                 .map(Number);
-            const endDate = new Date(eventDate);
-            endDate.setHours(endHours, endMinutes, 0, 0);
+
+            const eventDateTime = weekStartDay
+                .plus({days: templateEvent.dayOfWeek})
+                .set({
+                  hour: startHours,
+                  minute: startMinutes,
+                  second: 0,
+                  millisecond: 0,
+                });
+
+            const endDateTime = eventDateTime.set({
+              hour: endHours,
+              minute: endMinutes,
+            });
+
+            // Convert to JavaScript Date objects for compatibility
+            const eventDate = eventDateTime.toJSDate();
+            const endDate = endDateTime.toJSDate();
 
             // Find calendar
             const firestoreCalendarId = await findFirestoreCalendarId(
@@ -221,6 +271,7 @@ exports.applyScheduleTemplate = onCall(
               reminder: convertTemplateReminder(
                   templateEvent.reminder,
                   eventDate,
+                  timezone,
               ),
             };
 
@@ -258,7 +309,7 @@ exports.applyScheduleTemplate = onCall(
                   title: `Reminder: ${templateEvent.title}`,
                   body: templateEvent.title,
                   scheduledFor: eventDoc.reminder.scheduledFor,
-                  createdAt: new Date().toISOString(),
+                  createdAt: Timestamp.now(),
                   data: {
                     screen: "Calendar",
                     eventId: fullEventId,
@@ -307,8 +358,13 @@ exports.applyScheduleTemplate = onCall(
           results: results,
         };
       } catch (error) {
-        console.error("❌ Error:", error);
-        throw new functions.https.HttpsError("internal", error.message);
+        console.error("❌ CRITICAL ERROR:", error);
+        console.error("❌ Error message:", error.message);
+        console.error("❌ Error stack:", error.stack);
+        throw new functions.https.HttpsError(
+            "internal",
+            `Function failed: ${error.message}`,
+        );
       }
     },
 );

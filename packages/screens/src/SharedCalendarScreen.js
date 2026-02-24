@@ -162,8 +162,54 @@ const SharedCalendarScreen = ({
   const handleAddSchedule = async (template) => {
     console.log('📅 Applying schedule:', template.name, 'ID:', template.id);
 
+    // Calculate Sunday date options
+    const now = DateTime.now().setZone('America/New_York');
+    const today = now.startOf('day');
+    const dayOfWeek = now.weekday; // 1 = Monday, 7 = Sunday
+
+    // Calculate Sundays
+    const lastSunday = dayOfWeek === 7 ? today : today.minus({ days: dayOfWeek });
+    const thisSunday = lastSunday.plus({ days: 7 });
+    const nextSunday = thisSunday.plus({ days: 7 });
+
+    // Format dates for display
+    const formatDate = (dt) => dt.toFormat('EEE, MMM d, yyyy');
+
+    // Show date picker alert
+    Alert.alert(
+      'Apply Schedule Template',
+      `Today: ${formatDate(today)}\n\nChoose start date:`,
+      [
+        {
+          text: `Last Sunday (${formatDate(lastSunday)})`,
+          onPress: () => applyScheduleWithDate(template, lastSunday.toISODate()),
+        },
+        {
+          text: `This Sunday (${formatDate(thisSunday)})`,
+          onPress: () => applyScheduleWithDate(template, thisSunday.toISODate()),
+        },
+        {
+          text: `Next Sunday (${formatDate(nextSunday)})`,
+          onPress: () => applyScheduleWithDate(template, nextSunday.toISODate()),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const applyScheduleWithDate = async (template, startDate) => {
+    console.log('📅 Applying schedule with date:', startDate);
+
     try {
-      const result = await applyScheduleTemplate(app, template.id, template.name);
+      const result = await applyScheduleTemplate(
+        app,
+        template.id,
+        template.name,
+        startDate
+      );
 
       if (result.success) {
         console.log('✅ Result:', result);

@@ -8,9 +8,11 @@ const getFunctionsInstance = (app) => {
   if (__DEV__) {
     let emulatorHost;
     if (Platform.OS === 'android') {
-      emulatorHost = '10.0.2.2'; 
+      emulatorHost = '10.0.2.2';
     } else {
-      emulatorHost = '10.0.0.177'; 
+      // Physical device/Expo Go: Use Mac's IP
+      // iOS Simulator: Use 'localhost'
+      emulatorHost = '10.0.0.178'; // Your Mac's local IP
     }
     
     console.log(`🔧 [Google Calendar DEV] Connecting to Functions emulator at ${emulatorHost}:5001`);
@@ -95,16 +97,16 @@ export const deleteGoogleCalendarEvent = async (app, eventId, calendarId = 'prim
 /**
  * Apply schedule template to a week
  */
-export const applyScheduleTemplate = async (app, templateId, templateName) => {
-  console.log('🔍 SERVICE: Received templateId:', templateId, 'templateName:', templateName);
+export const applyScheduleTemplate = async (app, templateId, templateName, startDate, timezone = 'America/New_York') => {
+  console.log('🔍 SERVICE: Received templateId:', templateId, 'templateName:', templateName, 'startDate:', startDate);
 
   try {
     const functions = getFunctionsInstance(app);
     const applyTemplate = httpsCallable(functions, 'applyScheduleTemplate');
 
-    console.log('📅 Calling applyScheduleTemplate with ID:', templateId, 'Name:', templateName);
+    console.log('📅 Calling applyScheduleTemplate with ID:', templateId, 'Name:', templateName, 'Date:', startDate);
 
-    const dataToSend = { templateId, templateName };
+    const dataToSend = { templateId, templateName, startDate, timezone };
     console.log('🔍 SERVICE: Sending data:', dataToSend);
 
     const result = await applyTemplate(dataToSend);
