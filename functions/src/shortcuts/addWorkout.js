@@ -204,15 +204,20 @@ exports.addWorkout = onRequest(
               items: checklistTemplate.items || [],
             });
 
-            // Calculate reminder time (6:30 AM on event day)
+            // Calculate reminder time (6:30 AM on event day in Eastern time)
             const [reminderHour, reminderMinute] = checklistTemplate
                 .defaultReminderTime
                 .split(":")
                 .map(Number);
 
-            const reminderDate = new Date(workoutDateTime.toJSDate());
-            reminderDate.setHours(reminderHour, reminderMinute, 0, 0);
-            reminderTime = reminderDate;
+            // Use Luxon to set time in the correct timezone
+            const reminderDateTime = workoutDateTime.set({
+              hour: reminderHour,
+              minute: reminderMinute,
+              second: 0,
+              millisecond: 0,
+            });
+            reminderTime = reminderDateTime.toJSDate();
 
             console.log(
                 "⏰ Reminder time:",

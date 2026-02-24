@@ -66,7 +66,12 @@ const convertTemplateReminder = (templateReminder, eventDate, timezone) => {
 
   // Parse eventDate in the specified timezone and set reminder time
   const eventDateTime = DateTime.fromJSDate(eventDate, {zone: timezone});
-  const reminderDateTime = eventDateTime.set({hour: hours, minute: minutes, second: 0, millisecond: 0});
+  const reminderDateTime = eventDateTime.set({
+    hour: hours,
+    minute: minutes,
+    second: 0,
+    millisecond: 0,
+  });
 
   const runtimeReminder = {
     scheduledFor: Timestamp.fromDate(reminderDateTime.toJSDate()),
