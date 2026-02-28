@@ -26,6 +26,8 @@ import { usePinnedSort } from "../hooks/usePinnedSort";
 import { usePinnedOperations } from "../hooks/usePinnedOperations";
 import { usePinnedChecklistModal } from "../hooks/usePinnedChecklistModal";
 import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { isSpellingList } from '../utils/pinnedChecklistUtils';
+import SpellingTestModal from '../components/spelling/SpellingTestModal';
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -41,6 +43,7 @@ const PinnedScreen = () => {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const [showSpellingModal, setShowSpellingModal] = useState(false);
   const [checklistContext, setChecklistContext] = useState(null);
 
   // Track initial state for change detection
@@ -148,6 +151,7 @@ useEffect(() => {
     console.log('🚨 FORCE CLOSING ALL MODALS');
     setShowChecklistModal(false);
     setShowEditModal(false);
+    setShowSpellingModal(false);
     setSelectedChecklist(null);
     console.log('🚨 MODALS STATE SET TO FALSE');
   }
@@ -243,6 +247,11 @@ useEffect(() => {
   };
 
   const handleViewChecklist = (checklist) => {
+    if (isSpellingList(checklist.name)) {
+      setSelectedChecklist(checklist);
+      setShowSpellingModal(true);
+      return;
+    }
     if (checklist.isGroupChecklist) {
       setChecklistContext({
         type: "group",
@@ -320,6 +329,14 @@ const handleSaveWithToast = async (checklist) => {
   setSelectedChecklist(checklist);
   setIsDirtyComplete(false);
 };
+
+  const handleSaveSpellingChecklist = async (updatedChecklist) => {
+    const context = updatedChecklist.isGroupChecklist
+      ? { type: "group", groupId: updatedChecklist.groupId, groupName: updatedChecklist.groupName }
+      : { type: "personal" };
+    const cleaned = cleanObjectForFirestore(updatedChecklist);
+    await saveChecklistOperation(cleaned, context);
+  };
 
   const renderChecklist = ({ item }) => (
     <PinnedChecklistCard
@@ -754,6 +771,20 @@ const handleSaveWithToast = async (checklist) => {
           </KeyboardAvoidingView>
         </View>
       </ModalWrapper>
+
+      {/* Spelling Test Modal — opens for any list with "Spelling List" in the name */}
+      <SpellingTestModal
+        visible={showSpellingModal}
+        checklist={selectedChecklist}
+        onClose={() => {
+          setShowSpellingModal(false);
+          setSelectedChecklist(null);
+        }}
+        onSaveChecklist={handleSaveSpellingChecklist}
+        updatePinnedChecklist={updatePinnedChecklist}
+        user={user}
+        allTemplates={allTemplates}
+      />
     </SafeAreaView>
   );
 };
