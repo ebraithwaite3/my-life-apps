@@ -28,6 +28,7 @@ import { usePinnedChecklistModal } from "../hooks/usePinnedChecklistModal";
 import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { isSpellingList } from '../utils/pinnedChecklistUtils';
 import SpellingTestModal from '../components/spelling/SpellingTestModal';
+import VocabTestModal from '../components/vocab/VocabTestModal';
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -44,7 +45,12 @@ const PinnedScreen = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [showSpellingModal, setShowSpellingModal] = useState(false);
+  const [showVocabModal, setShowVocabModal] = useState(false);
+  const [pendingListType, setPendingListType] = useState(null); // 'checklist' | 'vocab' | null
   const [checklistContext, setChecklistContext] = useState(null);
+
+  // vocabEnabled gates vocab list CREATION only (viewing is open to all)
+  const vocabEnabled = user?.preferences?.vocabEnabled === true;
 
   // Track initial state for change detection
   const [initialChecklist, setInitialChecklist] = useState(null);
@@ -152,6 +158,7 @@ useEffect(() => {
     setShowChecklistModal(false);
     setShowEditModal(false);
     setShowSpellingModal(false);
+    setShowVocabModal(false);
     setSelectedChecklist(null);
     console.log('🚨 MODALS STATE SET TO FALSE');
   }
@@ -205,23 +212,32 @@ useEffect(() => {
     );
   };
 
-  const handleCreateChecklist = () => {
+  // Opens context (group/personal) selection and then the appropriate create flow
+  const openCreateFlow = (listType) => {
     if (!groups || groups.length === 0) {
       setChecklistContext({ type: "personal" });
       setSelectedChecklist(null);
-      setShowEditModal(true);
+      if (listType === "vocab") {
+        setShowVocabModal(true);
+      } else {
+        setShowEditModal(true);
+      }
     } else {
       const options = [
         {
-          text: "Personal Checklist",
+          text: "Personal",
           onPress: () => {
             setChecklistContext({ type: "personal" });
             setSelectedChecklist(null);
-            setShowEditModal(true);
+            if (listType === "vocab") {
+              setShowVocabModal(true);
+            } else {
+              setShowEditModal(true);
+            }
           },
         },
         ...groups.map((group) => ({
-          text: `${group.name || group.groupId} Checklist`,
+          text: group.name || group.groupId,
           onPress: () => {
             setChecklistContext({
               type: "group",
@@ -229,24 +245,58 @@ useEffect(() => {
               groupName: group.name || group.groupId,
             });
             setSelectedChecklist(null);
-            setShowEditModal(true);
+            if (listType === "vocab") {
+              setShowVocabModal(true);
+            } else {
+              setShowEditModal(true);
+            }
           },
         })),
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
       ];
 
       Alert.alert(
-        "Create Pinned Checklist",
-        "Where would you like to create this checklist?",
+        listType === "vocab" ? "New Vocab List" : "Create Pinned Checklist",
+        "Where would you like to create this?",
         options
       );
     }
   };
 
+  const handleCreateChecklist = () => {
+    if (vocabEnabled) {
+      Alert.alert(
+        "New Pinned List",
+        "What type of list would you like to create?",
+        [
+          {
+            text: "Regular Checklist",
+            onPress: () => {
+              setPendingListType("checklist");
+              openCreateFlow("checklist");
+            },
+          },
+          {
+            text: "Vocab List",
+            onPress: () => {
+              setPendingListType("vocab");
+              openCreateFlow("vocab");
+            },
+          },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+    } else {
+      openCreateFlow("checklist");
+    }
+  };
+
   const handleViewChecklist = (checklist) => {
+    if (checklist.listType === "vocab") {
+      setSelectedChecklist(checklist);
+      setShowVocabModal(true);
+      return;
+    }
     if (isSpellingList(checklist.name)) {
       setSelectedChecklist(checklist);
       setShowSpellingModal(true);
@@ -336,6 +386,17 @@ const handleSaveWithToast = async (checklist) => {
       : { type: "personal" };
     const cleaned = cleanObjectForFirestore(updatedChecklist);
     await saveChecklistOperation(cleaned, context);
+  };
+
+  const handleSaveVocabChecklist = async (updatedChecklist) => {
+    const context = checklistContext || (
+      updatedChecklist.isGroupChecklist
+        ? { type: "group", groupId: updatedChecklist.groupId, groupName: updatedChecklist.groupName }
+        : { type: "personal" }
+    );
+    const cleaned = cleanObjectForFirestore(updatedChecklist);
+    await saveChecklistOperation(cleaned, context);
+    setPendingListType(null);
   };
 
   const renderChecklist = ({ item }) => (
@@ -784,6 +845,20 @@ const handleSaveWithToast = async (checklist) => {
         updatePinnedChecklist={updatePinnedChecklist}
         user={user}
         allTemplates={allTemplates}
+      />
+
+      {/* Vocab Test Modal — opens for any list with listType === 'vocab' */}
+      <VocabTestModal
+        visible={showVocabModal}
+        checklist={selectedChecklist}
+        onClose={() => {
+          setShowVocabModal(false);
+          setSelectedChecklist(null);
+          setPendingListType(null);
+        }}
+        onSaveChecklist={handleSaveVocabChecklist}
+        updatePinnedChecklist={updatePinnedChecklist}
+        user={user}
       />
     </SafeAreaView>
   );
