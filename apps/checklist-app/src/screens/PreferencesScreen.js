@@ -27,6 +27,9 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useChecklistTemplates } from "@my-apps/hooks";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { collection, addDoc } from "firebase/firestore";
+import useMeals from "../hooks/useMeals";
+import MealEditorModal from "../components/grocery/MealEditorModal";
+import MealsManagementView from "../components/grocery/MealsManagementView";
 
 const defaultPreferences = {
   defaultCalendarView: "day",
@@ -56,6 +59,7 @@ const PreferencesScreen = ({ navigation, route }) => {
   const [showReminderEditor, setShowReminderEditor] = useState(false); // ← NEW
   const [showQuickSend, setShowQuickSend] = useState(false); // ← NEW
   const [quickSendMode, setQuickSendMode] = useState("now"); // 'now' or 'schedule'
+  const { meals, loading: mealsLoading } = useMeals();
 
   // Generate options for the Default Calendar SelectModal
   const defaultCalendarOptions = useMemo(() => {
@@ -668,6 +672,28 @@ const PreferencesScreen = ({ navigation, route }) => {
   </View>
 )}
 
+            {/* 🥘 Meals (Admin Only) */}
+            {user?.admin && (
+              <View style={styles.settingContainer}>
+                <Text style={styles.sectionHeaderText}>Meals</Text>
+                <TouchableOpacity
+                  style={styles.templateCard}
+                  onPress={() => setCurrentView("meals")}
+                >
+                  <View style={styles.iconContainer}>
+                    <Icon name="food-fork-drink" size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.templateInfo}>
+                    <Text style={styles.templateName}>Manage Meals</Text>
+                    <Text style={styles.templateDetails}>
+                      {mealsLoading ? "Loading…" : `${meals.length} meal${meals.length !== 1 ? "s" : ""}`}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Add bottom padding when buttons are showing */}
             {hasChanges && <View style={{ height: 100 }} />}
           </ScrollView>
@@ -702,6 +728,10 @@ const PreferencesScreen = ({ navigation, route }) => {
             activities={activities}
             onClose={handleBackToPreferences}
           />
+        </View>
+      ) : currentView === "meals" ? (
+        <View style={{ flex: 1 }}>
+          <MealsManagementView onClose={handleBackToPreferences} />
         </View>
       ) : null}
 
@@ -757,6 +787,7 @@ const PreferencesScreen = ({ navigation, route }) => {
     { userId: 'iSI29yZ4OKQTSHONKPRxibrHZYx2', name: 'Sarah' },
   ]}
 />
+
     </SafeAreaView>
   );
 };

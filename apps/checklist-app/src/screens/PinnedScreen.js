@@ -26,9 +26,10 @@ import { usePinnedSort } from "../hooks/usePinnedSort";
 import { usePinnedOperations } from "../hooks/usePinnedOperations";
 import { usePinnedChecklistModal } from "../hooks/usePinnedChecklistModal";
 import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
-import { isSpellingList } from '../utils/pinnedChecklistUtils';
+import { isSpellingList, isGroceryList } from '../utils/pinnedChecklistUtils';
 import SpellingTestModal from '../components/spelling/SpellingTestModal';
 import VocabTestModal from '../components/vocab/VocabTestModal';
+import GroceryListModal from '../components/grocery/GroceryListModal';
 
 const PinnedScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
@@ -46,6 +47,7 @@ const PinnedScreen = () => {
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [showSpellingModal, setShowSpellingModal] = useState(false);
   const [showVocabModal, setShowVocabModal] = useState(false);
+  const [showGroceryModal, setShowGroceryModal] = useState(false);
   const [pendingListType, setPendingListType] = useState(null); // 'checklist' | 'vocab' | null
   const [checklistContext, setChecklistContext] = useState(null);
 
@@ -159,6 +161,7 @@ useEffect(() => {
     setShowEditModal(false);
     setShowSpellingModal(false);
     setShowVocabModal(false);
+    setShowGroceryModal(false);
     setSelectedChecklist(null);
     console.log('🚨 MODALS STATE SET TO FALSE');
   }
@@ -292,6 +295,11 @@ useEffect(() => {
   };
 
   const handleViewChecklist = (checklist) => {
+    if (isGroceryList(checklist.name)) {
+      setSelectedChecklist(checklist);
+      setShowGroceryModal(true);
+      return;
+    }
     if (checklist.listType === "vocab") {
       setSelectedChecklist(checklist);
       setShowVocabModal(true);
@@ -397,6 +405,14 @@ const handleSaveWithToast = async (checklist) => {
     const cleaned = cleanObjectForFirestore(updatedChecklist);
     await saveChecklistOperation(cleaned, context);
     setPendingListType(null);
+  };
+
+  const handleSaveGroceryChecklist = async (updatedChecklist) => {
+    const context = updatedChecklist.isGroupChecklist
+      ? { type: "group", groupId: updatedChecklist.groupId, groupName: updatedChecklist.groupName }
+      : { type: "personal" };
+    const cleaned = cleanObjectForFirestore(updatedChecklist);
+    await saveChecklistOperation(cleaned, context);
   };
 
   const renderChecklist = ({ item }) => (
@@ -805,6 +821,9 @@ const handleSaveWithToast = async (checklist) => {
                     setUpdatedItems(checklistToSave.items);
                     setInitialChecklist(JSON.parse(JSON.stringify(checklistToSave)));
                     setIsDirtyComplete(false);
+                    // Sync the hook's initialChecklist so switching back to List tab
+                    // doesn't show "Cancel" due to stale baseline
+                    setSelectedChecklist(checklistToSave);
                     
                     if (shouldSaveAsTemplate) {
                       promptForContext(async (context) => {
@@ -859,6 +878,17 @@ const handleSaveWithToast = async (checklist) => {
         onSaveChecklist={handleSaveVocabChecklist}
         updatePinnedChecklist={updatePinnedChecklist}
         user={user}
+      />
+
+      {/* Grocery List Modal — opens for any list named "grocery list" */}
+      <GroceryListModal
+        visible={showGroceryModal}
+        checklist={selectedChecklist}
+        onClose={() => {
+          setShowGroceryModal(false);
+          setSelectedChecklist(null);
+        }}
+        onSaveChecklist={handleSaveGroceryChecklist}
       />
     </SafeAreaView>
   );
