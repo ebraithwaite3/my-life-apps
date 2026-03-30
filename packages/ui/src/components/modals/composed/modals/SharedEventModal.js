@@ -188,7 +188,7 @@ const SharedEventModal = ({
 
     if (missingActivities.length > 0 && !formState.isEditing) {
       const missingNames = missingActivities.map((a) => a.label).join(", ");
-      formState.setErrors([`Please select: ${missingNames}`]);
+      Alert.alert("Missing Required Field", `Please select: ${missingNames}`);
       return;
     }
 

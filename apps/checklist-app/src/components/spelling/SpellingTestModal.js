@@ -7,6 +7,7 @@ import {
   Alert,
 } from "react-native";
 import { useTheme } from "@my-apps/contexts";
+import { showSuccessToast } from "@my-apps/utils";
 import {
   ModalWrapper,
   ModalHeader,
@@ -99,8 +100,10 @@ const SpellingTestModal = ({
     setWorkingChecklist(saved);
     setInitialChecklist(JSON.parse(JSON.stringify(saved)));
     setHasEditChanges(false);
+    setTabMode("practice");
     // Force the Practice tab to restart with the updated word list
     setPracticeKey((k) => k + 1);
+    setTimeout(() => showSuccessToast("Word list saved", "", 2000, "top"), 100);
   };
 
   /**
@@ -110,7 +113,7 @@ const SpellingTestModal = ({
    */
   const handleSaveStats = async (updatedList) => {
     try {
-      await updatePinnedChecklist(updatedList);
+      await onSaveChecklist(updatedList);
       // Merge updated stats into local state — do NOT reset practiceKey
       setWorkingChecklist((prev) => ({
         ...prev,

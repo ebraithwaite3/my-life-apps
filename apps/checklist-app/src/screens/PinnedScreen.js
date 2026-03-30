@@ -77,7 +77,7 @@ console.log('📍 PINNED SCREEN RENDER - showEditModal:', showEditModal);
     handleSaveCustomOrder,
     handleCloseSortModal,
     handleCloseCustomOrderModal,
-  } = usePinnedSort(allPinned, db, user);
+  } = usePinnedSort(allPinned, db, user, user?.pinnedOrder ?? []);
   console.log("SHOW SORT MODAL:", showSortModal);
 
   const {
@@ -456,10 +456,10 @@ const handleSaveWithToast = async (checklist) => {
         title="Pinned Checklists"
         subtext="Always visible"
         icons={[
-          ...(user?.admin ? [{
+          {
             icon: "swap-vertical",
             action: () => setShowSortModal(true),
-          }] : []),
+          },
           {
             icon: "add",
             action: handleCreateChecklist,

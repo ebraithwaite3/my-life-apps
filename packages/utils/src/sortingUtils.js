@@ -38,30 +38,43 @@ export const sortByName = (items, ascending = true) => {
   };
   
   /**
-   * Apply sorting based on sort type
+   * Apply sorting based on sort type.
+   * @param {Array} items
+   * @param {string} sortType - 'a-z' | 'z-a' | 'newest' | 'oldest' | 'custom'
+   * @param {string[]} [userOrder] - Optional ordered array of item IDs for per-user custom sort.
+   *   When provided with sortType 'custom', items are sorted by their position in this array.
+   *   Items not present in the array are appended at the end in their original order.
    */
-  export const applySorting = (items, sortType) => {
+  export const applySorting = (items, sortType, userOrder) => {
     const sorted = [...items];
-  
+
     switch (sortType) {
       case 'a-z':
         return sorted.sort((a, b) => a.name.localeCompare(b.name));
-      
+
       case 'z-a':
         return sorted.sort((a, b) => b.name.localeCompare(a.name));
-      
+
       case 'newest':
-        return sorted.sort((a, b) => 
+        return sorted.sort((a, b) =>
           new Date(b.createdAt) - new Date(a.createdAt)
         );
-      
+
       case 'oldest':
-        return sorted.sort((a, b) => 
+        return sorted.sort((a, b) =>
           new Date(a.createdAt) - new Date(b.createdAt)
         );
-      
+
       case 'custom':
-        // Sort by order field, fallback to createdAt if no order exists
+        if (userOrder && userOrder.length > 0) {
+          const indexMap = new Map(userOrder.map((id, i) => [id, i]));
+          return sorted.sort((a, b) => {
+            const ia = indexMap.has(a.id) ? indexMap.get(a.id) : Infinity;
+            const ib = indexMap.has(b.id) ? indexMap.get(b.id) : Infinity;
+            return ia - ib;
+          });
+        }
+        // Fallback: sort by order field on item
         return sorted.sort((a, b) => {
           if (a.order !== undefined && b.order !== undefined) {
             return a.order - b.order;
@@ -70,7 +83,7 @@ export const sortByName = (items, ascending = true) => {
           if (b.order !== undefined) return 1;
           return new Date(a.createdAt) - new Date(b.createdAt);
         });
-      
+
       default:
         return sorted;
     }

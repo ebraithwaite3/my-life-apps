@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Alert } from 'react-native';
-import { doc, updateDoc, writeBatch, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, getDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/src/AuthContext';
 import { useData } from '../../../contexts/src/DataContext';
 
@@ -353,77 +353,20 @@ export const useChecklistTemplates = () => {
   };
 
   /**
- * Updates the order field for multiple templates in a single batch operation
- * Used when user manually reorders templates in custom sort mode
- * Since templates are stored as an array field in user/group docs, we need to:
- * 1. Add order index to each template
- * 2. Group templates by their parent document (user or group)
- * 3. Update each parent document's checklistTemplates array
+ * Saves the user's custom template order as an ordered array of IDs
+ * in their own user document. This is per-user so different users
+ * can have different orderings of the same shared templates.
  * @param {Array} orderedTemplates - Array of template objects in their new order
  * @returns {Promise<boolean>} - True if successful, false otherwise
  */
 const updateTemplateOrder = async (orderedTemplates) => {
   try {
-    // Add order index to each template
-    const templatesWithOrder = orderedTemplates.map((template, index) => ({
-      ...template,
-      order: index,
-      updatedAt: new Date().toISOString(),
-    }));
-
-    // Group templates by their parent document
-    const groupedTemplates = {};
-    
-    templatesWithOrder.forEach(template => {
-      const key = template.contextType === 'group' 
-        ? `group_${template.groupId}`
-        : `user_${template.userId}`; // Use template.userId instead of user.uid
-      
-      if (!groupedTemplates[key]) {
-        groupedTemplates[key] = [];
-      }
-      groupedTemplates[key].push(template);
-    });
-
-    // Update each parent document
-    const batch = writeBatch(db);
-    
-    for (const [key, templates] of Object.entries(groupedTemplates)) {
-      const isGroup = key.startsWith('group_');
-      const docPath = isGroup 
-        ? `groups/${key.replace('group_', '')}`
-        : `users/${key.replace('user_', '')}`;
-      
-      const docRef = doc(db, docPath);
-      
-      // Get current document to preserve templates not in the reorder list
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const currentTemplates = docSnap.data().checklistTemplates || [];
-        
-        // Create a map of updated templates by ID
-        const updatedMap = new Map(templates.map(t => [t.id, t]));
-        
-        // Update templates that are in our list, keep others unchanged
-        const updatedTemplates = currentTemplates.map(t => 
-          updatedMap.has(t.id) ? updatedMap.get(t.id) : t
-        );
-        
-        // Sort by order field (templates with order come first, sorted by order)
-        updatedTemplates.sort((a, b) => {
-          if (a.order !== undefined && b.order !== undefined) {
-            return a.order - b.order;
-          }
-          if (a.order !== undefined) return -1;
-          if (b.order !== undefined) return 1;
-          return 0;
-        });
-        
-        batch.update(docRef, { checklistTemplates: updatedTemplates });
-      }
-    }
-    
-    await batch.commit();
+    const orderedIds = orderedTemplates.map(t => t.id);
+    await setDoc(
+      doc(db, 'users', user.userId),
+      { templateOrder: orderedIds },
+      { merge: true }
+    );
     return true;
   } catch (error) {
     console.error('Error updating template order:', error);

@@ -78,7 +78,7 @@ const TemplatesScreen = () => {
   ];
 
   // Apply current sort
-  const sortedTemplates = applySorting(allTemplates, currentSort);
+  const sortedTemplates = applySorting(allTemplates, currentSort, user?.templateOrder ?? []);
 
   const closeTemplateModal = () => {
     setShowEditModal(false);
@@ -227,13 +227,13 @@ const TemplatesScreen = () => {
         title="Templates"
         subtext="Reusable checklists"
         icons={[
-          ...(user?.admin ? [{ 
-            icon: "swap-vertical", 
+          {
+            icon: "swap-vertical",
             action: () => {
               setShowSortModal(true);
-              setHasSortBeenChanged(false); // Reset when opening
+              setHasSortBeenChanged(false);
             }
-          }] : []),
+          },
           { 
             icon: "add", 
             action: handleCreateTemplate 

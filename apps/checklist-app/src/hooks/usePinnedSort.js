@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { applySorting, showSuccessToast, showErrorToast } from '@my-apps/utils';
 
 const SORT_KEY = '@pinned_checklists_sort';
 
-export const usePinnedSort = (allPinned, db, user) => {
+export const usePinnedSort = (allPinned, db, user, pinnedOrder = []) => {
   const [currentSort, setCurrentSort] = useState('a-z');
   const [originalSort, setOriginalSort] = useState('a-z'); // ✅ Track original
   const [showSortModal, setShowSortModal] = useState(false);
@@ -73,63 +73,13 @@ export const usePinnedSort = (allPinned, db, user) => {
 
   const handleSaveCustomOrder = async (newOrder) => {
     try {
-      // Group checklists by their parent document
-      const groupedChecklists = {};
-      
-      newOrder.forEach((checklist, index) => {
-        const checklistWithOrder = { ...checklist, order: index };
-        const key = checklist.isGroupChecklist 
-          ? `group_${checklist.groupId}`
-          : `user_${checklist.userId || user.userId}`;
-        
-        if (!groupedChecklists[key]) {
-          groupedChecklists[key] = [];
-        }
-        groupedChecklists[key].push(checklistWithOrder);
-      });
-
-      // Update each parent document
-      const batch = writeBatch(db);
-      
-      for (const [key, checklists] of Object.entries(groupedChecklists)) {
-        const isGroup = key.startsWith('group_');
-        const docPath = isGroup 
-          ? `pinnedChecklists/${key.replace('group_', '')}`
-          : `pinnedChecklists/${key.replace('user_', '')}`;
-        
-        const docRef = doc(db, docPath);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const currentPinned = docSnap.data().pinned || [];
-          
-          // Create a map of updated checklists by ID
-          const updatedMap = new Map(checklists.map(c => [c.id, c]));
-          
-          // Update checklists that are in our list, keep others unchanged
-          const updatedPinned = currentPinned.map(c => 
-            updatedMap.has(c.id) ? { ...updatedMap.get(c.id), updatedAt: new Date().toISOString() } : c
-          );
-          
-          // Sort by order field
-          updatedPinned.sort((a, b) => {
-            if (a.order !== undefined && b.order !== undefined) {
-              return a.order - b.order;
-            }
-            if (a.order !== undefined) return -1;
-            if (b.order !== undefined) return 1;
-            return 0;
-          });
-          
-          batch.update(docRef, { 
-            pinned: updatedPinned,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      }
-      
-      await batch.commit();
-      await saveSortPreference('custom'); // ✅ Save to AsyncStorage
+      const orderedIds = newOrder.map(c => c.id);
+      await setDoc(
+        doc(db, 'users', user.userId),
+        { pinnedOrder: orderedIds },
+        { merge: true }
+      );
+      await saveSortPreference('custom');
       setShowCustomOrderModal(false);
       return true;
     } catch (error) {
@@ -154,8 +104,8 @@ export const usePinnedSort = (allPinned, db, user) => {
   };
   
 
-  // Apply sorting
-  const sortedPinned = applySorting(allPinned, currentSort);
+  // Apply sorting — pass pinnedOrder for per-user custom sort
+  const sortedPinned = applySorting(allPinned, currentSort, pinnedOrder);
 
   return {
     // State

@@ -411,7 +411,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
           {
             type: "checklist",
             label: "Checklist",
-            required: true,
+            required: false,
             SelectorComponent: ChecklistSelector,
             EditorComponent: EditChecklistContent,
             selectedActivity: selectedChecklist,
