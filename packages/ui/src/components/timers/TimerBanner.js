@@ -97,7 +97,7 @@ const TimerBanner = forwardRef(({
 
   const saveTimerState = async () => {
     try {
-      const state = { isRunning, startTime, totalSeconds, notificationId };
+      const state = { isRunning, startTime, totalSeconds, notificationId, savedDate: new Date().toDateString() };
       await AsyncStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
       console.error('Error saving timer state:', error);
@@ -109,12 +109,15 @@ const TimerBanner = forwardRef(({
       const stateStr = await AsyncStorage.getItem(TIMER_STORAGE_KEY);
       if (stateStr) {
         const state = JSON.parse(stateStr);
-        if (state.isRunning && state.startTime) {
+        const savedToday = state.savedDate === new Date().toDateString();
+        if (state.isRunning && state.startTime && savedToday) {
           setTotalSeconds(state.totalSeconds);
           setStartTime(state.startTime);
           setNotificationId(state.notificationId);
           setIsRunning(true);
           recalculateTimer(state.startTime, state.totalSeconds);
+        } else if (!savedToday) {
+          await clearTimerState();
         }
       }
     } catch (error) {
