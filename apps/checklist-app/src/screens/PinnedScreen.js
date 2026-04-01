@@ -21,6 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useDeleteNotification, useChecklistTemplates, usePinnedChecklists, useNotificationHandlers, useNotifications } from "@my-apps/hooks";
 import PinnedChecklistCard from "../components/cards/PinnedChecklistCard";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import { showSuccessToast, showErrorToast } from "@my-apps/utils";
 import { usePinnedSort } from "../hooks/usePinnedSort";
 import { usePinnedOperations } from "../hooks/usePinnedOperations";
@@ -36,6 +37,8 @@ const PinnedScreen = () => {
   const { db } = useAuth();
   const { user, groups, addingToEvent } = useData();
   const { allPinned, checklistsLoading } = useChecklistData();
+  const route = useRoute();
+  const navigation = useNavigation();
   const deleteNotification = useDeleteNotification();
   const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
   const { createPinnedChecklist, updatePinnedChecklist } = usePinnedChecklists();
@@ -62,7 +65,20 @@ const PinnedScreen = () => {
   const [hasViewEditChanges, setHasViewEditChanges] = useState(false);
 
   console.log('📍 PINNED SCREEN RENDER - showChecklistModal:', showChecklistModal);
-console.log('📍 PINNED SCREEN RENDER - showEditModal:', showEditModal);
+  console.log('📍 PINNED SCREEN RENDER - showEditModal:', showEditModal);
+
+  // Deep link handler — notification tap with checklistId opens that checklist
+  useEffect(() => {
+    const { checklistId } = route.params || {};
+    if (!checklistId || checklistsLoading || !allPinned.length) return;
+
+    const target = allPinned.find((c) => c.id === checklistId);
+    if (target) {
+      console.log("📬 Deep link — opening checklist:", target.name);
+      handleViewChecklist(target);
+      navigation.setParams({ checklistId: undefined });
+    }
+  }, [route.params, checklistsLoading, allPinned]);
 
   // Custom hooks
   const {
@@ -662,6 +678,7 @@ const handleSaveWithToast = async (checklist) => {
                 initialChecklist={initialChecklist}
                 initialReminder={initialEditReminder}
                 isUserAdmin={user?.admin === true}
+
                 addReminder={true}
                 eventStartTime={null}
                 templates={allTemplates}
@@ -842,6 +859,8 @@ const handleSaveWithToast = async (checklist) => {
                   initialChecklist={initialChecklist}
                   initialReminder={initialViewReminder}
                   isUserAdmin={user?.admin === true}
+                  householdTasks={user?.admin ? householdTasks : []}
+                  householdTaskCategories={householdTaskCategories}
                   addReminder={true}
                   eventStartTime={null}
                   templates={allTemplates}

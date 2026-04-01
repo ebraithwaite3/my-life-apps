@@ -8,6 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Modal,
+  FlatList,
+  Clipboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@my-apps/contexts";
@@ -30,6 +33,9 @@ import { collection, addDoc } from "firebase/firestore";
 import useMeals from "../hooks/useMeals";
 import MealEditorModal from "../components/grocery/MealEditorModal";
 import MealsManagementView from "../components/grocery/MealsManagementView";
+import useHouseholdTasks from "../hooks/useHouseholdTasks";
+import HouseholdTasksManagementView from "../components/household/HouseholdTasksManagementView";
+import { getLogs, clearLogs } from "../hooks/useLogCapture";
 
 const defaultPreferences = {
   defaultCalendarView: "day",
@@ -60,6 +66,9 @@ const PreferencesScreen = ({ navigation, route }) => {
   const [showQuickSend, setShowQuickSend] = useState(false); // ← NEW
   const [quickSendMode, setQuickSendMode] = useState("now"); // 'now' or 'schedule'
   const { meals, loading: mealsLoading } = useMeals();
+  const { tasks: householdTasks } = useHouseholdTasks();
+  const [showLogViewer, setShowLogViewer] = useState(false);
+  const [logEntries, setLogEntries] = useState([]);
 
   // Generate options for the Default Calendar SelectModal
   const defaultCalendarOptions = useMemo(() => {
@@ -694,6 +703,51 @@ const PreferencesScreen = ({ navigation, route }) => {
               </View>
             )}
 
+            {/* 🏠 Household Tasks Library (Admin Only) */}
+            {user?.admin && (
+              <View style={styles.settingContainer}>
+                <Text style={styles.sectionHeaderText}>Task Library</Text>
+                <TouchableOpacity
+                  style={styles.templateCard}
+                  onPress={() => setCurrentView("householdTasks")}
+                >
+                  <View style={styles.iconContainer}>
+                    <Icon name="clipboard-list-outline" size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.templateInfo}>
+                    <Text style={styles.templateName}>Manage Task Library</Text>
+                    <Text style={styles.templateDetails}>
+                      {`${householdTasks.length} task${householdTasks.length !== 1 ? "s" : ""}`}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* 🪵 Log Viewer (Admin Only) */}
+            {user?.admin && (
+              <View style={styles.settingContainer}>
+                <Text style={styles.sectionHeaderText}>Developer</Text>
+                <TouchableOpacity
+                  style={styles.templateCard}
+                  onPress={() => {
+                    setLogEntries(getLogs());
+                    setShowLogViewer(true);
+                  }}
+                >
+                  <View style={styles.iconContainer}>
+                    <Icon name="console" size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.templateInfo}>
+                    <Text style={styles.templateName}>View Logs</Text>
+                    <Text style={styles.templateDetails}>Console output</Text>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Add bottom padding when buttons are showing */}
             {hasChanges && <View style={{ height: 100 }} />}
           </ScrollView>
@@ -733,7 +787,93 @@ const PreferencesScreen = ({ navigation, route }) => {
         <View style={{ flex: 1 }}>
           <MealsManagementView onClose={handleBackToPreferences} />
         </View>
+      ) : currentView === "householdTasks" ? (
+        <View style={{ flex: 1 }}>
+          <HouseholdTasksManagementView onClose={handleBackToPreferences} />
+        </View>
       ) : null}
+
+      {/* 🪵 Log Viewer Modal */}
+      <Modal
+        visible={showLogViewer}
+        animationType="slide"
+        onRequestClose={() => setShowLogViewer(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: theme.background }}>
+          {/* Header */}
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingTop: 56,
+            paddingBottom: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.border,
+            backgroundColor: theme.surface,
+          }}>
+            <Text style={{ flex: 1, fontSize: 18, fontWeight: "700", color: theme.text.primary }}>
+              Console Logs
+            </Text>
+            <TouchableOpacity
+              onPress={() => { clearLogs(); setLogEntries([]); }}
+              style={{ marginRight: 16 }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: theme.error }}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowLogViewer(false)}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: theme.primary }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          {logEntries.length === 0 ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: theme.text.secondary }}>No logs captured yet.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={logEntries}
+              keyExtractor={(_, i) => String(i)}
+              contentContainerStyle={{ padding: 12 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => Clipboard.setString(item.message)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{
+                    marginBottom: 6,
+                    padding: 8,
+                    borderRadius: 6,
+                    backgroundColor: item.level === "error"
+                      ? theme.error + "20"
+                      : item.level === "warn"
+                      ? "#ff980020"
+                      : theme.surface,
+                  }}>
+                    <Text style={{
+                      fontSize: 10,
+                      color: item.level === "error"
+                        ? theme.error
+                        : item.level === "warn"
+                        ? "#ff9800"
+                        : theme.text.tertiary,
+                      marginBottom: 2,
+                    }}>
+                      [{item.level.toUpperCase()}] {item.time}
+                    </Text>
+                    <Text style={{
+                      fontSize: 12,
+                      color: theme.text.primary,
+                      fontFamily: "monospace",
+                    }}>
+                      {item.message}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      </Modal>
 
       {/* ⬇️⬇️⬇️ MODAL ALWAYS RENDERED - CONTROLLED BY visible PROP ⬇️⬇️⬇️ */}
       <StandAloneReminderEditor

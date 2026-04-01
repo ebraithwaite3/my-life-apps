@@ -1,7 +1,9 @@
 // src/navigation/MainNavigator.js
-import React from "react";
+import React, { useRef } from "react";
 import { Text, View, ActivityIndicator, Linking } from "react-native";
-import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { NavigationContainer, useNavigation, createNavigationContainerRef } from "@react-navigation/native";
+
+export const navigationRef = createNavigationContainerRef();
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
 import { useTheme } from "@my-apps/contexts";
@@ -336,8 +338,8 @@ const MainNavigator = ({ onLogout }) => {
   };
 
   return (
-    <NavigationContainer linking={linking}>
-      <NotificationProvider>
+    <NavigationContainer linking={linking} ref={navigationRef}>
+      <NotificationProvider navigationRef={navigationRef}>
         <RootNavigator onLogout={onLogout} />
       </NotificationProvider>
     </NavigationContainer>

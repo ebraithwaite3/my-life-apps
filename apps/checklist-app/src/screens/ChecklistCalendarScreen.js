@@ -116,30 +116,47 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   // Handle navigation params for deep links (notifications, etc.)
   useEffect(() => {
     const { date, view, checklistId, eventId, activityId } = route.params || {};
+    const targetId = checklistId || activityId;
 
-    if (date) {
-      console.log("📅 Nav param date detected:", date, "View:", view);
-      navigateToDate(date);
+    if (!date) return;
 
-      if (view === "day") {
-        console.log("🔄 Switching to day view");
-        calendarState.setSelectedView("day");
-      } else if (view === "month") {
-        calendarState.setSelectedView("month");
+    console.log("📅 Deep link — date:", date, "view:", view, "targetId:", targetId);
+    navigateToDate(date);
+
+    // Default to day view so the event is immediately visible
+    calendarState.setSelectedView(view || "day");
+
+    // If we have a checklist/activity ID, find and open it
+    if (targetId) {
+      const dateISO = new Date(date).toISOString().split("T")[0];
+      const dayEvents = getEventsForDay(dateISO);
+      const dayActivities = getActivitiesForDay(dateISO);
+
+      // Find the activity matching targetId
+      const activity = dayActivities.find((a) => a.id === targetId);
+      // Find the event that contains this activity (matched by eventId or by activity presence)
+      const event = eventId
+        ? dayEvents.find((e) => e.id === eventId)
+        : dayEvents.find((e) =>
+            e.activities?.some((a) => a.id === targetId)
+          );
+
+      if (activity && event) {
+        console.log("📬 Deep link — opening checklist:", activity.name);
+        // Small delay to allow date navigation to settle first
+        setTimeout(() => calendarHandlers.handleViewChecklist(event, activity), 300);
       }
-
-      // TODO: Handle checklistId to auto-open the checklist modal
-
-      // Clear ALL params after handling
-      navigation.setParams({
-        date: undefined,
-        view: undefined,
-        checklistId: undefined,
-        eventId: undefined,
-        activityId: undefined,
-      });
     }
-  }, [route.params, navigateToDate, navigation, calendarState]);
+
+    // Clear params after handling
+    navigation.setParams({
+      date: undefined,
+      view: undefined,
+      checklistId: undefined,
+      eventId: undefined,
+      activityId: undefined,
+    });
+  }, [route.params]);
 
   console.log("What modal is shown?", {
     eventModalVisible: calendarState.eventModalVisible,

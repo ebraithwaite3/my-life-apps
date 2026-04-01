@@ -1,4 +1,7 @@
 import { registerRootComponent } from 'expo';
+import { installLogCapture } from './src/hooks/useLogCapture';
+
+installLogCapture();
 
 import App from './App';
 

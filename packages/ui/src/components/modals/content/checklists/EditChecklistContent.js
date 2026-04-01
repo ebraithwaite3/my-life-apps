@@ -16,7 +16,7 @@ import {
   Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@my-apps/contexts";
+import { useTheme, useData } from "@my-apps/contexts";
 import ReminderSelector from "../../../forms/ReminderSelector";
 import FilterChips from "../../../general/FilterChips";
 import ChecklistEditingRow from "../../../checklists/ChecklistEditingRow";
@@ -29,6 +29,7 @@ import { useChecklistItems } from "@my-apps/hooks";
 import { useChecklistFormState } from "@my-apps/hooks";
 import { useChecklistSave } from "@my-apps/hooks";
 import CustomReminderModal from "../../composed/modals/CustomReminderModal";
+import HouseholdTaskPickerModal from "../../composed/modals/HouseholdTaskPickerModal";
 
 // ✅ Smart item comparison - ignores structure differences, only compares what matters
 const areItemsEqual = (items1, items2) => {
@@ -77,9 +78,14 @@ const EditChecklistContent = forwardRef(
     ref
   ) => {
     const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+    const { user } = useData();
+    const householdTasks = (isUserAdmin && user?.householdTasks) ? user.householdTasks : [];
+    const householdTaskCategories = user?.householdTaskCategories || [];
 
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const [errors, setErrors] = useState([]);
+    const [showLibraryPicker, setShowLibraryPicker] = useState(false);
+
 
     const isInitialMount = useRef(true);
 
@@ -431,7 +437,20 @@ const EditChecklistContent = forwardRef(
             chipMarginBottom={4}
           />
 
-          <Text style={styles.sectionHeader}>Items</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: getSpacing.xs }}>
+            <Text style={[styles.sectionHeader, { flex: 1, marginBottom: 0 }]}>Items</Text>
+            {householdTasks.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setShowLibraryPicker(true)}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              >
+                <Ionicons name="library-outline" size={16} color={theme.primary} />
+                <Text style={{ fontSize: getTypography.bodySmall.fontSize, fontWeight: "600", color: theme.primary }}>
+                  Library
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {!keyboardVisible &&
             itemsHook.items.some((item) => item.name.trim()) && (
@@ -652,6 +671,25 @@ const EditChecklistContent = forwardRef(
           onSave={handleSaveConfig}
           onCancel={handleCancelConfig}
           isUserAdmin={isUserAdmin}
+        />
+
+        <HouseholdTaskPickerModal
+          visible={showLibraryPicker}
+          onClose={() => setShowLibraryPicker(false)}
+          onConfirm={(selectedTasks) => {
+            const newItems = selectedTasks.map((t) => ({
+              id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+              name: t.name,
+              completed: false,
+              itemType: "checkbox",
+              subItems: [],
+            }));
+            itemsHook.setItems((prev) => {
+              const hasOnlyEmptyItem =
+                prev.length === 1 && !prev[0].name.trim();
+              return hasOnlyEmptyItem ? newItems : [...prev, ...newItems];
+            });
+          }}
         />
       </View>
     );

@@ -6,15 +6,13 @@ import React, {
   useRef,
 } from "react";
 import * as Notifications from "expo-notifications";
-import { useNavigation } from "@react-navigation/native";
 
 const NotificationContext = createContext();
 
 export const useNotifications = () => useContext(NotificationContext);
 
-export const NotificationProvider = ({ children }) => {
+export const NotificationProvider = ({ children, navigationRef }) => {
   const [currentNotification, setCurrentNotification] = useState(null);
-  const navigation = useNavigation();
 
   // Refs to store listeners so we can clean them up
   const notificationListener = useRef();
@@ -52,12 +50,22 @@ export const NotificationProvider = ({ children }) => {
     // ========================================
     // CHECK: Did user tap a notification to open the app?
     // ========================================
-    // ✅ NEW (current):
+    // CHECK: Did user tap a notification to open the app? (cold start)
+    // Poll until navigationRef is ready, then handle
     const response = Notifications.getLastNotificationResponse();
     if (response) {
       console.log("🚀 App opened from notification tap:", response);
       const data = response.notification.request.content.data;
-      handleNotificationTap(data);
+
+      // NavigationContainer may not be ready yet on cold start — wait for it
+      const waitAndNavigate = () => {
+        if (navigationRef?.isReady()) {
+          handleNotificationTap(data);
+        } else {
+          setTimeout(waitAndNavigate, 100);
+        }
+      };
+      waitAndNavigate();
     }
 
     // Cleanup listeners when component unmounts
@@ -75,31 +83,26 @@ export const NotificationProvider = ({ children }) => {
  * Handle notification tap - navigate to the right screen
  */
 const handleNotificationTap = (data) => {
-  console.log("Handling notification tap with data:", data);
+  console.log("🔔 handleNotificationTap — full data:", JSON.stringify(data));
 
-  if (data?.screen) {
-    // Extract screen and pass everything else as params
-    const { screen, app, ...params } = data;
-    
-    console.log("📍 Navigating to:", screen, "with params:", params);
-    
-    // Navigate through nested stack: Main -> Tab -> Screen
-    navigation.navigate("Main", {
-      screen: screen,
-      params: {
-        screen: `${screen}Home`,
-        params: params
-      }
-    });
-  } else {
-    console.warn("Notification missing screen data, navigating to Calendar");
-    navigation.navigate("Main", {
-      screen: "Calendar",
-      params: {
-        screen: "CalendarHome"
-      }
-    });
+  if (!navigationRef?.isReady()) {
+    console.warn("Navigation not ready yet");
+    return;
   }
+
+  const { screen, app, ...params } = data || {};
+  const targetScreen = screen || "Calendar";
+  const homeScreen = `${targetScreen}Home`;
+
+  console.log("📍 Navigating to:", targetScreen, "with params:", params);
+
+  navigationRef.navigate("Main", {
+    screen: targetScreen,
+    params: {
+      screen: homeScreen,
+      params: Object.keys(params).length > 0 ? params : undefined,
+    },
+  });
 };
 
   /**
