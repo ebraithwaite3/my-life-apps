@@ -64,7 +64,7 @@ export const useEventFormState = ({
   defaultTitle = "Event",
   userPreferences = {},
 }) => {
-  console.log("Groups in useEventFormState:", groups);
+  //console.log("Groups in useEventFormState:", groups);
   const { allCalendars: fullCalendars } = useData();
 
   const isEditing = event !== null;

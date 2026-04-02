@@ -673,7 +673,7 @@ const EditChecklistContent = forwardRef(
           isUserAdmin={isUserAdmin}
         />
 
-        <HouseholdTaskPickerModal
+        {showLibraryPicker && <HouseholdTaskPickerModal
           visible={showLibraryPicker}
           onClose={() => setShowLibraryPicker(false)}
           onConfirm={(selectedTasks) => {
@@ -690,7 +690,7 @@ const EditChecklistContent = forwardRef(
               return hasOnlyEmptyItem ? newItems : [...prev, ...newItems];
             });
           }}
-        />
+        />}
       </View>
     );
   }

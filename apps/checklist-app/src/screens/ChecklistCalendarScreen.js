@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { SharedCalendarScreen } from "@my-apps/screens";
 import {
   ChecklistModal,
@@ -96,17 +96,18 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   const { db } = useAuth();
   const { removeItemsFromSource } = useRemoveChecklistItems(db, user, updateInternalActivities, updateExternalActivities);
 
-  console.log("🔍 Calendar screen allPinned:", allPinned);
+  //console.log("🔍 Calendar screen allPinned:", allPinned);
   console.log("🔍 Calendar screen allPinned length:", allPinned?.length);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [selectedCalendarIdForMoving, setSelectedCalendarIdForMoving] = useState(null);
+  const pendingDeepLink = useRef(null);
 
   useEffect(() => {
     if (addingToEvent.isActive) {
       console.log("📅 Calendar opened in adding mode:", addingToEvent);
       console.log("📦 Items to add:", addingToEvent.itemsToMove);
       console.log("🔙 Return path:", addingToEvent.returnPath);
-      
+
       // Force to month view
       calendarState.setSelectedView('month');
     }
@@ -114,6 +115,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
 
 
   // Handle navigation params for deep links (notifications, etc.)
+  // Step 1: capture params and kick off navigation; store pending checklist open for step 2
   useEffect(() => {
     const { date, view, checklistId, eventId, activityId } = route.params || {};
     const targetId = checklistId || activityId;
@@ -122,33 +124,13 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
 
     console.log("📅 Deep link — date:", date, "view:", view, "targetId:", targetId);
     navigateToDate(date);
-
-    // Default to day view so the event is immediately visible
     calendarState.setSelectedView(view || "day");
 
-    // If we have a checklist/activity ID, find and open it
     if (targetId) {
-      const dateISO = new Date(date).toISOString().split("T")[0];
-      const dayEvents = getEventsForDay(dateISO);
-      const dayActivities = getActivitiesForDay(dateISO);
-
-      // Find the activity matching targetId
-      const activity = dayActivities.find((a) => a.id === targetId);
-      // Find the event that contains this activity (matched by eventId or by activity presence)
-      const event = eventId
-        ? dayEvents.find((e) => e.id === eventId)
-        : dayEvents.find((e) =>
-            e.activities?.some((a) => a.id === targetId)
-          );
-
-      if (activity && event) {
-        console.log("📬 Deep link — opening checklist:", activity.name);
-        // Small delay to allow date navigation to settle first
-        setTimeout(() => calendarHandlers.handleViewChecklist(event, activity), 300);
-      }
+      const dateISO = date.split("T")[0];
+      pendingDeepLink.current = { dateISO, targetId, eventId };
     }
 
-    // Clear params after handling
     navigation.setParams({
       date: undefined,
       view: undefined,
@@ -157,6 +139,34 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
       activityId: undefined,
     });
   }, [route.params]);
+
+  // Step 2: once calendar data loads (getEventsForDay reference updates), try to open the checklist
+  useEffect(() => {
+    const pending = pendingDeepLink.current;
+    if (!pending) return;
+
+    const { dateISO, targetId, eventId } = pending;
+    const dayEvents = getEventsForDay(dateISO);
+    const dayActivities = getActivitiesForDay(dateISO);
+
+    // Activities use checklist.id as their id (set when added to event)
+    const activity = dayActivities.find((a) => a.id === targetId);
+    // Events use eventId field (Google Calendar IDs), not id
+    const event = eventId
+      ? dayEvents.find((e) => e.eventId === eventId)
+      : dayEvents.find((e) => e.activities?.some((a) => a.id === targetId));
+
+    if (activity && event) {
+      console.log("📬 Deep link — opening checklist:", activity.name);
+      pendingDeepLink.current = null;
+      setTimeout(() => calendarHandlers.handleViewChecklist(event, activity), 300);
+    } else if (dayEvents.length > 0 || dayActivities.length > 0) {
+      // Data is loaded but no match found — clear pending to avoid infinite retries
+      console.warn("📬 Deep link — no matching checklist found for targetId:", targetId);
+      pendingDeepLink.current = null;
+    }
+    // If dayEvents and dayActivities are both empty, data hasn't loaded yet — keep pending and wait
+  }, [getEventsForDay, getActivitiesForDay]);
 
   console.log("What modal is shown?", {
     eventModalVisible: calendarState.eventModalVisible,

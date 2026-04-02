@@ -78,7 +78,7 @@ const HouseholdTaskPickerModal = ({ visible, onClose, onConfirm }) => {
     return groups;
   }, [sort, sortedTasks, categories]);
 
-  const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.5)",
@@ -217,7 +217,7 @@ const HouseholdTaskPickerModal = ({ visible, onClose, onConfirm }) => {
       textAlign: "center",
       paddingVertical: getSpacing.xl,
     },
-  });
+  }), [theme, getSpacing, getTypography, getBorderRadius]);
 
   const renderTaskRow = (task) => {
     const isSelected = selected.includes(task.id);

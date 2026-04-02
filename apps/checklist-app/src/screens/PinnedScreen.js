@@ -859,8 +859,6 @@ const handleSaveWithToast = async (checklist) => {
                   initialChecklist={initialChecklist}
                   initialReminder={initialViewReminder}
                   isUserAdmin={user?.admin === true}
-                  householdTasks={user?.admin ? householdTasks : []}
-                  householdTaskCategories={householdTaskCategories}
                   addReminder={true}
                   eventStartTime={null}
                   templates={allTemplates}

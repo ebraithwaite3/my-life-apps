@@ -34,7 +34,7 @@ const AppHeader = ({
       ? Object.values(userCalendars)
       : [];
 
-  console.log("📅 User Calendars (converted to array):", calendars);
+  //console.log("📅 User Calendars (converted to array):", calendars);
 
   // Filter to only Google and iCal calendars (check source.type)
   const syncableCalendars = calendars.filter(cal => {
