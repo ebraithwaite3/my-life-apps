@@ -29,7 +29,7 @@ import { useChecklistItems } from "@my-apps/hooks";
 import { useChecklistFormState } from "@my-apps/hooks";
 import { useChecklistSave } from "@my-apps/hooks";
 import CustomReminderModal from "../../composed/modals/CustomReminderModal";
-import HouseholdTaskPickerModal from "../../composed/modals/HouseholdTaskPickerModal";
+import QuickAddPickerModal from "../../composed/modals/QuickAddPickerModal";
 
 // ✅ Smart item comparison - ignores structure differences, only compares what matters
 const areItemsEqual = (items1, items2) => {
@@ -74,17 +74,17 @@ const EditChecklistContent = forwardRef(
       onChangesDetected,
       initialChecklist,
       initialReminder,
+      useQuickAddMode = false,
+      pinnedChecklists = [],
     },
     ref
   ) => {
     const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
     const { user } = useData();
-    const householdTasks = (isUserAdmin && user?.householdTasks) ? user.householdTasks : [];
-    const householdTaskCategories = user?.householdTaskCategories || [];
 
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const [errors, setErrors] = useState([]);
-    const [showLibraryPicker, setShowLibraryPicker] = useState(false);
+    const [showQuickAddPicker, setShowQuickAddPicker] = useState(false);
 
 
     const isInitialMount = useRef(true);
@@ -439,14 +439,14 @@ const EditChecklistContent = forwardRef(
 
           <View style={{ flexDirection: "row", alignItems: "center", marginBottom: getSpacing.xs }}>
             <Text style={[styles.sectionHeader, { flex: 1, marginBottom: 0 }]}>Items</Text>
-            {householdTasks.length > 0 && (
+            {isUserAdmin && useQuickAddMode && (
               <TouchableOpacity
-                onPress={() => setShowLibraryPicker(true)}
+                onPress={() => setShowQuickAddPicker(true)}
                 style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
               >
-                <Ionicons name="library-outline" size={16} color={theme.primary} />
+                <Ionicons name="flash-outline" size={16} color={theme.primary} />
                 <Text style={{ fontSize: getTypography.bodySmall.fontSize, fontWeight: "600", color: theme.primary }}>
-                  Library
+                  Quick Add
                 </Text>
               </TouchableOpacity>
             )}
@@ -673,24 +673,43 @@ const EditChecklistContent = forwardRef(
           isUserAdmin={isUserAdmin}
         />
 
-        {showLibraryPicker && <HouseholdTaskPickerModal
-          visible={showLibraryPicker}
-          onClose={() => setShowLibraryPicker(false)}
-          onConfirm={(selectedTasks) => {
-            const newItems = selectedTasks.map((t) => ({
-              id: Math.random().toString(36).slice(2) + Date.now().toString(36),
-              name: t.name,
-              completed: false,
-              itemType: "checkbox",
-              subItems: [],
-            }));
-            itemsHook.setItems((prev) => {
-              const hasOnlyEmptyItem =
-                prev.length === 1 && !prev[0].name.trim();
-              return hasOnlyEmptyItem ? newItems : [...prev, ...newItems];
-            });
-          }}
-        />}
+        {showQuickAddPicker && (
+          <QuickAddPickerModal
+            visible={showQuickAddPicker}
+            onClose={() => setShowQuickAddPicker(false)}
+            pinnedChecklists={pinnedChecklists}
+            onConfirm={(results) => {
+              const newItems = results.map(({ item, sourceChecklistId, sourceItemId }) => {
+                const newId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+                const hasSubItems = item.subItems && item.subItems.length > 0;
+                return {
+                  id: newId,
+                  name: item.name,
+                  completed: false,
+                  itemType: hasSubItems ? "group" : "checkbox",
+                  subItems: hasSubItems
+                    ? item.subItems.map((sub) => ({
+                        id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+                        name: sub.name,
+                        completed: false,
+                        itemType: "checkbox",
+                        parentId: newId,
+                        // Each sub-item tracks its own source so completions sync individually
+                        ...(sourceChecklistId && { sourceChecklistId }),
+                        ...(sub.id && { sourceItemId: sub.id }),
+                      }))
+                    : [],
+                  ...(sourceChecklistId && { sourceChecklistId }),
+                  ...(sourceItemId && { sourceItemId }),
+                };
+              });
+              itemsHook.setItems((prev) => {
+                const hasOnlyEmptyItem = prev.length === 1 && !prev[0].name.trim();
+                return hasOnlyEmptyItem ? newItems : [...prev, ...newItems];
+              });
+            }}
+          />
+        )}
       </View>
     );
   }

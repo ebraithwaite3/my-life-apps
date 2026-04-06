@@ -149,12 +149,14 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     const dayEvents = getEventsForDay(dateISO);
     const dayActivities = getActivitiesForDay(dateISO);
 
-    // Activities use checklist.id as their id (set when added to event)
-    const activity = dayActivities.find((a) => a.id === targetId);
     // Events use eventId field (Google Calendar IDs), not id
     const event = eventId
       ? dayEvents.find((e) => e.eventId === eventId)
       : dayEvents.find((e) => e.activities?.some((a) => a.id === targetId));
+
+    // Activity may be embedded in the event (Google Calendar) or a standalone internal activity
+    const activity = event?.activities?.find((a) => a.id === targetId)
+      || dayActivities.find((a) => a.id === targetId);
 
     if (activity && event) {
       console.log("📬 Deep link — opening checklist:", activity.name);
@@ -461,6 +463,8 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
               promptForContext,
               prefilledTitle: "Checklist",
               isUserAdmin: user?.admin === true,
+              useQuickAddMode: true,
+              pinnedChecklists: allPinned,
             },
           },
         ]}
@@ -480,6 +484,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         onUpdatePinnedChecklist={updatePinnedChecklist}
         selectedCalendarIdForMoving={selectedCalendarIdForMoving}
         setSelectedCalendarIdForMoving={setSelectedCalendarIdForMoving}
+        useQuickAddMode={true}
       />
 
       {/* Add Checklist to Event Modal */}
@@ -498,6 +503,8 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         onSaveTemplate={saveTemplate}
         promptForContext={promptForContext}
         isUserAdmin={user?.admin === true}
+        useQuickAddMode={true}
+        pinnedChecklists={allPinned}
       />
     </>
   );

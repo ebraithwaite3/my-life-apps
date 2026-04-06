@@ -61,6 +61,7 @@ const ChecklistModal = ({
 
   selectedCalendarIdForMoving,
   setSelectedCalendarIdForMoving,
+  useQuickAddMode = false,
 }) => {
   console.log("🔍 ChecklistModal selectedChecklist:", selectedChecklist, "selected checklist event", selectedChecklistEvent)
 
@@ -277,6 +278,64 @@ const ChecklistModal = ({
     }
 
     await handleUpdateChecklist(updatedChecklist, null, wasJustCompleted, true);
+
+    // Sync completions back to source pinned checklists (one-way: daily → pinned)
+    if (onUpdatePinnedChecklist && initialChecklist) {
+      // byChecklist: checklistId → Set of sourceItemIds newly marked complete
+      const byChecklist = {};
+
+      const collectSync = (item, initialItemsArr) => {
+        if (!item.sourceChecklistId || !item.sourceItemId) return;
+        if (!item.completed) return;
+        const wasAlreadyComplete = initialItemsArr?.some(
+          (i) => i.id === item.id && i.completed
+        );
+        if (wasAlreadyComplete) return;
+        if (!byChecklist[item.sourceChecklistId]) byChecklist[item.sourceChecklistId] = new Set();
+        byChecklist[item.sourceChecklistId].add(item.sourceItemId);
+      };
+
+      updatedItems.forEach((item) => {
+        const initialItem = initialChecklist.items?.find((i) => i.id === item.id);
+        // Top-level item
+        collectSync(item, initialChecklist.items);
+        // Sub-items inside a group (each carries its own sourceItemId)
+        item.subItems?.forEach((sub) => {
+          collectSync(sub, initialItem?.subItems || []);
+        });
+      });
+
+      for (const [checklistId, itemIdSet] of Object.entries(byChecklist)) {
+        const pinned = pinnedChecklists.find((p) => p.id === checklistId);
+        if (!pinned) continue;
+        const updatedPinned = {
+          ...pinned,
+          items: pinned.items.map((pinnedItem) => {
+            // Direct top-level match
+            if (itemIdSet.has(pinnedItem.id)) {
+              return {
+                ...pinnedItem,
+                completed: true,
+                ...(pinnedItem.subItems?.length > 0 && {
+                  subItems: pinnedItem.subItems.map((sub) => ({ ...sub, completed: true })),
+                }),
+              };
+            }
+            // Search inside sub-items for a match
+            if (pinnedItem.subItems?.length > 0) {
+              const updatedSubs = pinnedItem.subItems.map((sub) =>
+                itemIdSet.has(sub.id) ? { ...sub, completed: true } : sub
+              );
+              const changed = updatedSubs.some((sub, idx) => sub !== pinnedItem.subItems[idx]);
+              if (changed) return { ...pinnedItem, subItems: updatedSubs };
+            }
+            return pinnedItem;
+          }),
+          updatedAt: new Date().toISOString(),
+        };
+        await onUpdatePinnedChecklist(updatedPinned);
+      }
+    }
 
     Keyboard.dismiss();
     setTimeout(() => {
@@ -603,6 +662,8 @@ const handleSaveWithToast = async (checklist) => {
                   }
                   initialChecklist={initialChecklist}
                   initialReminder={initialReminder}
+                  useQuickAddMode={useQuickAddMode}
+                  pinnedChecklists={pinnedChecklists}
                 />
               )}
             </View>

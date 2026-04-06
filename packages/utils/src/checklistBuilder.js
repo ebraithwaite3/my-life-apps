@@ -46,7 +46,13 @@ export const buildChecklistObject = ({
       if (item.yesNoConfig) {
         baseItem.yesNoConfig = item.yesNoConfig;
       }
-      
+      if (item.sourceChecklistId) {
+        baseItem.sourceChecklistId = item.sourceChecklistId;
+      }
+      if (item.sourceItemId) {
+        baseItem.sourceItemId = item.sourceItemId;
+      }
+
       if (hasSubItems) {
         baseItem.subItems = item.subItems
           .filter(sub => sub.name.trim())
@@ -56,6 +62,8 @@ export const buildChecklistObject = ({
             itemType: 'checkbox',
             parentId: item.id,
             completed: isTemplate ? undefined : sub.completed ?? false,
+            ...(sub.sourceChecklistId && { sourceChecklistId: sub.sourceChecklistId }),
+            ...(sub.sourceItemId && { sourceItemId: sub.sourceItemId }),
           }));
       }
 

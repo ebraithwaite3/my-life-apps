@@ -21,12 +21,14 @@ const AddChecklistToEventModal = ({
   onClose,
   onSuccess,
   selectedEvent,
-  preselectedChecklist = null,  // ✅ ADDED
+  preselectedChecklist = null,
   templates = [],
   onSaveChecklist,
   onSaveTemplate,
   promptForContext,
   isUserAdmin = false,
+  useQuickAddMode = false,
+  pinnedChecklists = [],
 }) => {
   const { theme, getBorderRadius } = useTheme();
   const editContentRef = useRef(null);
@@ -176,6 +178,8 @@ const AddChecklistToEventModal = ({
                   : null
               }
               templates={templates}
+              useQuickAddMode={useQuickAddMode}
+              pinnedChecklists={pinnedChecklists}
             />
           </View>
         </KeyboardAvoidingView>
