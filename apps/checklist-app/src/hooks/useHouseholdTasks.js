@@ -49,7 +49,13 @@ const useHouseholdTasks = () => {
     });
   };
 
-  return { tasks, categories, saveTask, deleteTask, saveCategory, deleteCategory };
+  const reorderCategories = async (orderedCategories) => {
+    await updateDocument("users", user.userId, {
+      householdTaskCategories: orderedCategories,
+    });
+  };
+
+  return { tasks, categories, saveTask, deleteTask, saveCategory, deleteCategory, reorderCategories };
 };
 
 export default useHouseholdTasks;

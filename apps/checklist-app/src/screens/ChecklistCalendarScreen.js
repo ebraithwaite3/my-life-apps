@@ -416,6 +416,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         addingToEvent={addingToEvent}
         setAddingToEvent={setAddingToEvent}
         setSelectedChecklist={setSelectedChecklist}
+        isDeleting={calendarState.isDeleting}
       />
 
       {/* Shared Event Modal with Checklist Configuration */}

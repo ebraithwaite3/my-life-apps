@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { useSaveInternalEvent } from "../internalCalendarHooks/useSaveInternalEvent";
 import { useSaveToGoogleCalendar } from "../googleCalendarHooks/useSaveToGoogleCalendar";
 import { useNotifications } from "../notificationHooks/useNotifications";
+import { showSuccessToast } from "@my-apps/utils";
 
 /**
  * Remove undefined values from object (Firestore doesn't allow undefined)
@@ -233,7 +234,7 @@ export const useEventCreation = ({ user, db }) => {
             }
           }
 
-          Alert.alert("Success", `Event added to ${calendarName}`);
+          showSuccessToast(`Event added to ${calendarName}`, "", 2000, "top");
           return { success: true, eventId: result.eventId };
         } else {
           Alert.alert("Error", `Failed to save event: ${result.error}`);
@@ -346,7 +347,7 @@ export const useEventCreation = ({ user, db }) => {
             }
           }
 
-          Alert.alert("Success", "Event added to Google Calendar");
+          showSuccessToast("Event added to Google Calendar", "", 2000, "top");
           return { success: true, eventId: result.eventId };
         } else {
           Alert.alert("Error", "Error saving event to Google Calendar.");

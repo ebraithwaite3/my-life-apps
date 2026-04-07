@@ -4,6 +4,7 @@ import { useUpdateInternalEvent } from "../internalCalendarHooks/useUpdateIntern
 import { useUpdateGoogleCalendarEvent } from "../googleCalendarHooks/useUpdateGoogleCalendarEvent";
 import { useDeleteNotification } from "../useDeleteNotification";
 import { useNotifications } from "../notificationHooks/useNotifications";
+import { showSuccessToast } from "@my-apps/utils";
 
 /**
  * Remove undefined values from object
@@ -200,7 +201,7 @@ export const useEventUpdate = ({ user, db }) => {
           }
         
           // ✅ Alert OUTSIDE the if block - always show success
-          Alert.alert("Success", "Event updated successfully");
+          showSuccessToast("Event updated", "", 2000, "top");
           return { success: true, eventId };
         } else {
           Alert.alert("Error", `Failed to update event: ${result.error}`);
@@ -294,7 +295,7 @@ export const useEventUpdate = ({ user, db }) => {
           }
       
           // ✅ Alert OUTSIDE the if block
-          Alert.alert("Success", "Event updated successfully");
+          showSuccessToast("Event updated", "", 2000, "top");
           return { success: true, eventId };
         } else {
           Alert.alert("Error", "Failed to update Google Calendar event");

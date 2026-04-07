@@ -1,17 +1,11 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
 import { useTheme } from "@my-apps/contexts";
 import { Ionicons } from "@expo/vector-icons";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import useMeals from "../../hooks/useMeals";
 import MealEditorModal from "./MealEditorModal";
+import { PageHeader } from "@my-apps/ui";
 
 /**
  * Full-page meals management view (rendered inside PreferencesScreen via currentView).
@@ -29,39 +23,6 @@ const MealsManagementView = ({ onClose }) => {
 
   const styles = StyleSheet.create({
     flex: { flex: 1, backgroundColor: theme.background },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: getSpacing.md,
-      paddingVertical: getSpacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-      backgroundColor: theme.surface,
-    },
-    backButton: {
-      padding: getSpacing.xs,
-      marginRight: getSpacing.sm,
-    },
-    headerTitle: {
-      flex: 1,
-      fontSize: getTypography.h1.fontSize,
-      fontWeight: "700",
-      color: theme.text.primary,
-    },
-    addButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: getSpacing.xs,
-      paddingVertical: getSpacing.sm,
-      paddingHorizontal: getSpacing.md,
-      borderRadius: getBorderRadius.full,
-      backgroundColor: theme.primary,
-    },
-    addButtonText: {
-      fontSize: getTypography.bodySmall.fontSize,
-      fontWeight: "700",
-      color: "#FFFFFF",
-    },
     scrollContent: {
       paddingHorizontal: getSpacing.lg,
       paddingVertical: getSpacing.md,
@@ -113,23 +74,14 @@ const MealsManagementView = ({ onClose }) => {
 
   return (
     <View style={styles.flex}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onClose}>
-          <Ionicons name="chevron-back" size={24} color={theme.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Meals</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            setSelectedMeal(null);
-            setShowEditor(true);
-          }}
-        >
-          <Ionicons name="add" size={16} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>Add Meal</Text>
-        </TouchableOpacity>
-      </View>
+      <PageHeader
+        title="Meals"
+        showBackButton
+        onBackPress={onClose}
+        icons={[
+          { icon: "add", action: () => { setSelectedMeal(null); setShowEditor(true); } },
+        ]}
+      />
 
       {loading ? (
         <View style={styles.emptyContainer}>

@@ -31,6 +31,9 @@ export const useCalendarState = (preferences = {}) => {
   const [showOnlyFilteredActivities, setShowOnlyFilteredActivities] = useState(false);
   const [showDeletedEvents, setShowDeletedEvents] = useState(false); // ← ADD THIS
 
+  // Loading states
+  const [isDeleting, setIsDeleting] = useState(false);
+
   return {
     // View
     selectedView,
@@ -65,5 +68,9 @@ export const useCalendarState = (preferences = {}) => {
     setShowOnlyFilteredActivities,
     showDeletedEvents,        // ← ADD THIS
     setShowDeletedEvents,     // ← ADD THIS
+
+    // Loading
+    isDeleting,
+    setIsDeleting,
   };
 };

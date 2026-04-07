@@ -8,6 +8,7 @@ import { useDeleteNotification } from "../useDeleteNotification";
 import { useNotifications } from "../notificationHooks/useNotifications";
 import { useData } from "@my-apps/contexts";
 import { scheduleBatchNotification } from "@my-apps/services";
+import { showSuccessToast, showErrorToast } from "@my-apps/utils";
 
 /**
  * Remove undefined values from object (Firestore doesn't allow undefined)
@@ -64,6 +65,7 @@ export const useCalendarHandlers = ({
   selectedChecklistEvent,
   selectedEvent,
   updatedItems,
+  setIsDeleting,
 }) => {
   const { allCalendars, adminUserId, groups } = useData();
 
@@ -91,6 +93,7 @@ export const useCalendarHandlers = ({
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            setIsDeleting?.(true);
             try {
               let result;
 
@@ -123,25 +126,18 @@ export const useCalendarHandlers = ({
                   notificationResult.success &&
                   notificationResult.deletedCount > 0
                 ) {
-                  Alert.alert(
-                    "Success",
-                    `Event "${event.title}" deleted successfully.\n${notificationResult.deletedCount} reminder(s) canceled.`
-                  );
+                  showSuccessToast(`"${event.title}" deleted`, `${notificationResult.deletedCount} reminder(s) canceled`, 3000, "top");
                 } else {
-                  Alert.alert(
-                    "Success",
-                    `Event "${event.title}" deleted successfully.`
-                  );
+                  showSuccessToast(`"${event.title}" deleted`, "", 2000, "top");
                 }
               } else {
                 Alert.alert("Error", `Error deleting event: ${result.error}`);
               }
             } catch (error) {
               console.error("Unexpected error deleting event:", error);
-              Alert.alert(
-                "Error",
-                `Unexpected error deleting event: ${error.message}`
-              );
+              Alert.alert("Error", `Unexpected error deleting event: ${error.message}`);
+            } finally {
+              setIsDeleting?.(false);
             }
           },
         },
@@ -230,7 +226,7 @@ export const useCalendarHandlers = ({
       }
 
       if (result.success) {
-        Alert.alert("Success", `Checklist added to "${selectedEvent.title}"`);
+        showSuccessToast(`Checklist added`, `"${selectedEvent.title}"`, 2000, "top");
 
         // Determine if this is a shared event
         let subscribers = [];
@@ -449,7 +445,7 @@ export const useCalendarHandlers = ({
   
       if (result.success) {
         if (!silent) {
-          Alert.alert("Success", `Checklist "${updatedChecklist.name}" updated`);
+          showSuccessToast(`"${updatedChecklist.name}" updated`, "", 2000, "top");
         }
   
         if (wasJustCompleted && updatedChecklist.notifyAdmin) {
@@ -600,7 +596,7 @@ export const useCalendarHandlers = ({
       } else {
         Alert.alert("Error", `Error updating checklist: ${result.error}`);
       }
-  
+
       if (onClose) onClose();
     } catch (error) {
       console.error("Unexpected error updating checklist:", error);
@@ -653,15 +649,9 @@ export const useCalendarHandlers = ({
                   await deleteNotification(notificationId);
                 }
 
-                Alert.alert(
-                  "Success",
-                  `"${activity.name}" deleted successfully`
-                );
+                showSuccessToast(`"${activity.name}" deleted`, "", 2000, "top");
               } else {
-                Alert.alert(
-                  "Error",
-                  `Error deleting checklist: ${result.error}`
-                );
+                Alert.alert("Error", `Error deleting checklist: ${result.error}`);
               }
             } catch (error) {
               console.error("Unexpected error deleting checklist:", error);

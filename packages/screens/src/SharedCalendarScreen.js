@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Alert } from "react-native";
+import { StyleSheet, Alert, View } from "react-native";
+import { LoadingScreen } from "@my-apps/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@my-apps/contexts";
 import { PageHeader, FilterChips } from "@my-apps/ui";
@@ -80,6 +81,9 @@ const SharedCalendarScreen = ({
   // MODAL STATE: To hide button when modals open
   addChecklistModalVisible,
   showChecklistModal,
+
+  // Loading
+  isDeleting = false,
 }) => {
   const { theme } = useTheme();
   const { templates, templatesLoading } = useData();
@@ -484,6 +488,13 @@ const SharedCalendarScreen = ({
         position="bottom-right"
         onPress={handleTodayPress}
       />
+
+      {/* Deleting overlay */}
+      {isDeleting && (
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+          <LoadingScreen message="Deleting event..." icon="🗑️" />
+        </View>
+      )}
     </SafeAreaView>
   );
 };

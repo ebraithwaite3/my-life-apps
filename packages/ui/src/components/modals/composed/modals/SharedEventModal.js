@@ -20,6 +20,7 @@ import { ModalWrapper } from "../../base";
 import { OptionsSelectionModal } from "../pickers";
 import { useAuth } from "@my-apps/contexts";
 import { LoadingScreen } from "../../../general";
+import { showSuccessToast } from "@my-apps/utils";
 import {
   useEventFormState,
   useEventValidation,
@@ -528,10 +529,7 @@ const SharedEventModal = ({
                               context
                             );
                           if (success) {
-                            Alert.alert(
-                              "Success",
-                              `Template "${activity.name}" saved successfully`
-                            );
+                            showSuccessToast(`Template "${activity.name}" saved`, "", 2000, "top");
                           }
                         }
                       );

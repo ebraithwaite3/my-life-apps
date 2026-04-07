@@ -1,15 +1,10 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-} from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
 import useHouseholdTasks from "../../hooks/useHouseholdTasks";
 import HouseholdTaskEditorModal from "./HouseholdTaskEditorModal";
+import { CustomOrderModal, PageHeader } from "@my-apps/ui";
 
 /**
  * Full-page household tasks library management view.
@@ -20,10 +15,11 @@ import HouseholdTaskEditorModal from "./HouseholdTaskEditorModal";
  */
 const HouseholdTasksManagementView = ({ onClose }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  const { tasks, categories } = useHouseholdTasks();
+  const { tasks, categories, reorderCategories } = useHouseholdTasks();
 
   const [showEditor, setShowEditor] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [showReorderCategories, setShowReorderCategories] = useState(false);
 
   const grouped = categories.reduce((acc, cat) => {
     acc[cat] = tasks.filter((t) => t.category === cat);
@@ -35,39 +31,6 @@ const HouseholdTasksManagementView = ({ onClose }) => {
 
   const styles = StyleSheet.create({
     flex: { flex: 1, backgroundColor: theme.background },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: getSpacing.md,
-      paddingVertical: getSpacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-      backgroundColor: theme.surface,
-    },
-    backButton: {
-      padding: getSpacing.xs,
-      marginRight: getSpacing.sm,
-    },
-    headerTitle: {
-      flex: 1,
-      fontSize: getTypography.h1.fontSize,
-      fontWeight: "700",
-      color: theme.text.primary,
-    },
-    addButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: getSpacing.xs,
-      paddingVertical: getSpacing.sm,
-      paddingHorizontal: getSpacing.md,
-      borderRadius: getBorderRadius.full,
-      backgroundColor: theme.primary,
-    },
-    addButtonText: {
-      fontSize: getTypography.bodySmall.fontSize,
-      fontWeight: "700",
-      color: "#FFFFFF",
-    },
     scrollContent: {
       paddingHorizontal: getSpacing.lg,
       paddingVertical: getSpacing.md,
@@ -141,22 +104,15 @@ const HouseholdTasksManagementView = ({ onClose }) => {
 
   return (
     <View style={styles.flex}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onClose}>
-          <Ionicons name="chevron-back" size={24} color={theme.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Task Library</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            setSelectedTask(null);
-            setShowEditor(true);
-          }}
-        >
-          <Ionicons name="add" size={16} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>Add Task</Text>
-        </TouchableOpacity>
-      </View>
+      <PageHeader
+        title="Task Library"
+        showBackButton
+        onBackPress={onClose}
+        icons={[
+          ...(categories.length > 1 ? [{ icon: "reorder-three-outline", action: () => setShowReorderCategories(true) }] : []),
+          { icon: "add", action: () => { setSelectedTask(null); setShowEditor(true); } },
+        ]}
+      />
 
       {tasks.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -193,6 +149,19 @@ const HouseholdTasksManagementView = ({ onClose }) => {
           setShowEditor(false);
           setSelectedTask(null);
         }}
+      />
+
+      <CustomOrderModal
+        visible={showReorderCategories}
+        title="Reorder Categories"
+        items={categories.map((cat) => ({ name: cat }))}
+        keyExtractor={(item) => item.name}
+        getItemName={(item) => item.name}
+        onSave={(orderedItems) => {
+          reorderCategories(orderedItems.map((item) => item.name));
+          setShowReorderCategories(false);
+        }}
+        onClose={() => setShowReorderCategories(false)}
       />
     </View>
   );
