@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 
@@ -124,6 +124,10 @@ const handlePress = () => {
       color: theme.text.tertiary,
       textDecorationLine: 'line-through',
     },
+    itemTextLink: {
+      color: theme.primary,
+      textDecorationLine: 'underline',
+    },
     screenTimeIcon: {
       padding: getSpacing.xs,
       borderRadius: getBorderRadius.sm,
@@ -217,14 +221,35 @@ const handlePress = () => {
             )}
 
             <View style={styles.itemTextContainer}>
-              <Text
-                style={[
-                  styles.itemText,
-                  item.completed && !selectionMode && styles.itemTextCompleted,
-                ]}
-              >
-                {displayText}
-              </Text>
+              {item.link && !selectionMode ? (
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation(); Linking.openURL(item.link); }}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <Text
+                    style={[
+                      styles.itemText,
+                      styles.itemTextLink,
+                      item.completed && styles.itemTextCompleted,
+                    ]}
+                  >
+                    {displayText}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text
+                  style={[
+                    styles.itemText,
+                    item.completed && !selectionMode && styles.itemTextCompleted,
+                  ]}
+                >
+                  {displayText}
+                </Text>
+              )}
+
+              {!selectionMode && item.link && (
+                <Ionicons name="link-outline" size={14} color={theme.primary} />
+              )}
 
               {/* ✅ Show checkmark for completed items in selection mode */}
               {selectionMode && item.completed && (
@@ -299,7 +324,19 @@ const handlePress = () => {
       <View style={styles.itemRow}>
         <View style={styles.rowContent}>
           <View style={styles.itemTextContainer}>
-            <Text style={styles.itemText}>{item.name}</Text>
+            {item.link ? (
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation(); Linking.openURL(item.link); }}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              >
+                <Text style={[styles.itemText, styles.itemTextLink]}>{item.name}</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.itemText}>{item.name}</Text>
+            )}
+            {item.link && (
+              <Ionicons name="link-outline" size={14} color={theme.primary} />
+            )}
             {item.requiredForScreenTime && (
               <View style={styles.screenTimeIcon}>
                 <Ionicons name="phone-portrait" size={16} color={theme.primary} />
@@ -364,14 +401,35 @@ const handlePress = () => {
         )}
 
         <View style={styles.itemTextContainer}>
-          <Text
-            style={[
-              styles.itemText,
-              item.completed && !selectionMode && styles.itemTextCompleted,
-            ]}
-          >
-            {displayText}
-          </Text>
+          {item.link && !selectionMode ? (
+            <TouchableOpacity
+              onPress={(e) => { e.stopPropagation(); Linking.openURL(item.link); }}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            >
+              <Text
+                style={[
+                  styles.itemText,
+                  styles.itemTextLink,
+                  item.completed && styles.itemTextCompleted,
+                ]}
+              >
+                {displayText}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <Text
+              style={[
+                styles.itemText,
+                item.completed && !selectionMode && styles.itemTextCompleted,
+              ]}
+            >
+              {displayText}
+            </Text>
+          )}
+
+          {!selectionMode && item.link && (
+            <Ionicons name="link-outline" size={14} color={theme.primary} />
+          )}
 
           {/* ✅ Show checkmark for completed items in selection mode */}
           {selectionMode && item.completed && (
