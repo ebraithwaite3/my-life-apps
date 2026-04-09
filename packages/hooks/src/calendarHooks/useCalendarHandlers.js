@@ -510,21 +510,33 @@ export const useCalendarHandlers = ({
           selectedChecklist.reminderMinutes !== updatedChecklist.reminderMinutes
         );
   
-        // Check if reminder is recurring
-        const isRecurringReminder = eventRef.reminder?.isRecurring === true;
-  
+        // Check if reminder is recurring — read from the checklist, not the event
+        const checklistReminder = eventRef.isAllDay
+          ? updatedChecklist.reminderTime
+          : updatedChecklist.reminderMinutes;
+
+        const isRecurringReminder = checklistReminder?.isRecurring === true;
+        const completedCancelsRecurring =
+          checklistReminder?.recurringConfig?.completedCancelsRecurring ?? true;
+
         // Only delete/reschedule based on specific conditions
         if (reminderRemoved) {
           console.log('🗑️ Reminder removed - deleting notifications');
           const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
           await deleteNotification(notificationId);
         } else if (wasJustCompleted && !isRecurringReminder) {
-          // Only delete on completion if reminder is NOT recurring
+          // Non-recurring reminder — delete on completion
           console.log('🗑️ Checklist completed (non-recurring reminder) - deleting notifications');
           const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
           await deleteNotification(notificationId);
-        } else if (wasJustCompleted && isRecurringReminder) {
-          console.log('✅ Checklist completed but reminder is recurring - keeping notifications');
+        } else if (wasJustCompleted && isRecurringReminder && completedCancelsRecurring) {
+          // Recurring but configured to cancel on completion — delete remaining
+          console.log('🗑️ Checklist completed (recurring, completedCancelsRecurring=true) - deleting remaining notifications');
+          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
+          await deleteNotification(notificationId);
+        } else if (wasJustCompleted && isRecurringReminder && !completedCancelsRecurring) {
+          // Recurring, explicitly configured to keep going — leave notifications alone
+          console.log('✅ Checklist completed but reminder is recurring with completedCancelsRecurring=false - keeping notifications');
         } else if (reminderChanged) {
           console.log('⏰ Reminder settings changed, rescheduling...');
           

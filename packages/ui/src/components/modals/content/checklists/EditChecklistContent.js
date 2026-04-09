@@ -76,6 +76,7 @@ const EditChecklistContent = forwardRef(
       initialReminder,
       useQuickAddMode = false,
       pinnedChecklists = [],
+      carryoverItems = [],
     },
     ref
   ) => {
@@ -99,7 +100,8 @@ const EditChecklistContent = forwardRef(
       checklist,
       prefilledTitle,
       isTemplate,
-      isEditing
+      isEditing,
+      carryoverItems
     );
     const itemsHook = useChecklistItems(
       formState.getInitialItems(),

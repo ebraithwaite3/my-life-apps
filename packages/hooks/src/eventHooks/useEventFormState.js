@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { DateTime } from "luxon";
 import { useData } from "@my-apps/contexts";
 
+
 const getStartOfDay = (date = null) =>
   (date ? DateTime.fromJSDate(date) : DateTime.local())
     .startOf("day")
@@ -65,7 +66,7 @@ export const useEventFormState = ({
   userPreferences = {},
 }) => {
   //console.log("Groups in useEventFormState:", groups);
-  const { allCalendars: fullCalendars } = useData();
+  const { allCalendars: fullCalendars, getActivitiesForDay } = useData();
 
   const isEditing = event !== null;
 
@@ -112,6 +113,7 @@ export const useEventFormState = ({
 
   // Form state
   const [title, setTitle] = useState(defaultTitle);
+  const [carryoverItems, setCarryoverItems] = useState([]);
   const [isAllDay, setIsAllDay] = useState(false);
   const [startDate, setStartDate] = useState(getRoundedToNearestHalfHour);
   const [endDate, setEndDate] = useState(getOneHourAfterRounded);
@@ -263,6 +265,46 @@ export const useEventFormState = ({
     }
   };
 
+  // "To Do" title auto-behavior
+  const handleTitleChange = (text) => {
+    setTitle(text);
+    if (text.trim().toLowerCase() === 'to do') {
+      setSelectedCalendarId('internal');
+      setIsAllDay(true);
+      const eventDay = DateTime.fromJSDate(startDate);
+      const firstReminder = eventDay.set({ hour: 17, minute: 0, second: 0, millisecond: 0 });
+      const reminderISO = firstReminder.toISO();
+      setReminderMinutes({
+        scheduledFor: reminderISO,
+        isRecurring: true,
+        recurringConfig: {
+          intervalSeconds: 3600,
+          totalOccurrences: 5,
+          currentOccurrence: 1,
+          completedCancelsRecurring: true,
+          nextScheduledFor: reminderISO,
+          lastSentAt: null,
+        },
+      });
+
+      // Compute carryover from yesterday's To Do checklist
+      const yesterday = eventDay.minus({ days: 1 }).toISODate();
+      console.log('[CARRYOVER] handleTitleChange — looking up yesterday:', yesterday);
+      const yesterdayActivities = getActivitiesForDay(yesterday);
+      console.log('[CARRYOVER] yesterdayActivities count:', yesterdayActivities.length, yesterdayActivities.map(a => ({ title: a.title, eventId: a.eventId })));
+      const yesterdayToDo = yesterdayActivities.find(
+        a => a.title?.trim().toLowerCase() === 'to do'
+      );
+      console.log('[CARRYOVER] yesterdayToDo:', yesterdayToDo ? { title: yesterdayToDo.title, activitiesCount: yesterdayToDo.activities?.length } : 'NOT FOUND');
+      const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
+      const incomplete = checklistActivity?.items?.filter(i => !i.completed) ?? [];
+      console.log('[CARRYOVER] incomplete items:', incomplete.length, incomplete.map(i => i.name));
+      setCarryoverItems(incomplete);
+    } else {
+      setCarryoverItems([]);
+    }
+  };
+
   // Calendar selector
   const handleCalendarSelect = (option) => {
     setSelectedCalendarId(option.value);
@@ -299,6 +341,8 @@ export const useEventFormState = ({
     // Form state
     title,
     setTitle,
+    handleTitleChange,
+    carryoverItems,
     isAllDay,
     setIsAllDay,
     startDate,

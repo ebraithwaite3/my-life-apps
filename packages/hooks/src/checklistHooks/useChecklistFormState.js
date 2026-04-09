@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Crypto from 'expo-crypto';
 
-export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isEditing) => {
+export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isEditing, carryoverItems = []) => {
   const uuidv4 = () => Crypto.randomUUID();
   
   const [checklistName, setChecklistName] = useState(prefilledTitle);
@@ -63,6 +63,30 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
         },
       ];
     } else {
+      console.log('[CARRYOVER] getInitialItems called, carryoverItems:', carryoverItems.length, carryoverItems.map(i => i.name));
+      if (carryoverItems.length > 0) {
+        const carried = carryoverItems.map(item => ({
+          id: uuidv4(),
+          name: item.name || "",
+          completed: false,
+          itemType: item.itemType || "checkbox",
+          requiredForScreenTime: item.requiredForScreenTime ?? false,
+          requiresParentApproval: item.requiresParentApproval ?? false,
+          yesNoConfig: item.yesNoConfig || null,
+          subItems: (item.subItems || []).map(sub => ({
+            ...sub,
+            id: uuidv4(),
+            completed: false,
+          })),
+          parentId: null,
+          ...(item.sourceChecklistId && { sourceChecklistId: item.sourceChecklistId }),
+          ...(item.sourceItemId && { sourceItemId: item.sourceItemId }),
+        }));
+        return [
+          ...carried,
+          { id: uuidv4(), name: "", completed: false, itemType: "checkbox", subItems: [] },
+        ];
+      }
       return [
         {
           id: uuidv4(),

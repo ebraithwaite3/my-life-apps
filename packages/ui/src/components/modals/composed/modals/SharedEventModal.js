@@ -362,7 +362,7 @@ const SharedEventModal = ({
                     label="Title"
                     placeholder="Event title"
                     value={formState.title}
-                    onChangeText={formState.setTitle}
+                    onChangeText={formState.handleTitleChange}
                     autoCapitalize="words"
                   />
 
@@ -512,6 +512,7 @@ const SharedEventModal = ({
                 <EditorComponent
                   ref={(ref) => (editorRefs.current[activityConfig.type] = ref)}
                   checklist={activityConfig.selectedActivity}
+                  carryoverItems={activityConfig.selectedActivity ? [] : formState.carryoverItems}
                   onSave={(activity, shouldSaveAsTemplate) => {
                     // Save the activity
                     activityConfig.onSelectActivity(activity);

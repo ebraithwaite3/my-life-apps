@@ -19,6 +19,7 @@ import {
   useUpdateInternalActivities,
 } from "@my-apps/hooks";
 import { Alert } from "react-native";
+import { DateTime } from "luxon";
 
 /**
  * ChecklistCalendarScreen - Complete with all features
@@ -100,6 +101,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   console.log("🔍 Calendar screen allPinned length:", allPinned?.length);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [selectedCalendarIdForMoving, setSelectedCalendarIdForMoving] = useState(null);
+  const [carryoverItems, setCarryoverItems] = useState([]);
   const pendingDeepLink = useRef(null);
 
   useEffect(() => {
@@ -223,6 +225,27 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   // Handles Add Activity button press
   // If theres addingToEvent, it pre-populates the checklist otherwise normal flow
   const handleAddActivity = (event) => {
+    // Compute carryover items from yesterday's To Do checklist.
+    // Use getActivitiesForDay (live activities collection) not getEventsForDay
+    // (which embeds a stale snapshot of activities at event-creation time).
+    if (event.title?.trim().toLowerCase() === 'to do') {
+      const yesterday = DateTime.fromISO(selectedDate).minus({ days: 1 }).toISODate();
+      console.log('[CARRYOVER] selectedDate:', selectedDate, '→ yesterday:', yesterday);
+      const yesterdayActivities = getActivitiesForDay(yesterday);
+      console.log('[CARRYOVER] yesterdayActivities count:', yesterdayActivities.length, yesterdayActivities.map(a => ({ title: a.title, eventId: a.eventId })));
+      const yesterdayToDo = yesterdayActivities.find(
+        a => a.title?.trim().toLowerCase() === 'to do'
+      );
+      console.log('[CARRYOVER] yesterdayToDo:', yesterdayToDo ? { title: yesterdayToDo.title, activitiesCount: yesterdayToDo.activities?.length } : 'NOT FOUND');
+      const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
+      console.log('[CARRYOVER] checklistActivity:', checklistActivity ? { itemCount: checklistActivity.items?.length, items: checklistActivity.items?.map(i => ({ name: i.name, completed: i.completed })) } : 'NOT FOUND');
+      const incomplete = checklistActivity?.items?.filter(i => !i.completed) ?? [];
+      console.log('[CARRYOVER] incomplete items to carry:', incomplete.length, incomplete.map(i => i.name));
+      setCarryoverItems(incomplete);
+    } else {
+      setCarryoverItems([]);
+    }
+
     if (addingToEvent.isActive) {
       // Create pre-populated checklist from items being moved
       const checklist = {
@@ -495,7 +518,9 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
           calendarState.setAddChecklistModalVisible(false);
           calendarState.setSelectedEvent(null);
           setSelectedChecklist(null);
+          setCarryoverItems([]);
         }}
+        carryoverItems={carryoverItems}
         onSuccess={handleEventSuccess}
         selectedEvent={calendarState.selectedEvent}
         preselectedChecklist={selectedChecklist}

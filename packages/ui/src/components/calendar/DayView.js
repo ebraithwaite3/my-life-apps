@@ -1,5 +1,5 @@
 import React, { useRef, useMemo } from "react";
-import { View, ScrollView, StyleSheet, PanResponder } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, PanResponder, Alert } from "react-native";
 import { useTheme } from "@my-apps/contexts";
 import EventCard from "./EventCard";
 
@@ -24,7 +24,7 @@ const DayView = ({
   onSwipeRight, // ← Previous day
   navigation,
 }) => {
-  const { theme, getSpacing } = useTheme();
+  const { theme, getSpacing, getBorderRadius } = useTheme();
   const scrollViewRef = useRef(null);
   console.log("Events in DayView:", events);
 
@@ -37,6 +37,21 @@ const DayView = ({
     });
   }, [events]);
   console.log("Sorted Events in DayView:", sortedEvents);
+
+  // Split To Do events (checklist app only) from regular events
+  const { todoEvents, regularEvents } = useMemo(() => {
+    if (appName !== 'checklist') return { todoEvents: [], regularEvents: sortedEvents };
+    const todoEvents = [];
+    const regularEvents = [];
+    sortedEvents.forEach(event => {
+      if (event.title?.trim().toLowerCase() === 'to do') {
+        todoEvents.push(event);
+      } else {
+        regularEvents.push(event);
+      }
+    });
+    return { todoEvents, regularEvents };
+  }, [sortedEvents, appName]);
 
   // Swipe gesture handler
   const panResponder = useMemo(() => PanResponder.create({
@@ -68,6 +83,22 @@ const DayView = ({
       paddingTop: getSpacing.md,
       paddingBottom: getSpacing.xl * 2,
     },
+    todoBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${theme.primary}18`,
+      borderRadius: getBorderRadius.md,
+      borderWidth: 1,
+      borderColor: `${theme.primary}40`,
+      paddingVertical: getSpacing.sm,
+      paddingHorizontal: getSpacing.md,
+      marginBottom: getSpacing.md,
+    },
+    todoBannerText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.primary,
+    },
   });
 
   return (
@@ -78,7 +109,35 @@ const DayView = ({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {sortedEvents.map((event, index) => (
+        {todoEvents.map(event => {
+          const checklistActivity = event.activities?.find(a => a.activityType === 'checklist');
+          if (!checklistActivity) return null;
+          const total = checklistActivity.items?.length ?? 0;
+          const completed = checklistActivity.items?.filter(i => i.completed).length ?? 0;
+          return (
+            <TouchableOpacity
+              key={event.eventId}
+              style={styles.todoBanner}
+              onPress={() => onActivityPress(checklistActivity, event)}
+              onLongPress={() => {
+                Alert.alert(
+                  'Delete To Do',
+                  'Are you sure you want to delete this To Do event?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => onDeleteEvent(event) },
+                  ]
+                );
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.todoBannerText}>
+                {`☑️ To Do — ${completed} of ${total} complete`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        {regularEvents.map((event, index) => (
           <EventCard
             key={`${event.eventId}-${index}`}
             appName={appName}
