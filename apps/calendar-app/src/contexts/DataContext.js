@@ -86,7 +86,7 @@ export const DataProvider = ({ children }) => {
         authUser.uid,
         (userData) => {
           if (userData) {
-            console.log("👤 User data updated - userId:", userData.userId);
+            //console.log("👤 User data updated - userId:", userData.userId);
             setUser(userData);
           } else {
             console.warn(

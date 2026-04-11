@@ -9,7 +9,10 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  TextInput,
+  Switch,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 import { PopUpModalWrapper } from '../../base';
 import ModalHeader from '../../../headers/ModalHeader';
@@ -30,7 +33,9 @@ const ChecklistItemConfigModal = ({
   const [requiresParentApproval, setRequiresParentApproval] = useState(false);
   const [yesNoType, setYesNoType] = useState('simple');
   const [options, setOptions] = useState([]);
-  
+  const [guidedSteps, setGuidedSteps] = useState([]);
+  const [quantityLabel, setQuantityLabel] = useState('');
+
   const inputRefs = useRef({});
 
   useEffect(() => {
@@ -47,9 +52,13 @@ const ChecklistItemConfigModal = ({
             name: opt,
           }))
         );
+        setGuidedSteps(item.yesNoConfig.steps || []);
+        setQuantityLabel(item.yesNoConfig.quantityLabel || '');
       } else {
         setYesNoType('simple');
         setOptions([]);
+        setGuidedSteps([]);
+        setQuantityLabel('');
       }
     }
   }, [item, visible]);
@@ -67,6 +76,17 @@ const ChecklistItemConfigModal = ({
         type: yesNoType,
         ...(yesNoType === 'multiChoice' && {
           options: options.map(opt => opt.name).filter(name => name.trim() !== ''),
+        }),
+        ...(yesNoType === 'guided' && {
+          ...(quantityLabel.trim() && { quantityLabel: quantityLabel.trim() }),
+          steps: guidedSteps
+            .filter(s => s.name.trim() !== '')
+            .map(s => ({
+              id: s.id,
+              name: s.name.trim(),
+              hasTimer: s.hasTimer || false,
+              ...(s.hasTimer && { timerMinutes: s.timerMinutes || 30 }),
+            })),
         }),
       };
     } else {
@@ -87,6 +107,8 @@ const ChecklistItemConfigModal = ({
     setRequiresParentApproval(item?.requiresParentApproval || false);
     setYesNoType(item?.yesNoConfig?.type || 'simple');
     setOptions([]);
+    setGuidedSteps(item?.yesNoConfig?.steps || []);
+    setQuantityLabel(item?.yesNoConfig?.quantityLabel || '');
     onCancel();
   };
 
@@ -114,12 +136,42 @@ const ChecklistItemConfigModal = ({
     const allIds = options.map(opt => opt.id);
     const currentIndex = allIds.indexOf(currentId);
     const nextId = allIds[currentIndex + 1];
-    
+
     if (nextId && inputRefs.current[nextId]) {
       inputRefs.current[nextId].focus();
     } else {
       addOption();
     }
+  };
+
+  // Guided step helpers
+  const addStep = () => {
+    setGuidedSteps(prev => [
+      ...prev,
+      { id: Crypto.randomUUID(), name: '', hasTimer: false, timerMinutes: 30 },
+    ]);
+  };
+
+  const updateStep = (id, field, value) => {
+    setGuidedSteps(prev =>
+      prev.map(s => s.id === id ? { ...s, [field]: value } : s)
+    );
+  };
+
+  const removeStep = (id) => {
+    setGuidedSteps(prev => prev.filter(s => s.id !== id));
+  };
+
+  const moveStep = (id, direction) => {
+    setGuidedSteps(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      if (idx === -1) return prev;
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+      return next;
+    });
   };
 
   const styles = StyleSheet.create({
@@ -236,6 +288,79 @@ const ChecklistItemConfigModal = ({
     },
     indentedRow: {
       paddingLeft: getSpacing.lg,
+    },
+    stepCard: {
+      backgroundColor: theme.background,
+      borderRadius: getBorderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: getSpacing.md,
+      marginBottom: getSpacing.sm,
+    },
+    stepRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: getSpacing.sm,
+    },
+    stepInput: {
+      flex: 1,
+      fontSize: getTypography.body.fontSize,
+      color: theme.text.primary,
+      backgroundColor: theme.surface,
+      borderRadius: getBorderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: getSpacing.md,
+      paddingVertical: getSpacing.sm,
+    },
+    stepReorderBtn: {
+      padding: getSpacing.xs,
+    },
+    stepDeleteBtn: {
+      padding: getSpacing.xs,
+    },
+    timerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: getSpacing.sm,
+      gap: getSpacing.sm,
+    },
+    timerLabel: {
+      fontSize: getTypography.caption.fontSize,
+      color: theme.text.secondary,
+      flex: 1,
+    },
+    timerMinutesInput: {
+      fontSize: getTypography.body.fontSize,
+      color: theme.text.primary,
+      backgroundColor: theme.surface,
+      borderRadius: getBorderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: getSpacing.md,
+      paddingVertical: getSpacing.xs,
+      textAlign: 'center',
+      minWidth: 56,
+    },
+    timerMinutesLabel: {
+      fontSize: getTypography.caption.fontSize,
+      color: theme.text.secondary,
+    },
+    quantityInput: {
+      fontSize: getTypography.body.fontSize,
+      color: theme.text.primary,
+      backgroundColor: theme.surface,
+      borderRadius: getBorderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: getSpacing.md,
+      paddingVertical: getSpacing.sm,
+      marginBottom: getSpacing.md,
+    },
+    quantityHint: {
+      fontSize: getTypography.caption.fontSize,
+      color: theme.text.tertiary,
+      marginBottom: getSpacing.md,
     },
   });
 
@@ -384,6 +509,28 @@ const ChecklistItemConfigModal = ({
                       </Text>
                     </View>
                   </TouchableOpacity>
+
+                  {/* Guided Workflow */}
+                  <TouchableOpacity
+                    style={[
+                      styles.radioOption,
+                      yesNoType === 'guided' && styles.radioOptionSelected,
+                    ]}
+                    onPress={() => setYesNoType('guided')}
+                  >
+                    <View style={[
+                      styles.radioCircle,
+                      yesNoType === 'guided' && styles.radioCircleSelected,
+                    ]}>
+                      {yesNoType === 'guided' && <View style={styles.radioCircleInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.radioLabel}>Guided Workflow</Text>
+                      <Text style={styles.radioDescription}>
+                        Step-by-step tasks, optionally repeated N times
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
 
                 {/* OPTIONS EDITOR (only for multiChoice) */}
@@ -412,6 +559,100 @@ const ChecklistItemConfigModal = ({
                     ))}
                     <TouchableOpacity style={styles.addButton} onPress={addOption}>
                       <Text style={styles.addButtonText}>+ Add Option</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* GUIDED WORKFLOW STEP BUILDER */}
+                {yesNoType === 'guided' && (
+                  <View style={{ marginTop: getSpacing.lg }}>
+                    <Text style={styles.subSectionTitle}>Quantity Prompt (optional)</Text>
+                    <TextInput
+                      style={styles.quantityInput}
+                      value={quantityLabel}
+                      onChangeText={setQuantityLabel}
+                      placeholder="e.g. How many loads?"
+                      placeholderTextColor={theme.text.tertiary}
+                    />
+                    <Text style={styles.quantityHint}>
+                      Leave blank to run steps once with no quantity prompt.
+                    </Text>
+
+                    <Text style={styles.subSectionTitle}>Steps</Text>
+                    {guidedSteps.map((step, index) => (
+                      <View key={step.id} style={styles.stepCard}>
+                        <View style={styles.stepRow}>
+                          {/* Reorder buttons */}
+                          <View style={{ gap: 2 }}>
+                            <TouchableOpacity
+                              style={styles.stepReorderBtn}
+                              onPress={() => moveStep(step.id, 'up')}
+                              disabled={index === 0}
+                            >
+                              <Ionicons
+                                name="chevron-up"
+                                size={16}
+                                color={index === 0 ? theme.text.tertiary : theme.text.secondary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.stepReorderBtn}
+                              onPress={() => moveStep(step.id, 'down')}
+                              disabled={index === guidedSteps.length - 1}
+                            >
+                              <Ionicons
+                                name="chevron-down"
+                                size={16}
+                                color={index === guidedSteps.length - 1 ? theme.text.tertiary : theme.text.secondary}
+                              />
+                            </TouchableOpacity>
+                          </View>
+
+                          <TextInput
+                            style={styles.stepInput}
+                            value={step.name}
+                            onChangeText={val => updateStep(step.id, 'name', val)}
+                            placeholder={`Step ${index + 1} name`}
+                            placeholderTextColor={theme.text.tertiary}
+                          />
+
+                          <TouchableOpacity
+                            style={styles.stepDeleteBtn}
+                            onPress={() => removeStep(step.id)}
+                          >
+                            <Ionicons name="trash-outline" size={18} color={theme.error} />
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.timerRow}>
+                          <Text style={styles.timerLabel}>Has timer</Text>
+                          <Switch
+                            value={step.hasTimer}
+                            onValueChange={val => updateStep(step.id, 'hasTimer', val)}
+                            trackColor={{ false: theme.border, true: theme.primary + '80' }}
+                            thumbColor={step.hasTimer ? theme.primary : theme.text.tertiary}
+                          />
+                          {step.hasTimer && (
+                            <>
+                              <TextInput
+                                style={styles.timerMinutesInput}
+                                value={String(step.timerMinutes || 30)}
+                                onChangeText={val => {
+                                  const n = parseInt(val, 10);
+                                  updateStep(step.id, 'timerMinutes', isNaN(n) ? 0 : n);
+                                }}
+                                keyboardType="number-pad"
+                                selectTextOnFocus
+                              />
+                              <Text style={styles.timerMinutesLabel}>min</Text>
+                            </>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+
+                    <TouchableOpacity style={styles.addButton} onPress={addStep}>
+                      <Text style={styles.addButtonText}>+ Add Step</Text>
                     </TouchableOpacity>
                   </View>
                 )}

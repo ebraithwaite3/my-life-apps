@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
+import GuidedStepTimer from '../timers/GuidedStepTimer';
 
 const ChecklistItemRow = ({ 
   item, 
@@ -26,20 +27,21 @@ const ChecklistItemRow = ({
   const answer = yesNoConfig.answer;
   const isMultiChoice = isYesNo && yesNoConfig.type === 'multiChoice';
   const isFillIn = isYesNo && yesNoConfig.type === 'fillIn';
+  const isGuided = isYesNo && yesNoConfig.type === 'guided';
 
-  // For groups AND answered multiChoice/fillIn, calculate completion
+  // For groups AND answered multiChoice/fillIn/guided, calculate completion
   const subItems = item.subItems || [];
   const completedSubItems = subItems.filter(sub => sub.completed).length;
   const allSubItemsComplete = subItems.length > 0 && completedSubItems === subItems.length;
 
-  // MultiChoice/FillIn answered "yes" with subItems should behave like a group
-  const shouldRenderAsGroup = (isGroup || ((isMultiChoice || isFillIn) && isAnswered && answer === 'yes')) && !isSubItem;
+  // MultiChoice/FillIn/Guided answered "yes" with subItems should behave like a group
+  const shouldRenderAsGroup = (isGroup || ((isMultiChoice || isFillIn || isGuided) && isAnswered && answer === 'yes')) && !isSubItem;
 
   // Determine display text
   let displayText = item.name;
   if (isAnswered && answer === 'no') {
     displayText = `${item.name} - No`;
-  } else if ((isGroup || ((isMultiChoice || isFillIn) && isAnswered)) && subItems.length > 0) {
+  } else if ((isGroup || ((isMultiChoice || isFillIn || isGuided) && isAnswered)) && subItems.length > 0) {
     displayText = `${item.name} (${completedSubItems}/${subItems.length})`;
   }
 
@@ -264,8 +266,8 @@ const handlePress = () => {
                 </View>
               )}
 
-              {/* Reset button for multiChoice/fillIn (hide in selection mode) */}
-              {!selectionMode && (isMultiChoice || isFillIn) && onResetYesNo && (
+              {/* Reset button for multiChoice/fillIn/guided (hide in selection mode) */}
+              {!selectionMode && (isMultiChoice || isFillIn || isGuided) && onResetYesNo && (
                 <TouchableOpacity
                   style={styles.resetButton}
                   onPress={(e) => {
@@ -298,6 +300,15 @@ const handlePress = () => {
               isMoveable={isMoveable}
               selectedItems={selectedItems}
             />
+            {/* Timer for guided steps with hasTimer */}
+            {isGuided && subItem.hasTimer && !selectionMode && (
+              <GuidedStepTimer
+                timerMinutes={subItem.timerMinutes || 30}
+                stepName={subItem.name}
+                stepId={subItem.id}
+                completed={subItem.completed}
+              />
+            )}
           </View>
         ))}
       </View>

@@ -179,6 +179,10 @@ const EditChecklistContent = forwardRef(
     }, []);
 
     useEffect(() => {
+      console.log('[EditChecklist] mount — carryoverItems:', carryoverItems.length);
+    }, []);
+
+    useEffect(() => {
       if (wasJustCompleted) {
         console.log("🎉 Checklist just completed!");
         const stats = getChecklistStats(currentChecklist.items);

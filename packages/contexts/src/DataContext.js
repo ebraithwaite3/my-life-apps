@@ -127,7 +127,7 @@ export const DataProvider = ({ children }) => {
   } = useStandAloneReminders(db, user?.userId, user?.admin);
   console.log("📬 Reminders:", reminders, "Loading:", remindersLoading);
 
-  console.log("👤 User:", user?.userId, "Loading:", loading, "Full User", user);
+  //console.log("👤 User:", user?.userId, "Loading:", loading, "Full User", user);
   if (userError) console.error("❌ User error:", userError);
 
   if (messagesError) console.error("❌ Messages error:", messagesError);

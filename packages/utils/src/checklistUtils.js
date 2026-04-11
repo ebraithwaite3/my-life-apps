@@ -30,7 +30,8 @@ export const calculateChecklistProgress = (items) => {
       item.itemType === "group" ||
       (item.itemType === "yesNo" &&
         (item.yesNoConfig?.type === "multiChoice" ||
-          item.yesNoConfig?.type === "fillIn"));
+          item.yesNoConfig?.type === "fillIn" ||
+          item.yesNoConfig?.type === "guided"));
 
     if (hasSubItems && isGroupOrMultiOrFill) {
       // For groups, multiChoice, and fillIn, count sub-items instead of parent

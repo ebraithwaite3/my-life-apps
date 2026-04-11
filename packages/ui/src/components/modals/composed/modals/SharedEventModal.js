@@ -27,6 +27,7 @@ import {
   useEventCreation,
   useEventUpdate,
 } from "@my-apps/hooks";
+import ScheduleWorkoutModal from "./ScheduleWorkoutModal";
 
 /**
  * SharedEventModal - Universal event creation/editing modal
@@ -139,7 +140,31 @@ const SharedEventModal = ({
           createdAt: Date.now(),
         };
 
+    // For To Do events: merge yesterday's incomplete items not already in template
+    const isToDo = formState.title?.trim().toLowerCase().includes('to do');
+    if (isToDo && formState.carryoverItems?.length > 0) {
+      const templateNames = new Set(
+        (newActivity.items || []).map((item) => (item.name || '').trim().toLowerCase())
+      );
+      const carryoverToMerge = formState.carryoverItems
+        .filter((item) => !templateNames.has((item.name || '').trim().toLowerCase()))
+        .map((item) => ({
+          ...item,
+          id: `carryover_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          completed: false,
+        }));
+      console.log('[SharedEventModal] Merging carryover into template — raw:', formState.carryoverItems.length, '| filtered:', carryoverToMerge.length, carryoverToMerge.map(i => i.name));
+      newActivity.items = [...(newActivity.items || []), ...carryoverToMerge];
+    } else {
+      console.log('[SharedEventModal] No carryover merge — isToDo:', isToDo, '| carryoverItems:', formState.carryoverItems?.length);
+    }
+
     activityConfig.onSelectActivity(newActivity);
+
+    // For To Do events: navigate straight into the editor so user sees template + carryover
+    if (isToDo) {
+      formState.setCurrentScreen(activityConfig.type);
+    }
 
     // ✅ Set reminder from template if provided (with recurring config)
     if (template.defaultReminderTime) {
@@ -546,6 +571,12 @@ const SharedEventModal = ({
           </View>
         );
       })}
+
+      <ScheduleWorkoutModal
+        visible={formState.showWorkoutModal}
+        onClose={() => formState.setShowWorkoutModal(false)}
+        eventDate={formState.startDate}
+      />
     </ModalWrapper>
   );
 };

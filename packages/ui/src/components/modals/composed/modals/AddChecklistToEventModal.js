@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -34,12 +34,20 @@ const AddChecklistToEventModal = ({
   const { theme, getBorderRadius } = useTheme();
   const editContentRef = useRef(null);
 
+  const isToDoEvent = selectedEvent?.title?.trim().toLowerCase().includes('to do');
+
+  useEffect(() => {
+    if (visible) {
+      console.log('[AddChecklist] OPENED — selectedEvent title:', selectedEvent?.title, '| isToDoEvent:', isToDoEvent, '| carryoverItems count:', carryoverItems.length, carryoverItems.map(i => i.name));
+    }
+  }, [visible]);
+
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [hasPickedTemplate, setHasPickedTemplate] = useState(false);
 
   // ✅ Initialize with preselected checklist
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible && preselectedChecklist) {
       setSelectedChecklist(preselectedChecklist);
       setHasPickedTemplate(true);  // Skip template selector
@@ -47,7 +55,7 @@ const AddChecklistToEventModal = ({
   }, [visible, preselectedChecklist]);
 
   // Show template picker on mount if templates exist AND no preselected checklist
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible && templates.length > 0 && !hasPickedTemplate && !preselectedChecklist) {  // ✅ UPDATED
       setShowTemplateModal(true);
     }
@@ -70,6 +78,7 @@ const AddChecklistToEventModal = ({
 
   // Handle template selection
   const handleTemplateSelect = (option) => {
+    console.log('[AddChecklist] handleTemplateSelect — option:', option.value, '| selectedEvent:', selectedEvent?.title, '| isToDoEvent:', isToDoEvent, '| carryoverItems:', carryoverItems.length, carryoverItems.map(i => i.name));
     setShowTemplateModal(false);
     setHasPickedTemplate(true);
 
@@ -81,14 +90,34 @@ const AddChecklistToEventModal = ({
 
     // Use template
     const template = option.template;
+    const templateItems = template.items.map((item, index) => ({
+      ...item,
+      id: item.id || `item_${Date.now()}_${index}`,
+      completed: false,
+    }));
+
+    // For To Do events: append yesterday's incomplete items that aren't already in the template
+    let carryoverToMerge = [];
+    if (isToDoEvent && carryoverItems.length > 0) {
+      const templateNames = new Set(
+        templateItems.map((item) => (item.name || '').trim().toLowerCase())
+      );
+      carryoverToMerge = carryoverItems
+        .filter((item) => !templateNames.has((item.name || '').trim().toLowerCase()))
+        .map((item) => ({
+          ...item,
+          id: `carryover_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          completed: false,
+        }));
+      console.log('[AddChecklist] To Do carryover — raw:', carryoverItems.length, '| template names:', [...templateNames], '| merging:', carryoverToMerge.length, carryoverToMerge.map(i => i.name));
+    } else {
+      console.log('[AddChecklist] Skipping carryover — isToDoEvent:', isToDoEvent, '| carryoverItems:', carryoverItems.length);
+    }
+
     const newChecklist = {
       id: `checklist_${Date.now()}`,
       name: template.name,
-      items: template.items.map((item, index) => ({
-        ...item,
-        id: item.id || `item_${Date.now()}_${index}`,
-        completed: false,
-      })),
+      items: [...templateItems, ...carryoverToMerge],
       createdAt: Date.now(),
       ...(template.defaultNotifyAdmin && { notifyAdmin: true }),
     };
@@ -182,6 +211,7 @@ const AddChecklistToEventModal = ({
               templates={templates}
               useQuickAddMode={useQuickAddMode}
               pinnedChecklists={pinnedChecklists}
+
             />
           </View>
         </KeyboardAvoidingView>
@@ -195,6 +225,7 @@ const AddChecklistToEventModal = ({
           onClose={() => setShowTemplateModal(false)}
         />
       </View>
+
     </ModalWrapper>
   );
 };

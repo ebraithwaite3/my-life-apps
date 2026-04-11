@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Alert } from "react-native";
 import { DateTime } from "luxon";
 import { useData } from "@my-apps/contexts";
 
@@ -150,6 +151,7 @@ export const useEventFormState = ({
   console.log("✅ useEventFormState - membersToNotify:", membersToNotify);
   console.log("✅ useEventFormState - selectedCalendarId:", selectedCalendarId);
 
+  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
   const [description, setDescription] = useState("");
   const [reminderMinutes, setReminderMinutes] = useState(null);
   const [errors, setErrors] = useState([]);
@@ -300,6 +302,15 @@ export const useEventFormState = ({
       const incomplete = checklistActivity?.items?.filter(i => !i.completed) ?? [];
       console.log('[CARRYOVER] incomplete items:', incomplete.length, incomplete.map(i => i.name));
       setCarryoverItems(incomplete);
+
+      Alert.alert(
+        'Add a Workout?',
+        'Add a workout for this day?',
+        [
+          { text: 'No', style: 'cancel' },
+          { text: 'Yes', onPress: () => setShowWorkoutModal(true) },
+        ]
+      );
     } else {
       setCarryoverItems([]);
     }
@@ -389,6 +400,10 @@ export const useEventFormState = ({
     // Activity (app-specific)
     selectedActivity,
     setSelectedActivity,
+
+    // Workout modal
+    showWorkoutModal,
+    setShowWorkoutModal,
 
     // Metadata
     isEditing,

@@ -15,6 +15,7 @@ import ChecklistItemRow from "../../../checklists/ChecklistItemRow";
 import ProgressBar from "../../../general/ProgressBar";
 import MultipleChoiceSelectionModal from "../../composed/modals/MultipleChoiceSelectionModals";
 import FillInSelectionModal from "../../composed/modals/FillInSelectionModal";
+import GuidedWorkflowSetupModal from "../../composed/modals/GuidedWorkflowSetupModal";
 import MoveItemsModal from "../../composed/modals/MoveItemsModal";
 import { generateUUID } from "@my-apps/utils";
 import { CustomOrderModal } from "../../../sorting";
@@ -50,6 +51,10 @@ const ChecklistContent = ({
   // Fill in modal state
   const [showFillInModal, setShowFillInModal] = useState(false);
   const [fillInItem, setFillInItem] = useState(null);
+
+  // Guided workflow modal state
+  const [showGuidedSetupModal, setShowGuidedSetupModal] = useState(false);
+  const [guidedItem, setGuidedItem] = useState(null);
 
   // NEW: Selection mode state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -307,6 +312,16 @@ const ChecklistContent = ({
       return;
     }
 
+    if (answer === "yes" && item?.yesNoConfig?.type === "guided") {
+      if (item.yesNoConfig.quantityLabel) {
+        setGuidedItem(item);
+        setShowGuidedSetupModal(true);
+      } else {
+        handleGuidedConfirm(item, 1);
+      }
+      return;
+    }
+
     const updatedItems = items.map((item) => {
       if (item.id !== itemId) return item;
 
@@ -414,6 +429,51 @@ const ChecklistContent = ({
     setItems(updatedItems);
     setShowFillInModal(false);
     setFillInItem(null);
+
+    if (onItemToggle) {
+      onItemToggle(updatedItems);
+    }
+  };
+
+  const handleGuidedConfirm = (item, quantity) => {
+    const sourceItem = item || guidedItem;
+    if (!sourceItem) return;
+
+    const steps = sourceItem.yesNoConfig?.steps || [];
+    const subItems = [];
+    const now = Date.now();
+
+    for (let loadIdx = 0; loadIdx < quantity; loadIdx++) {
+      steps.forEach((step, stepIdx) => {
+        subItems.push({
+          id: generateUUID(),
+          name: quantity > 1 ? `Load ${loadIdx + 1} - ${step.name}` : step.name,
+          itemType: 'checkbox',
+          completed: false,
+          parentId: sourceItem.id,
+          hasTimer: step.hasTimer || false,
+          timerMinutes: step.timerMinutes || 0,
+        });
+      });
+    }
+
+    const updatedItems = items.map(i => {
+      if (i.id !== sourceItem.id) return i;
+      return {
+        ...i,
+        yesNoConfig: {
+          ...i.yesNoConfig,
+          answered: true,
+          answer: 'yes',
+        },
+        subItems,
+        completed: false,
+      };
+    });
+
+    setItems(updatedItems);
+    setShowGuidedSetupModal(false);
+    setGuidedItem(null);
 
     if (onItemToggle) {
       onItemToggle(updatedItems);
@@ -791,6 +851,17 @@ const ChecklistContent = ({
         onCancel={() => {
           setShowFillInModal(false);
           setFillInItem(null);
+        }}
+      />
+
+      {/* Guided Workflow Setup Modal */}
+      <GuidedWorkflowSetupModal
+        visible={showGuidedSetupModal}
+        quantityLabel={guidedItem?.yesNoConfig?.quantityLabel}
+        onConfirm={(quantity) => handleGuidedConfirm(guidedItem, quantity)}
+        onCancel={() => {
+          setShowGuidedSetupModal(false);
+          setGuidedItem(null);
         }}
       />
 

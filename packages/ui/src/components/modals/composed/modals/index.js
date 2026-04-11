@@ -10,3 +10,5 @@ export { default as ScheduleDefaultEventModal } from './ScheduleDefaultEventModa
 export { default as QuickSendModal } from './QuickSendModal';
 export { default as HouseholdTaskPickerModal } from './HouseholdTaskPickerModal';
 export { default as QuickAddPickerModal } from './QuickAddPickerModal';
+export { default as GuidedWorkflowSetupModal } from './GuidedWorkflowSetupModal';
+export { default as ScheduleWorkoutModal } from './ScheduleWorkoutModal';

@@ -30,7 +30,7 @@ export const useUserDoc = (db, userId) => {
       doc(db, 'users', userId),
       (docSnap) => {
         if (docSnap.exists()) {
-          console.log('👤 User data received:', userId);
+          //console.log('👤 User data received:', userId);
           setUser({ id: docSnap.id, ...docSnap.data() });
         } else {
           console.warn('❌ User document not found:', userId);
