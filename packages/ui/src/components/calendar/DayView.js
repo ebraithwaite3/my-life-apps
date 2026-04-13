@@ -38,9 +38,8 @@ const DayView = ({
   }, [events]);
   console.log("Sorted Events in DayView:", sortedEvents);
 
-  // Split To Do events (checklist app only) from regular events
+  // Split To Do events from regular events
   const { todoEvents, regularEvents } = useMemo(() => {
-    if (appName !== 'checklist') return { todoEvents: [], regularEvents: sortedEvents };
     const todoEvents = [];
     const regularEvents = [];
     sortedEvents.forEach(event => {
@@ -83,13 +82,24 @@ const DayView = ({
       paddingTop: getSpacing.md,
       paddingBottom: getSpacing.xl * 2,
     },
-    todoBanner: {
+    todoBannerIncomplete: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: `${theme.primary}18`,
       borderRadius: getBorderRadius.md,
       borderWidth: 1,
       borderColor: `${theme.primary}40`,
+      paddingVertical: getSpacing.sm,
+      paddingHorizontal: getSpacing.md,
+      marginBottom: getSpacing.md,
+    },
+    todoBannerComplete: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${theme.success || '#4CAF50'}18`,
+      borderRadius: getBorderRadius.md,
+      borderWidth: 1,
+      borderColor: `${theme.success || '#4CAF50'}40`,
       paddingVertical: getSpacing.sm,
       paddingHorizontal: getSpacing.md,
       marginBottom: getSpacing.md,
@@ -114,10 +124,11 @@ const DayView = ({
           if (!checklistActivity) return null;
           const total = checklistActivity.items?.length ?? 0;
           const completed = checklistActivity.items?.filter(i => i.completed).length ?? 0;
+          const isDone = total > 0 && completed === total;
           return (
             <TouchableOpacity
               key={event.eventId}
-              style={styles.todoBanner}
+              style={isDone ? styles.todoBannerComplete : styles.todoBannerIncomplete}
               onPress={() => onActivityPress(checklistActivity, event)}
               onLongPress={() => {
                 Alert.alert(
@@ -131,7 +142,7 @@ const DayView = ({
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.todoBannerText}>
+              <Text style={[styles.todoBannerText, isDone && { color: theme.success || '#4CAF50' }]}>
                 {`☑️ To Do — ${completed} of ${total} complete`}
               </Text>
             </TouchableOpacity>

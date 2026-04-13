@@ -1,5 +1,7 @@
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const {DateTime} = require("luxon");
+const handlers = require("./handlers");
 
 exports.sendScheduledNotifications = onSchedule(
     "*/10 * * * *",
@@ -62,11 +64,44 @@ exports.sendScheduledNotifications = onSchedule(
               continue;
             }
 
+            // Resolve dynamic content via handler if specified
+            let title = notification.title || "MyOrganizer";
+            let body = notification.body || "";
+
+            if (notification.handlerName) {
+              const handler = handlers[notification.handlerName];
+              if (handler) {
+                try {
+                  const result = await handler(
+                      notification.userId,
+                      notification.handlerParams || {},
+                      db,
+                  );
+                  title = result.title;
+                  body = result.body;
+                  console.log(
+                      `🧠 Handler "${notification.handlerName}" ` +
+                      `resolved content`,
+                  );
+                } catch (handlerErr) {
+                  console.error(
+                      `❌ Handler "${notification.handlerName}" failed:`,
+                      handlerErr,
+                  );
+                  // Falls through to static title/body as fallback
+                }
+              } else {
+                console.warn(
+                    `⚠️  Unknown handler: ${notification.handlerName}`,
+                );
+              }
+            }
+
             const message = {
               to: pushToken,
               sound: "default",
-              title: notification.title || "MyOrganizer",
-              body: notification.body || "",
+              title,
+              body,
               data: notification.data || {},
             };
 
@@ -125,15 +160,34 @@ exports.sendScheduledNotifications = onSchedule(
                     config.currentOccurrence < config.totalOccurrences;
 
                 if (isInfinite || hasMore) {
-                  // ✅ Calculate next time from ORIGINAL scheduled time
+                  // Calculate next scheduled time.
+                  // If a timezone is provided (e.g. for daily notifications),
+                  // advance by calendar days in that zone so wall-clock time
+                  // stays fixed across DST transitions.
+                  // Otherwise fall back to adding raw intervalSeconds.
                   const currentScheduledTime = notification.scheduledFor;
-                  const nextSeconds =
-                      currentScheduledTime.seconds + config.intervalSeconds;
+                  let nextScheduledFor;
 
-                  const nextScheduledFor = new admin.firestore.Timestamp(
-                      nextSeconds,
-                      0,
-                  );
+                  const tz = notification.handlerParams?.timezone;
+                  const intervalDays = config.intervalSeconds / 86400;
+                  const isWholeDays = Number.isInteger(intervalDays);
+
+                  if (tz && isWholeDays) {
+                    const nextDt = DateTime
+                        .fromSeconds(currentScheduledTime.seconds, {zone: tz})
+                        .plus({days: intervalDays});
+                    nextScheduledFor = new admin.firestore.Timestamp(
+                        Math.floor(nextDt.toSeconds()),
+                        0,
+                    );
+                  } else {
+                    const nextSeconds =
+                        currentScheduledTime.seconds + config.intervalSeconds;
+                    nextScheduledFor = new admin.firestore.Timestamp(
+                        nextSeconds,
+                        0,
+                    );
+                  }
 
                   const nowIso = admin.firestore.Timestamp.now()
                       .toDate().toISOString();

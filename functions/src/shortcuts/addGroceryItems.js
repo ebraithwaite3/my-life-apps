@@ -26,7 +26,7 @@ exports.addGroceryItems = functions.https.onRequest(async (req, res) => {
 
   const {items, user} = req.body;
 
-  //console.log("👤 User:", user);
+  // console.log("👤 User:", user);
   console.log("🛒 Items:", items);
   console.log("📊 Item count:", items?.length || 0);
 

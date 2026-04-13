@@ -86,7 +86,7 @@ const handlePress = () => {
       elevation: 1,
     },
     itemRowCompleted: {
-      backgroundColor: `${theme.primary}15`,
+      backgroundColor: `${theme.success || '#4CAF50'}15`,
     },
     rowContent: {
       flexDirection: 'row',
@@ -217,7 +217,7 @@ const handlePress = () => {
                 <Ionicons
                   name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
                   size={28}
-                  color={item.completed ? theme.primary : theme.text.tertiary}
+                  color={item.completed ? (theme.success || '#4CAF50') : theme.text.tertiary}
                 />
               </View>
             )}
@@ -406,7 +406,7 @@ const handlePress = () => {
             <Ionicons
               name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
               size={28}
-              color={item.completed ? theme.primary : theme.text.tertiary}
+              color={item.completed ? (theme.success || '#4CAF50') : theme.text.tertiary}
             />
           </View>
         )}

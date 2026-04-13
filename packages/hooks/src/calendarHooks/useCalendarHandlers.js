@@ -510,38 +510,44 @@ export const useCalendarHandlers = ({
           selectedChecklist.reminderMinutes !== updatedChecklist.reminderMinutes
         );
   
-        // Check if reminder is recurring — read from the checklist, not the event
-        const checklistReminder = eventRef.isAllDay
+        // Check if reminder is recurring.
+        // For all-day To Do events, the reminder lives at the event level (eventRef.reminderMinutes),
+        // not on the checklist activity. Fall back to the event-level reminder if no checklist-level one.
+        const checklistLevelReminder = eventRef.isAllDay
           ? updatedChecklist.reminderTime
           : updatedChecklist.reminderMinutes;
+        const isEventLevelReminder = !checklistLevelReminder && !!eventRef.reminderMinutes;
+        const checklistReminder = checklistLevelReminder ?? (isEventLevelReminder ? eventRef.reminderMinutes : null);
 
         const isRecurringReminder = checklistReminder?.isRecurring === true;
         const completedCancelsRecurring =
           checklistReminder?.recurringConfig?.completedCancelsRecurring ?? true;
 
+        // Event-level reminders (To Do) are stored with notificationId = eventId.
+        // Checklist-level reminders use ${eventId}-checklist-${checklistId}.
+        const notificationId = isEventLevelReminder
+          ? eventRef.eventId
+          : `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
+
         // Only delete/reschedule based on specific conditions
         if (reminderRemoved) {
           console.log('🗑️ Reminder removed - deleting notifications');
-          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
           await deleteNotification(notificationId);
         } else if (wasJustCompleted && !isRecurringReminder) {
           // Non-recurring reminder — delete on completion
           console.log('🗑️ Checklist completed (non-recurring reminder) - deleting notifications');
-          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
           await deleteNotification(notificationId);
         } else if (wasJustCompleted && isRecurringReminder && completedCancelsRecurring) {
           // Recurring but configured to cancel on completion — delete remaining
           console.log('🗑️ Checklist completed (recurring, completedCancelsRecurring=true) - deleting remaining notifications');
-          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
           await deleteNotification(notificationId);
         } else if (wasJustCompleted && isRecurringReminder && !completedCancelsRecurring) {
           // Recurring, explicitly configured to keep going — leave notifications alone
           console.log('✅ Checklist completed but reminder is recurring with completedCancelsRecurring=false - keeping notifications');
         } else if (reminderChanged) {
           console.log('⏰ Reminder settings changed, rescheduling...');
-          
-          // Delete old notifications
-          const notificationId = `${eventRef.eventId}-checklist-${updatedChecklist.id}`;
+
+          // Delete old notifications (use same ID logic as above)
           await deleteNotification(notificationId);
   
           // Reschedule with new time

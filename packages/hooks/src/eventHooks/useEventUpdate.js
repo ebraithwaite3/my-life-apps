@@ -20,6 +20,23 @@ const cleanUndefined = (obj) => {
 };
 
 /**
+ * Extract activity IDs by type for notification data (mirrors useEventCreation)
+ */
+const getActivityData = (activities) => {
+  const data = {};
+  activities.forEach(activity => {
+    if (activity.activityType === 'checklist') {
+      data.checklistId = activity.id;
+    } else if (activity.activityType === 'workout') {
+      data.workoutId = activity.id;
+    } else if (activity.activityType === 'golf') {
+      data.golfId = activity.id;
+    }
+  });
+  return data;
+};
+
+/**
  * Extract scheduled time from reminder object
  */
 const getReminderTime = (reminder) => {
@@ -90,6 +107,7 @@ export const useEventUpdate = ({ user, db }) => {
     }
 
     const cleanedActivities = activities.map(cleanUndefined);
+    const activityData = getActivityData(activities);
 
     try {
       let result;
@@ -167,6 +185,7 @@ export const useEventUpdate = ({ user, db }) => {
                       screen: "Calendar",
                       eventId,
                       app: `${appName}-app`,
+                      ...activityData,
                       ...(reminderMinutes.isRecurring && {
                         isRecurring: true,
                         recurringConfig: reminderMinutes.recurringConfig,
@@ -187,6 +206,7 @@ export const useEventUpdate = ({ user, db }) => {
                       screen: "Calendar",
                       eventId,
                       app: `${appName}-app`,
+                      ...activityData,
                       ...(reminderMinutes.isRecurring && {
                         isRecurring: true,
                         recurringConfig: reminderMinutes.recurringConfig,
@@ -199,7 +219,7 @@ export const useEventUpdate = ({ user, db }) => {
           } else {
             console.log("✅ Reminder unchanged, keeping existing notifications");
           }
-        
+
           // ✅ Alert OUTSIDE the if block - always show success
           showSuccessToast("Event updated", "", 2000, "top");
           return { success: true, eventId };
@@ -263,6 +283,7 @@ export const useEventUpdate = ({ user, db }) => {
                       screen: "Calendar",
                       eventId,
                       app: `${appName}-app`,
+                      ...activityData,
                       ...(reminderMinutes.isRecurring && {
                         isRecurring: true,
                         recurringConfig: reminderMinutes.recurringConfig,
@@ -281,6 +302,7 @@ export const useEventUpdate = ({ user, db }) => {
                       screen: "Calendar",
                       eventId,
                       app: `${appName}-app`,
+                      ...activityData,
                       ...(reminderMinutes.isRecurring && {
                         isRecurring: true,
                         recurringConfig: reminderMinutes.recurringConfig,

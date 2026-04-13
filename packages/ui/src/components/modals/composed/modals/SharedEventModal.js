@@ -69,7 +69,7 @@ const SharedEventModal = ({
     defaultTitle,
     userPreferences: user?.preferences,
   });
-  console.log("FORM STATE: ", formState);
+  //console.log("FORM STATE: ", formState);
 
   // HOOK 2: Validation (shared)
   const { validateEvent } = useEventValidation();

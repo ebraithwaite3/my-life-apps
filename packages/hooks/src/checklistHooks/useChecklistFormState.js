@@ -53,6 +53,8 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
         yesNoConfig: item.yesNoConfig || null,
         subItems: item.subItems || [],
         parentId: item.parentId || null,
+        ...(item.sourceChecklistId && { sourceChecklistId: item.sourceChecklistId }),
+        ...(item.sourceItemId && { sourceItemId: item.sourceItemId }),
       })) || [
         {
           id: uuidv4(),
