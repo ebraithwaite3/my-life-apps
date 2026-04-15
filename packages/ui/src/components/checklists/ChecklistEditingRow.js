@@ -11,6 +11,7 @@ const ChecklistEditingRow = ({
   getBorderRadius,
   isUserAdmin,
   isSubItem = false, // NEW: Indicates this is a sub-item
+  showConfig = false, // Allow star on sub-items (e.g. header children)
   onUpdateItem,
   onRemoveItem,
   onToggleScreenTime,
@@ -102,7 +103,7 @@ const ChecklistEditingRow = ({
           </TouchableOpacity>
 
           {/* Config - Only show for parent items (not sub-items) */}
-          {isUserAdmin && !isSubItem && item.name.trim() !== '' && (
+          {isUserAdmin && (!isSubItem || showConfig) && item.name.trim() !== '' && (
             <TouchableOpacity
               onPress={() => onToggleConfig && onToggleConfig(item.id)}
               style={[
@@ -111,7 +112,7 @@ const ChecklistEditingRow = ({
               ]}
             >
               <Ionicons
-                name={isConfigured ? 'git-branch' : 'git-branch-outline'}
+                name={isConfigured ? 'star' : 'star-outline'}
                 size={20}
                 color={isConfigured ? theme.primary : theme.text.secondary}
               />

@@ -263,8 +263,14 @@ const EditChecklistContent = forwardRef(
 
     const handleToggleConfig = useCallback(
       (itemId) => {
-        const item = itemsHook.items.find((i) => i.id === itemId);
-        formState.setSelectedItemForConfig(item);
+        let found = itemsHook.items.find((i) => i.id === itemId);
+        if (!found) {
+          for (const parent of itemsHook.items) {
+            const sub = (parent.subItems || []).find((s) => s.id === itemId);
+            if (sub) { found = sub; break; }
+          }
+        }
+        formState.setSelectedItemForConfig(found);
         formState.setShowConfigModal(true);
       },
       [itemsHook.items]
@@ -502,15 +508,16 @@ const EditChecklistContent = forwardRef(
                     getSpacing={getSpacing}
                     getTypography={getTypography}
                     getBorderRadius={getBorderRadius}
-                    isUserAdmin={false}
+                    isUserAdmin={isUserAdmin}
                     isSubItem={true}
+                    showConfig={item.yesNoConfig?.type === 'header'}
                     onUpdateItem={(id, name) =>
                       itemsHook.updateItem(id, name, true, item.id)
                     }
                     onRemoveItem={(id) =>
                       itemsHook.removeItem(id, true, item.id)
                     }
-                    onToggleConfig={() => {}}
+                    onToggleConfig={handleToggleConfig}
                     onFocus={(id) => itemsHook.handleFocus(id, scrollToInput)}
                     onBlur={(id) => itemsHook.handleBlur(id, true, item.id)}
                     onSubmitEditing={(id) =>

@@ -7,3 +7,4 @@ export { useChecklistItems } from './useChecklistItems';
 export { useChecklistFormState } from './useChecklistFormState';
 export { useChecklistSave } from './useChecklistSave';
 export { useRemoveChecklistItems } from './useRemoveChecklistItems';
+export { useAssignChecklistTask } from './useAssignChecklistTask';

@@ -227,7 +227,19 @@ export const useChecklistItems = (initialItems = [], isTemplate = false) => {
   /* ---------------- Update Item Config ---------------- */
   const updateItemConfig = useCallback((updatedItem) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+      prev.map((item) => {
+        if (item.id === updatedItem.id) return updatedItem;
+        // Also handle sub-item config updates
+        if (item.subItems?.some((s) => s.id === updatedItem.id)) {
+          return {
+            ...item,
+            subItems: item.subItems.map((s) =>
+              s.id === updatedItem.id ? updatedItem : s
+            ),
+          };
+        }
+        return item;
+      })
     );
   }, []);
 

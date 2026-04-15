@@ -17,7 +17,9 @@ import MultipleChoiceSelectionModal from "../../composed/modals/MultipleChoiceSe
 import FillInSelectionModal from "../../composed/modals/FillInSelectionModal";
 import GuidedWorkflowSetupModal from "../../composed/modals/GuidedWorkflowSetupModal";
 import MoveItemsModal from "../../composed/modals/MoveItemsModal";
-import { generateUUID } from "@my-apps/utils";
+import AssignmentModal from "../../composed/modals/AssignmentModal";
+import { generateUUID, showSuccessToast, showErrorToast } from "@my-apps/utils";
+import { useAssignChecklistTask } from "@my-apps/hooks";
 import { CustomOrderModal } from "../../../sorting";
 import { useData } from "@my-apps/contexts";
 
@@ -40,7 +42,7 @@ const ChecklistContent = ({
     "🔍 ChecklistContent checklist:", checklist);
 
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  const { isUserAdmin } = useData();
+  const { isUserAdmin, user, groups } = useData();
   const [items, setItems] = useState([]);
   const reorderTimeoutRef = useRef(null);
 
@@ -55,6 +57,7 @@ const ChecklistContent = ({
   // Guided workflow modal state
   const [showGuidedSetupModal, setShowGuidedSetupModal] = useState(false);
   const [guidedItem, setGuidedItem] = useState(null);
+  const [guidedItemParent, setGuidedItemParent] = useState(null);
 
   // NEW: Selection mode state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -63,6 +66,13 @@ const ChecklistContent = ({
   // NEW: Move items modal state
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [itemsBeingMoved, setItemsBeingMoved] = useState([]);
+
+  const { assignTask } = useAssignChecklistTask();
+
+  // Assignment modal state
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [assignableItem, setAssignableItem] = useState(null);
+  const [assignableParentItem, setAssignableParentItem] = useState(null);
 
   // Sort Modal State
   const [showSortModal, setShowSortModal] = useState(false);
@@ -255,21 +265,32 @@ const ChecklistContent = ({
   const toggleItem = (itemId) => {
     let updatedItems = items.map((item) => {
       if (item.subItems && item.subItems.length > 0) {
-        const subItemIndex = item.subItems.findIndex(
-          (sub) => sub.id === itemId
-        );
+        // Depth-1 match
+        const subItemIndex = item.subItems.findIndex((sub) => sub.id === itemId);
         if (subItemIndex !== -1) {
           const updatedSubItems = item.subItems.map((sub) =>
             sub.id === itemId ? { ...sub, completed: !sub.completed } : sub
           );
-
           const allComplete = updatedSubItems.every((sub) => sub.completed);
+          return { ...item, subItems: updatedSubItems, completed: allComplete };
+        }
 
-          return {
-            ...item,
-            subItems: updatedSubItems,
-            completed: allComplete,
-          };
+        // Depth-2 match (grandchild — guided steps inside a header child)
+        let foundGrandchild = false;
+        const updatedSubItems = item.subItems.map((sub) => {
+          if (!sub.subItems || sub.subItems.length === 0) return sub;
+          const gcIdx = sub.subItems.findIndex((gc) => gc.id === itemId);
+          if (gcIdx === -1) return sub;
+          foundGrandchild = true;
+          const updatedGrandchildren = sub.subItems.map((gc) =>
+            gc.id === itemId ? { ...gc, completed: !gc.completed } : gc
+          );
+          const allGcComplete = updatedGrandchildren.every((gc) => gc.completed);
+          return { ...sub, subItems: updatedGrandchildren, completed: allGcComplete };
+        });
+        if (foundGrandchild) {
+          const allComplete = updatedSubItems.every((sub) => sub.completed);
+          return { ...item, subItems: updatedSubItems, completed: allComplete };
         }
       }
 
@@ -298,7 +319,44 @@ const ChecklistContent = ({
   };
 
   const handleYesNoAnswer = (itemId, answer) => {
-    const item = items.find((i) => i.id === itemId);
+    // Find in top-level or inside sub-items (header children)
+    let item = items.find((i) => i.id === itemId);
+    let parentItem = null;
+    if (!item) {
+      for (const parent of items) {
+        const sub = (parent.subItems || []).find((s) => s.id === itemId);
+        if (sub) { item = sub; parentItem = parent; break; }
+      }
+    }
+
+    // Helper to update a sub-item's yesNoConfig inside its parent
+    const updateSubItem = (updatedSub) => {
+      const updatedItems = items.map((i) => {
+        if (i.id !== parentItem.id) return i;
+        return { ...i, subItems: i.subItems.map((s) => s.id === updatedSub.id ? updatedSub : s) };
+      });
+      setItems(updatedItems);
+      if (onItemToggle) onItemToggle(updatedItems);
+    };
+
+    // Header: reveal existing sub-items, no generation needed
+    if (answer === "yes" && item?.yesNoConfig?.type === "header") {
+      const updated = { ...item, yesNoConfig: { ...item.yesNoConfig, answered: true, answer: "yes" } };
+      if (parentItem) { updateSubItem(updated); } else {
+        const updatedItems = items.map((i) => i.id === itemId ? updated : i);
+        setItems(updatedItems);
+        if (onItemToggle) onItemToggle(updatedItems);
+      }
+      return;
+    }
+
+    // Assignable: open assignment modal
+    if (answer === "yes" && item?.yesNoConfig?.type === "assignable") {
+      setAssignableItem(item);
+      setAssignableParentItem(parentItem || null);
+      setShowAssignmentModal(true);
+      return;
+    }
 
     if (answer === "yes" && item?.yesNoConfig?.type === "multiChoice") {
       setMultiChoiceItem(item);
@@ -315,51 +373,46 @@ const ChecklistContent = ({
     if (answer === "yes" && item?.yesNoConfig?.type === "guided") {
       if (item.yesNoConfig.quantityLabel) {
         setGuidedItem(item);
+        setGuidedItemParent(parentItem || null);
         setShowGuidedSetupModal(true);
       } else {
-        handleGuidedConfirm(item, 1);
+        handleGuidedConfirm(item, 1, parentItem || null);
       }
       return;
     }
 
-    const updatedItems = items.map((item) => {
-      if (item.id !== itemId) return item;
-
-      const updatedItem = {
+    // Sub-item simple yes/no answer
+    if (parentItem) {
+      const updatedSub = {
         ...item,
-        yesNoConfig: {
-          ...item.yesNoConfig,
-          answered: true,
-          answer: answer,
-        },
+        yesNoConfig: { ...item.yesNoConfig, answered: true, answer },
+        ...(answer === "no" && { completed: true }),
       };
+      updateSubItem(updatedSub);
+      return;
+    }
 
-      if (answer === "no") {
-        updatedItem.completed = true;
-      }
-
+    const updatedItems = items.map((i) => {
+      if (i.id !== itemId) return i;
+      const updatedItem = {
+        ...i,
+        yesNoConfig: { ...i.yesNoConfig, answered: true, answer },
+      };
+      if (answer === "no") updatedItem.completed = true;
       return updatedItem;
     });
 
     setItems(updatedItems);
 
     if (answer === "no") {
-      if (reorderTimeoutRef.current) {
-        clearTimeout(reorderTimeoutRef.current);
-      }
-
+      if (reorderTimeoutRef.current) clearTimeout(reorderTimeoutRef.current);
       reorderTimeoutRef.current = setTimeout(() => {
         const reordered = reorderItems(updatedItems);
         setItems(reordered);
-
-        if (onItemToggle) {
-          onItemToggle(reordered);
-        }
+        if (onItemToggle) onItemToggle(reordered);
       }, 500);
     } else {
-      if (onItemToggle) {
-        onItemToggle(updatedItems);
-      }
+      if (onItemToggle) onItemToggle(updatedItems);
     }
   };
 
@@ -435,17 +488,17 @@ const ChecklistContent = ({
     }
   };
 
-  const handleGuidedConfirm = (item, quantity) => {
+  const handleGuidedConfirm = (item, quantity, parent = null) => {
     const sourceItem = item || guidedItem;
+    const sourceParent = parent !== undefined ? parent : guidedItemParent;
     if (!sourceItem) return;
 
     const steps = sourceItem.yesNoConfig?.steps || [];
-    const subItems = [];
-    const now = Date.now();
+    const generatedSubItems = [];
 
     for (let loadIdx = 0; loadIdx < quantity; loadIdx++) {
-      steps.forEach((step, stepIdx) => {
-        subItems.push({
+      steps.forEach((step) => {
+        generatedSubItems.push({
           id: generateUUID(),
           name: quantity > 1 ? `Load ${loadIdx + 1} - ${step.name}` : step.name,
           itemType: 'checkbox',
@@ -457,27 +510,30 @@ const ChecklistContent = ({
       });
     }
 
-    const updatedItems = items.map(i => {
-      if (i.id !== sourceItem.id) return i;
-      return {
-        ...i,
-        yesNoConfig: {
-          ...i.yesNoConfig,
-          answered: true,
-          answer: 'yes',
-        },
-        subItems,
-        completed: false,
-      };
-    });
+    const updatedSourceItem = {
+      ...sourceItem,
+      yesNoConfig: { ...sourceItem.yesNoConfig, answered: true, answer: 'yes' },
+      subItems: generatedSubItems,
+      completed: false,
+    };
+
+    let updatedItems;
+    if (sourceParent) {
+      // Guided item is a sub-item inside a header — update inside parent's subItems
+      updatedItems = items.map(i => {
+        if (i.id !== sourceParent.id) return i;
+        return { ...i, subItems: i.subItems.map(s => s.id === sourceItem.id ? updatedSourceItem : s) };
+      });
+    } else {
+      updatedItems = items.map(i => i.id !== sourceItem.id ? i : updatedSourceItem);
+    }
 
     setItems(updatedItems);
     setShowGuidedSetupModal(false);
     setGuidedItem(null);
+    setGuidedItemParent(null);
 
-    if (onItemToggle) {
-      onItemToggle(updatedItems);
-    }
+    if (onItemToggle) onItemToggle(updatedItems);
   };
 
   const handleResetYesNo = (itemId) => {
@@ -858,7 +914,7 @@ const ChecklistContent = ({
       <GuidedWorkflowSetupModal
         visible={showGuidedSetupModal}
         quantityLabel={guidedItem?.yesNoConfig?.quantityLabel}
-        onConfirm={(quantity) => handleGuidedConfirm(guidedItem, quantity)}
+        onConfirm={(quantity) => handleGuidedConfirm(guidedItem, quantity, guidedItemParent)}
         onCancel={() => {
           setShowGuidedSetupModal(false);
           setGuidedItem(null);
@@ -904,6 +960,84 @@ const ChecklistContent = ({
         hiddenCount={
           !sortingParent ? items.filter((i) => i.completed).length : 0
         }
+      />
+
+      {/* Assignment Modal */}
+      <AssignmentModal
+        visible={showAssignmentModal}
+        groups={groups || []}
+        currentUserId={user?.userId}
+        taskName={assignableItem?.name}
+        onConfirm={async (selectedMemberIds) => {
+          setShowAssignmentModal(false);
+          if (!assignableItem) return;
+
+          const taskName = assignableItem.name;
+
+          // Mark the assignable item answered/completed (handles sub-item case too)
+          let updatedItems;
+          if (assignableParentItem) {
+            updatedItems = items.map((i) => {
+              if (i.id !== assignableParentItem.id) return i;
+              return {
+                ...i,
+                subItems: i.subItems.map((s) => {
+                  if (s.id !== assignableItem.id) return s;
+                  return { ...s, yesNoConfig: { ...s.yesNoConfig, answered: true, answer: "yes" }, completed: true };
+                }),
+              };
+            });
+          } else {
+            updatedItems = items.map((i) => {
+              if (i.id !== assignableItem.id) return i;
+              return { ...i, yesNoConfig: { ...i.yesNoConfig, answered: true, answer: "yes" }, completed: true };
+            });
+          }
+
+          // Self-assign: append new checkbox item to the open checklist
+          const isSelfSelected = selectedMemberIds.includes(user?.userId);
+          if (isSelfSelected) {
+            updatedItems = [...updatedItems, { id: generateUUID(), name: taskName, itemType: 'checkbox', completed: false }];
+          }
+
+          setItems(updatedItems);
+          if (onItemToggle) onItemToggle(updatedItems);
+
+          // Kids: write to their GCal checklist event via Firestore
+          const otherIds = selectedMemberIds.filter((id) => id !== user?.userId);
+          if (otherIds.length > 0) {
+            const allMembers = (groups || []).flatMap((g) => g.members || []);
+            const resolvedMembers = otherIds
+              .map((id) => allMembers.find((m) => m.userId === id))
+              .filter(Boolean);
+            try {
+              const results = await assignTask({ members: resolvedMembers, taskName, currentUserId: user?.userId });
+              const failures = results.filter((r) => !r.success && !r.skipped);
+              if (failures.length > 0) {
+                const failedNames = failures
+                  .map((f) => resolvedMembers.find((m) => m.userId === f.memberId)?.name || f.memberId)
+                  .join(', ');
+                showErrorToast('Assignment failed', `Could not add to: ${failedNames}`, 4000, 'top');
+              } else {
+                const assignedNames = resolvedMembers.map((m) => m.name || m.email || 'member').join(', ');
+                showSuccessToast(`Assigned to ${assignedNames}`, '', 2500, 'top');
+              }
+            } catch (err) {
+              console.error('❌ assignTask error:', err);
+              showErrorToast('Assignment failed', err.message, 4000, 'top');
+            }
+          } else if (isSelfSelected) {
+            showSuccessToast(`Added "${taskName}" to your list`, '', 2000, 'top');
+          }
+
+          setAssignableItem(null);
+          setAssignableParentItem(null);
+        }}
+        onCancel={() => {
+          setShowAssignmentModal(false);
+          setAssignableItem(null);
+          setAssignableParentItem(null);
+        }}
       />
     </View>
   );

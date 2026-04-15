@@ -31,7 +31,7 @@ export const buildChecklistObject = ({
       const hasSubItems = item.subItems && item.subItems.length > 0 && 
                           item.subItems.some(sub => sub.name.trim());
 
-      if (hasSubItems) {
+      if (hasSubItems && item.itemType !== 'yesNo') {
         baseItem.itemType = 'group';
       } else if (item.itemType && item.itemType !== "checkbox") {
         baseItem.itemType = item.itemType;
@@ -56,15 +56,23 @@ export const buildChecklistObject = ({
       if (hasSubItems) {
         baseItem.subItems = item.subItems
           .filter(sub => sub.name.trim())
-          .map(sub => ({
-            id: sub.id,
-            name: sub.name.trim(),
-            itemType: 'checkbox',
-            parentId: item.id,
-            completed: isTemplate ? undefined : sub.completed ?? false,
-            ...(sub.sourceChecklistId && { sourceChecklistId: sub.sourceChecklistId }),
-            ...(sub.sourceItemId && { sourceItemId: sub.sourceItemId }),
-          }));
+          .map(sub => {
+            const baseSub = {
+              id: sub.id,
+              name: sub.name.trim(),
+              parentId: item.id,
+              completed: isTemplate ? undefined : sub.completed ?? false,
+              ...(sub.sourceChecklistId && { sourceChecklistId: sub.sourceChecklistId }),
+              ...(sub.sourceItemId && { sourceItemId: sub.sourceItemId }),
+            };
+            if (sub.itemType === 'yesNo') {
+              baseSub.itemType = 'yesNo';
+              baseSub.yesNoConfig = sub.yesNoConfig;
+            } else {
+              baseSub.itemType = 'checkbox';
+            }
+            return baseSub;
+          });
       }
 
       return baseItem;

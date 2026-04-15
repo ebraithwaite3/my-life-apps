@@ -9,7 +9,7 @@ const ChecklistItemRow = ({
   onToggle, 
   onYesNoAnswer, 
   onResetYesNo, 
-  isSubItem = false,
+  isSubItem = 0, // depth: 0=root, 1=child, 2=grandchild (no further recursion)
   // NEW: Selection mode props
   selectionMode = false,
   isSelected = false,
@@ -28,20 +28,22 @@ const ChecklistItemRow = ({
   const isMultiChoice = isYesNo && yesNoConfig.type === 'multiChoice';
   const isFillIn = isYesNo && yesNoConfig.type === 'fillIn';
   const isGuided = isYesNo && yesNoConfig.type === 'guided';
+  const isHeader = isYesNo && yesNoConfig.type === 'header';
 
   // For groups AND answered multiChoice/fillIn/guided, calculate completion
   const subItems = item.subItems || [];
   const completedSubItems = subItems.filter(sub => sub.completed).length;
   const allSubItemsComplete = subItems.length > 0 && completedSubItems === subItems.length;
 
-  // MultiChoice/FillIn/Guided answered "yes" with subItems should behave like a group
-  const shouldRenderAsGroup = (isGroup || ((isMultiChoice || isFillIn || isGuided) && isAnswered && answer === 'yes')) && !isSubItem;
+  // MultiChoice/FillIn/Guided/Header answered "yes" with subItems should behave like a group
+  // Depth < 2 allows group rendering; depth 2+ are always leaf checkboxes (prevents infinite recursion)
+  const shouldRenderAsGroup = (isGroup || ((isMultiChoice || isFillIn || isGuided || isHeader) && isAnswered && answer === 'yes')) && isSubItem < 2;
 
   // Determine display text
   let displayText = item.name;
   if (isAnswered && answer === 'no') {
     displayText = `${item.name} - No`;
-  } else if ((isGroup || ((isMultiChoice || isFillIn || isGuided) && isAnswered)) && subItems.length > 0) {
+  } else if ((isGroup || ((isMultiChoice || isFillIn || isGuided || isHeader) && isAnswered)) && subItems.length > 0) {
     displayText = `${item.name} (${completedSubItems}/${subItems.length})`;
   }
 
@@ -293,7 +295,9 @@ const handlePress = () => {
             <ChecklistItemRow
               item={subItem}
               onToggle={handleSubItemPress}
-              isSubItem={true}
+              onYesNoAnswer={onYesNoAnswer}
+              onResetYesNo={onResetYesNo}
+              isSubItem={isSubItem + 1}
               selectionMode={selectionMode}
               isSelected={selectedItems.has(subItem.id)}
               onSelect={onSelect}
