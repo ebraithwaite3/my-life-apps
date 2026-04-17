@@ -4,8 +4,17 @@ import { doc, updateDoc, writeBatch, getDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/src/AuthContext';
 import { useData } from '../../../contexts/src/DataContext';
 
+// yesNo types whose sub-items are generated at runtime — not static editor content
+const RUNTIME_YESNO_TYPES = ['multiChoice', 'fillIn', 'guided', 'assignable'];
+
+const stripRuntimeYesNoState = (config) => {
+  if (!config) return config;
+  const { answered, answer, ...staticConfig } = config;
+  return staticConfig;
+};
+
 /**
- * Clean a template - remove undefined fields and ensure completed is boolean
+ * Clean a template - remove undefined fields, reset runtime state, ensure completed is boolean
  */
 const cleanTemplate = (template) => {
   const cleaned = {
@@ -15,15 +24,29 @@ const cleanTemplate = (template) => {
         ...item,
         completed: item.completed === true,
       };
-      
-      // Handle sub-items if they exist
-      if (item.subItems) {
-        cleanedItem.subItems = item.subItems.map(sub => ({
-          ...sub,
-          completed: sub.completed === true,
-        }));
+
+      // Strip runtime answered state from yesNoConfig
+      if (cleanedItem.yesNoConfig) {
+        cleanedItem.yesNoConfig = stripRuntimeYesNoState(cleanedItem.yesNoConfig);
       }
-      
+
+      // Handle sub-items
+      if (item.subItems) {
+        if (item.itemType === 'yesNo' && RUNTIME_YESNO_TYPES.includes(item.yesNoConfig?.type)) {
+          // Runtime-generated sub-items — strip from template
+          delete cleanedItem.subItems;
+        } else {
+          // Static sub-items (header, group) — keep but clean them
+          cleanedItem.subItems = item.subItems.map(sub => {
+            const cleanedSub = { ...sub, completed: sub.completed === true };
+            if (cleanedSub.yesNoConfig) {
+              cleanedSub.yesNoConfig = stripRuntimeYesNoState(cleanedSub.yesNoConfig);
+            }
+            return cleanedSub;
+          });
+        }
+      }
+
       return cleanedItem;
     }),
     updatedAt: new Date().toISOString(),

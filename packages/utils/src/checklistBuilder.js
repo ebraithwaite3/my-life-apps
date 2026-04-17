@@ -3,6 +3,15 @@ import { DateTime } from 'luxon';
 
 const uuidv4 = () => Crypto.randomUUID();
 
+// yesNo types whose sub-items are generated at runtime (answer time) — not static editor content
+const RUNTIME_YESNO_TYPES = ['multiChoice', 'fillIn', 'guided', 'assignable'];
+
+const stripRuntimeYesNoState = (config) => {
+  if (!config) return config;
+  const { answered, answer, ...staticConfig } = config;
+  return staticConfig;
+};
+
 export const buildChecklistObject = ({
   checklistName,
   items,
@@ -44,7 +53,9 @@ export const buildChecklistObject = ({
         baseItem.requiresParentApproval = true;
       }
       if (item.yesNoConfig) {
-        baseItem.yesNoConfig = item.yesNoConfig;
+        baseItem.yesNoConfig = isTemplate
+          ? stripRuntimeYesNoState(item.yesNoConfig)
+          : item.yesNoConfig;
       }
       if (item.checklistLinkConfig) {
         baseItem.checklistLinkConfig = item.checklistLinkConfig;
@@ -59,7 +70,15 @@ export const buildChecklistObject = ({
         baseItem.sourceItemId = item.sourceItemId;
       }
 
-      if (hasSubItems) {
+      // For templates: skip runtime-generated sub-items (multiChoice/fillIn/guided answers).
+      // Keep static sub-items (header type, plain groups).
+      const shouldIncludeSubItems = hasSubItems && (
+        !isTemplate ||
+        item.itemType !== 'yesNo' ||
+        !RUNTIME_YESNO_TYPES.includes(item.yesNoConfig?.type)
+      );
+
+      if (shouldIncludeSubItems) {
         baseItem.subItems = item.subItems
           .filter(sub => sub.name.trim())
           .map(sub => {
@@ -73,10 +92,19 @@ export const buildChecklistObject = ({
             };
             if (sub.itemType === 'yesNo') {
               baseSub.itemType = 'yesNo';
-              baseSub.yesNoConfig = sub.yesNoConfig;
+              baseSub.yesNoConfig = isTemplate
+                ? stripRuntimeYesNoState(sub.yesNoConfig)
+                : sub.yesNoConfig;
+            } else if (sub.itemType === 'checklistLink') {
+              baseSub.itemType = 'checklistLink';
+              if (sub.checklistLinkConfig) baseSub.checklistLinkConfig = sub.checklistLinkConfig;
             } else {
               baseSub.itemType = 'checkbox';
             }
+            // Preserve these regardless of type
+            if (sub.link) baseSub.link = sub.link;
+            if (sub.requiredForScreenTime) baseSub.requiredForScreenTime = true;
+            if (sub.requiresParentApproval) baseSub.requiresParentApproval = true;
             return baseSub;
           });
       }

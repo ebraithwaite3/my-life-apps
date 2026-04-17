@@ -119,17 +119,23 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
   // Handle navigation params for deep links (notifications, etc.)
   // Step 1: capture params and kick off navigation; store pending checklist open for step 2
   useEffect(() => {
-    const { date, view, checklistId, eventId, activityId } = route.params || {};
+    const { date, view, checklistId, eventId, activityId, dateOffset } = route.params || {};
     const targetId = checklistId || activityId;
 
-    if (!date) return;
+    // dateOffset: relative day offset from today (e.g. 1 = tomorrow, -1 = yesterday)
+    // Used by notifications that should always open relative to "now" rather than a fixed date
+    const resolvedDate = dateOffset != null
+      ? DateTime.now().plus({ days: Number(dateOffset) }).toISODate()
+      : date;
 
-    console.log("📅 Deep link — date:", date, "view:", view, "targetId:", targetId);
-    navigateToDate(date);
+    if (!resolvedDate) return;
+
+    console.log("📅 Deep link — date:", resolvedDate, "view:", view, "targetId:", targetId);
+    navigateToDate(resolvedDate);
     calendarState.setSelectedView(view || "day");
 
     if (targetId) {
-      const dateISO = date.split("T")[0];
+      const dateISO = resolvedDate.split("T")[0];
       pendingDeepLink.current = { dateISO, targetId, eventId };
     }
 
@@ -139,6 +145,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
       checklistId: undefined,
       eventId: undefined,
       activityId: undefined,
+      dateOffset: undefined,
     });
   }, [route.params]);
 

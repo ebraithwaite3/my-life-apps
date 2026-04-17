@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import TemplateCard from "../components/cards/TemplateCard";
 import { useChecklistTemplates } from "@my-apps/hooks";
+import { useChecklistData } from "@my-apps/contexts";
 import { applySorting } from "@my-apps/utils";
 
 const SORT_KEY = '@checklist_templates_sort';
@@ -21,6 +22,7 @@ const SORT_KEY = '@checklist_templates_sort';
 const TemplatesScreen = () => {
   const { theme, getSpacing, getTypography } = useTheme();
   const { user, isUserAdmin } = useData();
+  const { allPinned } = useChecklistData();
   const editContentRef = React.useRef(null);
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -327,6 +329,7 @@ const TemplatesScreen = () => {
                 isTemplate
                 addReminder
                 templates={allTemplates}
+                pinnedChecklists={allPinned}
               />
             </View>
           </KeyboardAvoidingView>

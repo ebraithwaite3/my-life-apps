@@ -90,11 +90,27 @@ const AddChecklistToEventModal = ({
 
     // Use template
     const template = option.template;
-    const templateItems = template.items.map((item, index) => ({
-      ...item,
-      id: item.id || `item_${Date.now()}_${index}`,
-      completed: false,
-    }));
+    const templateItems = template.items.map((item, index) => {
+      const instantiated = {
+        ...item,
+        id: item.id || `item_${Date.now()}_${index}`,
+        completed: false,
+      };
+
+      // Reset any runtime yesNo state that may have leaked into the template
+      if (instantiated.yesNoConfig) {
+        const { answered, answer, ...staticConfig } = instantiated.yesNoConfig;
+        instantiated.yesNoConfig = staticConfig;
+      }
+
+      // Clear runtime-generated sub-items (multiChoice/fillIn/guided generate these at answer time)
+      if (instantiated.subItems && instantiated.itemType === 'yesNo' &&
+          ['multiChoice', 'fillIn', 'guided', 'assignable'].includes(instantiated.yesNoConfig?.type)) {
+        delete instantiated.subItems;
+      }
+
+      return instantiated;
+    });
 
     // For To Do events: append yesterday's incomplete items that aren't already in the template
     let carryoverToMerge = [];

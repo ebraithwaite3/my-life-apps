@@ -363,6 +363,7 @@ const handlePress = () => {
               onSelect={onSelect}
               isMoveable={isMoveable}
               selectedItems={selectedItems}
+              onNavigateToLinkedChecklist={onNavigateToLinkedChecklist}
             />
             {/* Timer for guided steps with hasTimer */}
             {isGuided && subItem.hasTimer && !selectionMode && (
