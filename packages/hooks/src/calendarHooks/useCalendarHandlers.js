@@ -8,7 +8,7 @@ import { useDeleteNotification } from "../useDeleteNotification";
 import { useNotifications } from "../notificationHooks/useNotifications";
 import { useData } from "@my-apps/contexts";
 import { scheduleBatchNotification } from "@my-apps/services";
-import { showSuccessToast, showErrorToast } from "@my-apps/utils";
+import { showSuccessToast, showErrorToast, isChecklistComplete } from "@my-apps/utils";
 
 /**
  * Remove undefined values from object (Firestore doesn't allow undefined)
@@ -362,7 +362,7 @@ export const useCalendarHandlers = ({
 
     const wasJustCompleted =
       !selectedChecklist.completedAt &&
-      updatedItems.every((item) => item.completed);
+      isChecklistComplete({ items: updatedItems });
 
     if (wasJustCompleted) {
       updatedChecklist.completedAt = new Date().toISOString();

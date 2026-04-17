@@ -42,6 +42,7 @@ const VocabModeSelector = ({ mode, onSelect }) => {
   const options = [
     { label: "Solo", value: "solo" },
     { label: "Parent", value: "parent" },
+    { label: "MC", value: "mc" },
   ];
 
   return (

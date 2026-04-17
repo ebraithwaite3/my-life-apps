@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import * as Crypto from 'expo-crypto';
 import {
   View,
   KeyboardAvoidingView,
@@ -57,15 +58,16 @@ const VocabTestModal = ({
         setInitialChecklist(JSON.parse(JSON.stringify(checklist)));
         setTabMode("flashcards");
       } else {
-        // Create mode
+        // Create mode — assign ID now so a second list doesn't overwrite the first
+        const newId = Crypto.randomUUID();
         setWorkingChecklist({
-          id: null,
+          id: newId,
           name: "",
           items: [],
           listType: "vocab",
           totalSessions: 0,
         });
-        setInitialChecklist({ id: null, name: "", items: [], listType: "vocab", totalSessions: 0 });
+        setInitialChecklist({ id: newId, name: "", items: [], listType: "vocab", totalSessions: 0 });
         setTabMode("edit");
       }
       setHasEditChanges(false);

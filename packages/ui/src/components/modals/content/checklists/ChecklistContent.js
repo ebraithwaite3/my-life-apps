@@ -37,6 +37,7 @@ const ChecklistContent = ({
   groupId = null,
   eventStartTime = null,
   eventActivities = [],
+  onNavigateToLinkedChecklist,
 }) => {
   console.log(
     "🔍 ChecklistContent checklist:", checklist);
@@ -377,6 +378,27 @@ const ChecklistContent = ({
         setShowGuidedSetupModal(true);
       } else {
         handleGuidedConfirm(item, 1, parentItem || null);
+      }
+      return;
+    }
+
+    // linkedNavigate: save answered state, then navigate
+    if (answer === "yes" && item?.yesNoConfig?.type === "linkedNavigate") {
+      const updatedItems = items.map((i) => {
+        if (i.id !== itemId) return i;
+        return { ...i, yesNoConfig: { ...i.yesNoConfig, answered: true, answer: "yes" } };
+      });
+      setItems(updatedItems);
+      if (onItemToggle) onItemToggle(updatedItems);
+      if (onSaveChecklist) {
+        onSaveChecklist({
+          ...checklist,
+          items: updatedItems,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      if (onNavigateToLinkedChecklist) {
+        onNavigateToLinkedChecklist({ type: "bySearch", searchTerm: item.name });
       }
       return;
     }
@@ -833,6 +855,7 @@ const ChecklistContent = ({
                 onSelect={toggleSelection}
                 isMoveable={isItemMoveable(item)}
                 selectedItems={selectedItems}
+                onNavigateToLinkedChecklist={onNavigateToLinkedChecklist}
               />
             ))}
           </>

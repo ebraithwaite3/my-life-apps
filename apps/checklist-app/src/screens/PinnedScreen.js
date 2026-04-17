@@ -69,14 +69,31 @@ const PinnedScreen = () => {
 
   // Deep link handler — notification tap with checklistId opens that checklist
   useEffect(() => {
-    const { checklistId } = route.params || {};
-    if (!checklistId || checklistsLoading || !allPinned.length) return;
+    const { checklistId, checklistSearchTerm } = route.params || {};
+    if (checklistsLoading || !allPinned.length) return;
 
-    const target = allPinned.find((c) => c.id === checklistId);
-    if (target) {
-      console.log("📬 Deep link — opening checklist:", target.name);
-      handleViewChecklist(target);
+    if (checklistId) {
+      const target = allPinned.find((c) => c.id === checklistId);
+      if (target) {
+        console.log("📬 Deep link — opening checklist:", target.name);
+        handleViewChecklist(target);
+      } else {
+        Alert.alert('Not Found', 'That checklist no longer exists or has been removed.');
+      }
       navigation.setParams({ checklistId: undefined });
+    }
+
+    if (checklistSearchTerm) {
+      const term = checklistSearchTerm.toLowerCase();
+      const matches = allPinned.filter((c) => c.name.toLowerCase().includes(term));
+      const sorted = matches.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      if (sorted.length > 0) {
+        console.log("🔍 Smart link — opening:", sorted[0].name);
+        handleViewChecklist(sorted[0]);
+      } else {
+        Alert.alert('Not Found', `"${checklistSearchTerm}" was not found in any of your pinned lists.`);
+      }
+      navigation.setParams({ checklistSearchTerm: undefined });
     }
   }, [route.params, checklistsLoading, allPinned]);
 
@@ -752,6 +769,30 @@ const handleSaveWithToast = async (checklist) => {
                   onUpdatePinnedChecklist={updatePinnedChecklist}
                   onCreatePinnedChecklist={createPinnedChecklist}
                   onCloseParentModal={() => setShowChecklistModal(false)}  // ✅ Add this
+                  onNavigateToLinkedChecklist={({ type, id, searchTerm }) => {
+                    if (type === 'byId' && !id) {
+                      Alert.alert('No Checklist Linked', 'Edit this item and select a pinned checklist to link to.');
+                      return;
+                    }
+                    setShowChecklistModal(false);
+                    setTimeout(() => {
+                      let target;
+                      if (type === 'byId') {
+                        target = allPinned.find((c) => c.id === id);
+                      } else {
+                        const term = searchTerm.toLowerCase();
+                        const matches = allPinned.filter((c) => c.name.toLowerCase().includes(term));
+                        target = matches.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+                      }
+                      if (target) {
+                        handleViewChecklist(target);
+                      } else if (type === 'byId') {
+                        Alert.alert('Not Found', 'That checklist no longer exists or has been removed.');
+                      } else {
+                        Alert.alert('Not Found', `"${searchTerm}" was not found in any of your pinned lists.`);
+                      }
+                    }, 300);
+                  }}
                 />
               ) : (
                 <EditChecklistContent

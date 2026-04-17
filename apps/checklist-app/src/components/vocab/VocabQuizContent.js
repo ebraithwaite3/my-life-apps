@@ -38,6 +38,11 @@ const VocabQuizContent = ({ list, onSaveStats }) => {
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
 
+  // MC mode state
+  const [mcChoices, setMcChoices] = useState([]);
+  const [mcSelected, setMcSelected] = useState(null); // id of tapped choice
+  const [mcResult, setMcResult] = useState(null); // 'correct' | 'incorrect'
+
   const items = list?.items || [];
 
   const {
@@ -71,16 +76,29 @@ const VocabQuizContent = ({ list, onSaveStats }) => {
   useEffect(() => {
     setAnswer("");
     setResult(null);
+    setMcSelected(null);
+    setMcResult(null);
     if (vocabMode === "solo") {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [currentIndex]);
 
-  // Clear result when switching to Parent mode
+  // Clear result when switching modes; regenerate MC choices on mode switch
   useEffect(() => {
     setAnswer("");
     setResult(null);
+    setMcSelected(null);
+    setMcResult(null);
   }, [vocabMode]);
+
+  // Generate MC choices whenever the current word or mode changes
+  useEffect(() => {
+    if (vocabMode !== "mc" || !currentWord) return;
+    const others = items.filter((i) => i.id !== currentWord.id);
+    const shuffledOthers = [...others].sort(() => Math.random() - 0.5).slice(0, 3);
+    const choices = [currentWord, ...shuffledOthers].sort(() => Math.random() - 0.5);
+    setMcChoices(choices);
+  }, [currentIndex, vocabMode]);
 
   // Persist stats once when session ends
   useEffect(() => {
@@ -223,6 +241,46 @@ const VocabQuizContent = ({ list, onSaveStats }) => {
       textAlign: "center",
       marginTop: getSpacing.md,
     },
+    // MC mode
+    mcGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: getSpacing.sm,
+      marginBottom: getSpacing.lg,
+    },
+    mcChoice: {
+      width: "48%",
+      paddingVertical: getSpacing.md,
+      paddingHorizontal: getSpacing.sm,
+      borderRadius: getBorderRadius.md,
+      borderWidth: 2,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 64,
+    },
+    mcChoiceCorrect: {
+      borderColor: theme.success,
+      backgroundColor: `${theme.success}15`,
+    },
+    mcChoiceWrong: {
+      borderColor: theme.error,
+      backgroundColor: `${theme.error}10`,
+    },
+    mcChoiceRevealed: {
+      borderColor: theme.success,
+      backgroundColor: `${theme.success}15`,
+    },
+    mcChoiceText: {
+      fontSize: getTypography.body.fontSize,
+      fontWeight: "600",
+      color: theme.text.primary,
+      textAlign: "center",
+    },
+    mcChoiceTextCorrect: { color: theme.success },
+    mcChoiceTextWrong: { color: theme.error },
+    mcChoiceTextRevealed: { color: theme.success },
   });
 
   if (items.length === 0) {
@@ -277,6 +335,91 @@ const VocabQuizContent = ({ list, onSaveStats }) => {
       </View>
     </>
   );
+
+  // ── MC MODE ──────────────────────────────────────────────────────────────
+  if (vocabMode === "mc") {
+    if (items.length < 2) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="help-circle-outline" size={48} color={theme.text.tertiary} />
+          <Text style={styles.emptyText}>
+            Add at least 2 words to use Multiple Choice.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {modeSelectorsJSX}
+        <VocabDefinitionDisplay definition={currentWord?.definition} />
+        {speakButtonJSX}
+
+        <View style={styles.mcGrid}>
+          {mcChoices.map((choice) => {
+            const isSelected = mcSelected === choice.id;
+            const isCorrectChoice = choice.id === currentWord?.id;
+
+            let choiceStyle = styles.mcChoice;
+            let textStyle = styles.mcChoiceText;
+
+            if (mcSelected !== null) {
+              if (isSelected && isCorrectChoice) {
+                choiceStyle = [styles.mcChoice, styles.mcChoiceCorrect];
+                textStyle = [styles.mcChoiceText, styles.mcChoiceTextCorrect];
+              } else if (isSelected && !isCorrectChoice) {
+                choiceStyle = [styles.mcChoice, styles.mcChoiceWrong];
+                textStyle = [styles.mcChoiceText, styles.mcChoiceTextWrong];
+              } else if (!isSelected && isCorrectChoice) {
+                // Reveal the correct answer when wrong was picked
+                choiceStyle = [styles.mcChoice, styles.mcChoiceRevealed];
+                textStyle = [styles.mcChoiceText, styles.mcChoiceTextRevealed];
+              }
+            }
+
+            return (
+              <TouchableOpacity
+                key={choice.id}
+                style={choiceStyle}
+                onPress={() => {
+                  if (mcSelected !== null) return; // already answered
+                  setMcSelected(choice.id);
+                  if (choice.id === currentWord?.id) {
+                    setMcResult("correct");
+                  } else {
+                    setMcResult("incorrect");
+                  }
+                }}
+                activeOpacity={mcSelected !== null ? 1 : 0.7}
+              >
+                <Text style={textStyle}>{choice.word}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {mcResult !== null && (
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={() => {
+              if (mcResult === "correct") {
+                handleRight();
+              } else {
+                handleWrong();
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.nextButtonText}>Next Word →</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    );
+  }
 
   // ── PARENT MODE ──────────────────────────────────────────────────────────
   if (vocabMode === "parent") {

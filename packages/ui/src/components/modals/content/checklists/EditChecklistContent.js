@@ -684,6 +684,7 @@ const EditChecklistContent = forwardRef(
           onSave={handleSaveConfig}
           onCancel={handleCancelConfig}
           isUserAdmin={isUserAdmin}
+          availablePinnedChecklists={pinnedChecklists.map((c) => ({ id: c.id, name: c.name }))}
         />
 
         {showQuickAddPicker && (

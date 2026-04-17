@@ -71,6 +71,20 @@ const TYPE_CARDS = [
     label: 'Assignable Task',
     description: 'Tap Yes to assign to family members',
   },
+  {
+    itemType: 'checklistLink',
+    yesNoType: null,
+    icon: 'open-outline',
+    label: 'Checklist Link',
+    description: 'Tap to open a specific pinned list',
+  },
+  {
+    itemType: 'yesNo',
+    yesNoType: 'linkedNavigate',
+    icon: 'checkmark-circle-outline',
+    label: 'Yes/No Navigate',
+    description: 'On Yes, opens the most recent matching pinned list',
+  },
 ];
 
 const TYPE_TITLES = {
@@ -81,6 +95,8 @@ const TYPE_TITLES = {
   guided: 'Guided Workflow',
   header: 'Header w/ Sub-Items',
   assignable: 'Assignable Task',
+  checklistLink: 'Checklist Link',
+  linkedNavigate: 'Yes/No Navigate',
 };
 
 const ChecklistItemConfigModal = ({
@@ -89,6 +105,7 @@ const ChecklistItemConfigModal = ({
   onSave,
   onCancel,
   isUserAdmin,
+  availablePinnedChecklists = [],
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
@@ -112,6 +129,10 @@ const ChecklistItemConfigModal = ({
   // Assignable
   const [notificationText, setNotificationText] = useState('');
 
+  // Checklist Link
+  const [linkedChecklistId, setLinkedChecklistId] = useState(null);
+  const [linkedChecklistName, setLinkedChecklistName] = useState('');
+
   const inputRefs = useRef({});
 
   useEffect(() => {
@@ -120,6 +141,21 @@ const ChecklistItemConfigModal = ({
       setItemType(item.itemType || 'checkbox');
       setRequiredForScreenTime(item.requiredForScreenTime || false);
       setRequiresParentApproval(item.requiresParentApproval || false);
+
+      // Reset linked checklist state
+      setLinkedChecklistId(null);
+      setLinkedChecklistName('');
+
+      if (item.itemType === 'checklistLink') {
+        setYesNoType(null);
+        setOptions([]);
+        setGuidedSteps([]);
+        setQuantityLabel('');
+        setNotificationText('');
+        setLinkedChecklistId(item.checklistLinkConfig?.linkedChecklistId || null);
+        setLinkedChecklistName(item.checklistLinkConfig?.linkedChecklistName || '');
+        return;
+      }
 
       const cfg = item.yesNoConfig;
       if (cfg) {
@@ -138,10 +174,15 @@ const ChecklistItemConfigModal = ({
     }
   }, [item, visible]);
 
-  const currentTypeKey = itemType === 'checkbox' ? 'checkbox' : (yesNoType || 'simple');
+  const currentTypeKey = itemType === 'checkbox'
+    ? 'checkbox'
+    : itemType === 'checklistLink'
+      ? 'checklistLink'
+      : (yesNoType || 'simple');
 
   const isCardSelected = (card) => {
     if (card.itemType === 'checkbox') return itemType === 'checkbox';
+    if (card.itemType === 'checklistLink') return itemType === 'checklistLink';
     return itemType === 'yesNo' && yesNoType === card.yesNoType;
   };
 
@@ -187,6 +228,18 @@ const ChecklistItemConfigModal = ({
       requiredForScreenTime: requiredForScreenTime || undefined,
       requiresParentApproval: requiresParentApproval || undefined,
     };
+
+    if (itemType === 'checklistLink') {
+      updatedItem.checklistLinkConfig = {
+        linkedChecklistId,
+        linkedChecklistName,
+      };
+      updatedItem.yesNoConfig = undefined;
+      updatedItem.requiredForScreenTime = undefined;
+      updatedItem.requiresParentApproval = undefined;
+      onSave(updatedItem);
+      return;
+    }
 
     if (itemType === 'yesNo') {
       if (yesNoType === 'multiChoice') {
@@ -244,8 +297,8 @@ const ChecklistItemConfigModal = ({
   const styles = StyleSheet.create({
     // Step 1 - card grid
     step1Container: {
-      flex: 1,
       padding: getSpacing.lg,
+      paddingBottom: getSpacing.xl * 2,
     },
     cardRow: {
       flexDirection: 'row',
@@ -443,7 +496,8 @@ const ChecklistItemConfigModal = ({
     TYPE_CARDS.slice(0, 2),
     TYPE_CARDS.slice(2, 4),
     TYPE_CARDS.slice(4, 6),
-    TYPE_CARDS.slice(6),
+    TYPE_CARDS.slice(6, 8),
+    TYPE_CARDS.slice(8),
   ];
 
   const renderStep1 = () => (
@@ -650,7 +704,56 @@ const ChecklistItemConfigModal = ({
             </View>
           )}
 
-          {/* Requirements - shown for all types */}
+          {/* Checklist Link: pinned checklist picker */}
+          {itemType === 'checklistLink' && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Select Pinned Checklist</Text>
+              {availablePinnedChecklists.length === 0 ? (
+                <View style={styles.headerInfo}>
+                  <Text style={styles.headerInfoText}>
+                    No pinned checklists found. Create one first from the Pinned tab.
+                  </Text>
+                </View>
+              ) : (
+                availablePinnedChecklists.map((cl) => (
+                  <TouchableOpacity
+                    key={cl.id}
+                    style={[
+                      styles.checkboxRow,
+                      linkedChecklistId === cl.id && {
+                        backgroundColor: `${theme.primary}10`,
+                        borderWidth: 1,
+                        borderColor: theme.primary,
+                      },
+                    ]}
+                    onPress={() => {
+                      setLinkedChecklistId(cl.id);
+                      setLinkedChecklistName(cl.name);
+                    }}
+                  >
+                    <View style={[styles.checkbox, linkedChecklistId === cl.id && styles.checkboxChecked]}>
+                      {linkedChecklistId === cl.id && <Text style={{ color: '#fff', fontSize: 16 }}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{cl.name}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* Yes/No Navigate: info message */}
+          {yesNoType === 'linkedNavigate' && (
+            <View style={styles.section}>
+              <View style={styles.headerInfo}>
+                <Text style={styles.headerInfoText}>
+                  When 'Yes' is tapped, this item will open the most recently created pinned checklist whose name contains this item's name.{'\n\n'}Name this item to match the list you want to open (e.g. 'Spelling', 'Vocab').
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Requirements - shown for all types except checklistLink */}
+          {itemType !== 'checklistLink' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Requirements</Text>
             <TouchableOpacity
@@ -672,6 +775,7 @@ const ChecklistItemConfigModal = ({
               <Text style={styles.checkboxLabel}>Parent approval needed</Text>
             </TouchableOpacity>
           </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </>

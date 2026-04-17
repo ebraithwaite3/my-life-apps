@@ -46,6 +46,12 @@ export const buildChecklistObject = ({
       if (item.yesNoConfig) {
         baseItem.yesNoConfig = item.yesNoConfig;
       }
+      if (item.checklistLinkConfig) {
+        baseItem.checklistLinkConfig = item.checklistLinkConfig;
+      }
+      if (item.link) {
+        baseItem.link = item.link;
+      }
       if (item.sourceChecklistId) {
         baseItem.sourceChecklistId = item.sourceChecklistId;
       }

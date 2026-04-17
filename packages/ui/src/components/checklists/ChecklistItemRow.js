@@ -4,11 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@my-apps/contexts';
 import GuidedStepTimer from '../timers/GuidedStepTimer';
 
-const ChecklistItemRow = ({ 
-  item, 
-  onToggle, 
-  onYesNoAnswer, 
-  onResetYesNo, 
+const ChecklistItemRow = ({
+  item,
+  onToggle,
+  onYesNoAnswer,
+  onResetYesNo,
   isSubItem = 0, // depth: 0=root, 1=child, 2=grandchild (no further recursion)
   // NEW: Selection mode props
   selectionMode = false,
@@ -16,12 +16,14 @@ const ChecklistItemRow = ({
   onSelect,
   isMoveable = true,
   selectedItems = new Set(),
+  onNavigateToLinkedChecklist,
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
   // Check if this is a yes/no item
   const isYesNo = item.itemType === 'yesNo';
   const isGroup = item.itemType === 'group';
+  const isChecklistLink = item.itemType === 'checklistLink';
   const yesNoConfig = item.yesNoConfig || {};
   const isAnswered = yesNoConfig.answered || false;
   const answer = yesNoConfig.answer;
@@ -29,6 +31,7 @@ const ChecklistItemRow = ({
   const isFillIn = isYesNo && yesNoConfig.type === 'fillIn';
   const isGuided = isYesNo && yesNoConfig.type === 'guided';
   const isHeader = isYesNo && yesNoConfig.type === 'header';
+  const isLinkedNavigate = isYesNo && yesNoConfig.type === 'linkedNavigate';
 
   // For groups AND answered multiChoice/fillIn/guided, calculate completion
   const subItems = item.subItems || [];
@@ -192,6 +195,63 @@ const handlePress = () => {
       opacity: 0.4,
     },
   });
+
+  // CHECKLIST LINK - tappable row that marks done + navigates to a pinned list
+  if (isChecklistLink) {
+    if (selectionMode) {
+      return (
+        <View style={[styles.itemRow, styles.disabledRow]}>
+          <View style={styles.rowContent}>
+            <View style={styles.selectionCheckbox} />
+            <View style={styles.itemTextContainer}>
+              <Text style={styles.itemText}>{item.name}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.itemRow, item.completed && styles.itemRowCompleted, { flexDirection: 'row', alignItems: 'center' }]}>
+        <TouchableOpacity
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+          onPress={() => onToggle(item.id)}
+          activeOpacity={0.6}
+        >
+          <View style={styles.checkbox}>
+            <Ionicons
+              name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
+              size={28}
+              color={item.completed ? (theme.success || '#4CAF50') : theme.text.tertiary}
+            />
+          </View>
+          <View style={styles.itemTextContainer}>
+            <Text style={[
+              styles.itemText,
+              styles.itemTextLink,
+              item.completed && styles.itemTextCompleted,
+            ]}>
+              {item.name}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            if (onNavigateToLinkedChecklist) {
+              onNavigateToLinkedChecklist({
+                type: 'byId',
+                id: item.checklistLinkConfig?.linkedChecklistId ?? null,
+              });
+            }
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ paddingLeft: getSpacing.sm }}
+        >
+          <Ionicons name="open-outline" size={22} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // GROUP OR MULTICHOICE (answered yes) - Show parent + indented sub-items
   if (shouldRenderAsGroup) {

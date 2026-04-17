@@ -6,8 +6,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "@my-apps/contexts";
-import { calculateChecklistProgress } from "@my-apps/utils";
+import { calculateChecklistProgress, isChecklistComplete } from "@my-apps/utils";
 import { showSuccessToast } from "@my-apps/utils";
 import ModalWrapper from "../../base/ModalWrapper";
 import ModalHeader from "../../../headers/ModalHeader";
@@ -67,6 +68,24 @@ const ChecklistModal = ({
 
   const { theme, getSpacing } = useTheme();
   const { db } = useAuth();
+  const navigation = useNavigation();
+
+  const handleNavigateToLinkedChecklist = ({ type, id, searchTerm }) => {
+    if (type === 'byId' && !id) {
+      Alert.alert('No Checklist Linked', 'Edit this item and select a pinned checklist to link to.');
+      return;
+    }
+    closeViewChecklistModal();
+    setTimeout(() => {
+      const params = type === 'byId'
+        ? { checklistId: id }
+        : { checklistSearchTerm: searchTerm };
+      navigation.navigate('Pinned', {
+        screen: 'PinnedHome',
+        params,
+      });
+    }, 100);
+  };
   const editContentRef = useRef(null);
 
   const {
@@ -271,7 +290,7 @@ const ChecklistModal = ({
 
     const wasJustCompleted =
       !selectedChecklist.completedAt &&
-      updatedItems.every((item) => item.completed);
+      isChecklistComplete({ items: updatedItems });
 
     if (wasJustCompleted) {
       updatedChecklist.completedAt = new Date().toISOString();
@@ -453,7 +472,11 @@ const ChecklistModal = ({
 
     setWorkingChecklist(checklist);
     setUpdatedItems(checklist.items);
-    setInitialChecklist(JSON.parse(JSON.stringify(checklist)));
+    // Snapshot using raw editor state so areItemsEqual returns true (trailing empty items match)
+    const editorState = editContentRef.current?.getCurrentState();
+    const snapshotItems = editorState?.items ?? checklist.items;
+    setInitialChecklist(JSON.parse(JSON.stringify({ ...checklist, items: snapshotItems })));
+    setHasEditModeChanges(false);
     setIsDirtyComplete(false);
     } finally {
       setSaving(false);
@@ -632,6 +655,7 @@ const handleSaveWithToast = async (checklist) => {
                   groupId={selectedChecklistEvent?.groupId || null}
                   eventStartTime={selectedChecklistEvent?.startTime}
                   eventActivities={selectedChecklistEvent?.activities || []}
+                  onNavigateToLinkedChecklist={handleNavigateToLinkedChecklist}
                 />
               ) : (
                 <EditChecklistContent
