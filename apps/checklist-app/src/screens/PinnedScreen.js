@@ -328,9 +328,13 @@ useEffect(() => {
   };
 
   const handleViewChecklist = (checklist) => {
-    if (isGroceryList(checklist.name)) {
+    if (isGroceryList(checklist)) {
       setSelectedChecklist(checklist);
       setShowGroceryModal(true);
+      // Backfill type field silently if missing
+      if (!checklist.type) {
+        updatePinnedChecklist({ ...checklist, type: 'grocery' }).catch(() => {});
+      }
       return;
     }
     if (checklist.listType === "vocab") {

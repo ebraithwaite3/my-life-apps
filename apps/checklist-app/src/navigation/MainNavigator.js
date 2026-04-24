@@ -1,6 +1,6 @@
 // src/navigation/MainNavigator.js
 import React, { useRef } from "react";
-import { Text, View, ActivityIndicator, Linking } from "react-native";
+import { Text, View, ActivityIndicator, Linking, Alert } from "react-native";
 import { NavigationContainer, useNavigation, createNavigationContainerRef } from "@react-navigation/native";
 
 export const navigationRef = createNavigationContainerRef();
@@ -9,6 +9,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { useTheme } from "@my-apps/contexts";
 import { useAuth } from "@my-apps/contexts";
 import { useData } from "@my-apps/contexts";
+import { useIngredients, useMeals } from "@my-apps/hooks";
 import { AppHeader } from "@my-apps/ui";
 import { LoadingScreen } from "@my-apps/ui";
 import { DateTime } from "luxon";
@@ -80,9 +81,11 @@ function PreferencesStackScreen() {
 
 // Header wrapper with navigation context
 function HeaderWithNavigation({ onLogout }) {
-  const { allCalendars } = useData();
+  const { allCalendars, isUserAdmin } = useData();
   console.log("ALL CALENDARS IN HEADER:", allCalendars);
   const navigation = useNavigation();
+  const { refreshIngredients, refreshing: ingredientsRefreshing } = useIngredients();
+  const { refreshMeals, refreshing: mealsRefreshing } = useMeals();
 
   // Build menu items for MyChecklists
   const menuItems = [
@@ -101,6 +104,26 @@ function HeaderWithNavigation({ onLogout }) {
     //   label: "Open Golf",
     //   onPress: () => console.log("TODO: Deep link to golf app"),
     // },
+    ...(isUserAdmin ? [
+      {
+        icon: "🥕",
+        label: ingredientsRefreshing ? "Refreshing..." : "Refresh Ingredients",
+        onPress: async () => {
+          if (ingredientsRefreshing) return;
+          const count = await refreshIngredients();
+          Alert.alert("Ingredients Refreshed", `${count} items loaded`);
+        },
+      },
+      {
+        icon: "🍽️",
+        label: mealsRefreshing ? "Refreshing..." : "Refresh Meals",
+        onPress: async () => {
+          if (mealsRefreshing) return;
+          const count = await refreshMeals();
+          Alert.alert("Meals Refreshed", `${count} items loaded`);
+        },
+      },
+    ] : []),
     {
       icon: "🚪",
       label: "Logout",

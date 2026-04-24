@@ -21,10 +21,11 @@ const uuidv4 = () => Crypto.randomUUID();
  */
 export const useAssignChecklistTask = () => {
 
-  const assignTask = async ({ members, taskName, currentUserId }) => {
+  const assignTask = async ({ members, taskName, currentUserId, targetDate }) => {
     const results = [];
-    const today = DateTime.now().toFormat('yyyy-MM-dd');
-    const monthKey = DateTime.now().toFormat('yyyy-MM');
+    const target = targetDate ? DateTime.fromISO(targetDate) : DateTime.now();
+    const today = target.toFormat('yyyy-MM-dd');
+    const monthKey = target.toFormat('yyyy-MM');
 
     for (const member of members) {
       if (member.userId === currentUserId) continue; // admin self-assign handled by caller

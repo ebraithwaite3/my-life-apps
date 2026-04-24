@@ -14,3 +14,5 @@ export * from './src/calendarHooks';
 export * from './src/eventHooks';
 export * from './src/checklistHooks';
 export * from './src/notificationHooks';
+export { useIngredients } from './src/useIngredients';
+export { useMeals } from './src/useMeals';

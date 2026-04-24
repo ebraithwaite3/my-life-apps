@@ -1,25 +1,30 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Alert,
 } from "react-native";
-import { useTheme } from "@my-apps/contexts";
+import { useTheme, useData } from "@my-apps/contexts";
 import { showSuccessToast } from "@my-apps/utils";
+import { useIngredients } from "@my-apps/hooks";
 import {
   ModalWrapper,
   ModalHeader,
   PillSelectionButton,
   ChecklistContent,
-  EditChecklistContent,
 } from "@my-apps/ui";
 import AddMealsContent from "./AddMealsContent";
+import GroceryItemsContent from "./GroceryItemsContent";
+import { STORES } from "./groceryConstants";
 
 /**
  * Modal for "Grocery List" checklists.
- * Tabs: List | Add Meals | Edit
+ * Tabs: List | Meals | Items
  * Mirrors the usePinnedChecklistModal pattern used by the regular checklist modal.
  *
  * Props:
@@ -34,16 +39,23 @@ const GroceryListModal = ({
   onClose,
   onSaveChecklist,
 }) => {
-  const { theme, getSpacing, getBorderRadius } = useTheme();
+  const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
+  const { user } = useData();
+  const isAdmin = user?.admin === true;
+  const {
+    ingredients,
+    ingredientsByCategory,
+    loading: ingredientsLoading,
+    addIngredient,
+    updateIngredient,
+  } = useIngredients();
 
   const [tabMode, setTabMode] = useState("list");
+  const [selectedStore, setSelectedStore] = useState(null);
   const [workingChecklist, setWorkingChecklist] = useState(null);
   const [initialChecklist, setInitialChecklist] = useState(null);
   const [updatedItems, setUpdatedItems] = useState([]);
   const [isDirtyList, setIsDirtyList] = useState(false);
-  const [hasEditChanges, setHasEditChanges] = useState(false);
-
-  const editContentRef = useRef(null);
 
   // Init / reset when modal opens
   useEffect(() => {
@@ -53,7 +65,6 @@ const GroceryListModal = ({
       setUpdatedItems(checklist.items || []);
       setTabMode("list");
       setIsDirtyList(false);
-      setHasEditChanges(false);
     }
   }, [visible, checklist?.id]);
 
@@ -66,9 +77,7 @@ const GroceryListModal = ({
     setIsDirtyList(hasChanges);
   }, [updatedItems, initialChecklist]);
 
-  const hasPendingChanges =
-    (tabMode === "list" && isDirtyList) ||
-    (tabMode === "edit" && hasEditChanges);
+  const hasPendingChanges = isDirtyList;
 
   const handleClose = () => {
     if (hasPendingChanges) {
@@ -82,7 +91,6 @@ const GroceryListModal = ({
             style: "destructive",
             onPress: () => {
               setIsDirtyList(false);
-              setHasEditChanges(false);
               onClose();
             },
           },
@@ -122,47 +130,45 @@ const GroceryListModal = ({
     setIsDirtyList(false);
   };
 
-  // Add Meals tab: meal added or removed — saves immediately and advances baseline
-  // so switching to List/Edit tab afterwards doesn't show false "Cancel"
-  const handleUpdateList = async (updatedChecklist) => {
+  // Meals/Items tabs: update local state only — Update button handles the write
+  const handleUpdateList = (updatedChecklist) => {
     setWorkingChecklist(updatedChecklist);
     setUpdatedItems(updatedChecklist.items || []);
-    try {
-      await onSaveChecklist(updatedChecklist);
-      setInitialChecklist(JSON.parse(JSON.stringify(updatedChecklist)));
-    } catch (e) {
-      console.error("❌ GroceryListModal meal update failed:", e);
+  };
+
+  // Build set of item IDs (both parents and sub-items) that are unavailable at the selected store
+  const warningItemIds = useMemo(() => {
+    if (!selectedStore || !ingredients.length) return new Set();
+    const ingredientMapById = new Map(ingredients.map((i) => [i.id, i]));
+    const ids = new Set();
+
+    for (const item of updatedItems) {
+      let parentWarning = false;
+
+      if (item.subItems?.length) {
+        for (const sub of item.subItems) {
+          if (sub.ingredientId) {
+            const ing = ingredientMapById.get(sub.ingredientId);
+            if (ing?.unavailableAt?.includes(selectedStore)) {
+              ids.add(sub.id);
+              parentWarning = true;
+            }
+          }
+        }
+      } else if (item.ingredientId) {
+        const ing = ingredientMapById.get(item.ingredientId);
+        if (ing?.unavailableAt?.includes(selectedStore)) {
+          ids.add(item.id);
+        }
+      }
+
+      if (parentWarning) ids.add(item.id);
     }
-  };
+    return ids;
+  }, [selectedStore, updatedItems, ingredients]);
 
-  // Edit tab: saved — spread workingChecklist first to preserve isGroupChecklist,
-  // groupId, order, etc. so handleSaveGroceryChecklist builds the right context
-  const handleSaveEdit = async (updatedChecklist) => {
-    const saved = {
-      ...workingChecklist,
-      ...updatedChecklist,
-      updatedAt: new Date().toISOString(),
-    };
-    await onSaveChecklist(saved);
-    const snapshot = JSON.parse(JSON.stringify(saved));
-    setWorkingChecklist(saved);
-    setInitialChecklist(snapshot);
-    setUpdatedItems(saved.items || []);
-    setHasEditChanges(false);
-    setTabMode("list");
-  };
-
-  const getDoneHandler = () => {
-    if (tabMode === "edit") return () => editContentRef.current?.save();
-    if (tabMode === "list") return handleSaveList;
-    return undefined; // meals tab saves immediately on add/remove
-  };
-
-  const getDoneDisabled = () => {
-    if (tabMode === "edit") return !hasEditChanges;
-    if (tabMode === "list") return !isDirtyList;
-    return true;
-  };
+  const getDoneHandler = () => handleSaveList;
+  const getDoneDisabled = () => !isDirtyList;
 
   const styles = StyleSheet.create({
     overlay: {
@@ -190,6 +196,33 @@ const GroceryListModal = ({
     content: {
       flex: 1,
     },
+    storeRow: {
+      paddingHorizontal: getSpacing.lg,
+      paddingBottom: getSpacing.sm,
+      backgroundColor: theme.surface,
+    },
+    storePill: {
+      paddingHorizontal: getSpacing.md,
+      paddingVertical: getSpacing.xs,
+      borderRadius: getBorderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginRight: getSpacing.sm,
+      backgroundColor: theme.surface,
+    },
+    storePillSelected: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '15',
+    },
+    storePillText: {
+      fontSize: getTypography.bodySmall.fontSize,
+      color: theme.text.secondary,
+      fontWeight: '500',
+    },
+    storePillTextSelected: {
+      color: theme.primary,
+      fontWeight: '700',
+    },
   });
 
   if (!workingChecklist) return null;
@@ -215,13 +248,35 @@ const GroceryListModal = ({
               <PillSelectionButton
                 options={[
                   { label: "List", value: "list" },
-                  { label: "Add Meals", value: "meals" },
-                  { label: "Edit", value: "edit" },
+                  { label: "Meals", value: "meals" },
+                  { label: "Items", value: "items" },
                 ]}
                 selectedValue={tabMode}
                 onSelect={setTabMode}
               />
             </View>
+
+            {/* Store filter — only visible on List tab for admins */}
+            {tabMode === "list" && isAdmin && (
+              <View style={styles.storeRow}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {STORES.map((store) => {
+                    const selected = selectedStore === store;
+                    return (
+                      <TouchableOpacity
+                        key={store}
+                        style={[styles.storePill, selected && styles.storePillSelected]}
+                        onPress={() => setSelectedStore(selected ? null : store)}
+                      >
+                        <Text style={[styles.storePillText, selected && styles.storePillTextSelected]}>
+                          {store}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
 
             <View style={styles.content}>
               {tabMode === "list" && (
@@ -230,6 +285,7 @@ const GroceryListModal = ({
                   onItemToggle={handleItemToggle}
                   onSaveChecklist={handleSaveListFromContent}
                   onCloseParentModal={handleClose}
+                  warningItemIds={warningItemIds}
                 />
               )}
               {tabMode === "meals" && (
@@ -238,17 +294,15 @@ const GroceryListModal = ({
                   onUpdateList={handleUpdateList}
                 />
               )}
-              {tabMode === "edit" && (
-                <EditChecklistContent
-                  ref={editContentRef}
-                  checklist={workingChecklist}
-                  initialChecklist={initialChecklist}
-                  onSave={handleSaveEdit}
-                  onChangesDetected={(hasChanges) =>
-                    setHasEditChanges(hasChanges)
-                  }
-                  addReminder={false}
-                  isUserAdmin={false}
+              {tabMode === "items" && (
+                <GroceryItemsContent
+                  list={{ ...workingChecklist, items: updatedItems }}
+                  onUpdateList={handleUpdateList}
+                  ingredients={ingredients}
+                  ingredientsByCategory={ingredientsByCategory}
+                  ingredientsLoading={ingredientsLoading}
+                  addIngredient={addIngredient}
+                  updateIngredient={updateIngredient}
                 />
               )}
             </View>

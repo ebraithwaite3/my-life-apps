@@ -1,26 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
-  TextInput,
   ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@my-apps/contexts";
-import useMeals from "../../hooks/useMeals";
-import MealCard from "./MealCard";
+import { useMeals } from "@my-apps/hooks";
 import MealOptionPicker from "./MealOptionPicker";
 
 const uuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 /**
- * Add Meals tab content.
- * Displays a searchable list of meals; lets the user add/remove them from the grocery list.
- *
- * When a meal is added, it becomes an `itemType: 'group'` item with `mealId` and `subItems`
- * (ingredients) so the existing ChecklistItemRow renders it as a header + nested list.
+ * Add Meals tab — scrollable list of all meals as checkbox rows.
+ * Checked = already on the grocery list. Tap to add (opens MealOptionPicker) or remove.
  *
  * Props:
  *   list         {object}   - Current working checklist (with items array)
@@ -29,56 +25,40 @@ const uuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const AddMealsContent = ({ list, onUpdateList }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const { meals, loading } = useMeals();
-
-  const [searchText, setSearchText] = useState("");
   const [pendingMeal, setPendingMeal] = useState(null);
 
   // Meals already on the list (keyed by mealId)
-  const addedMealIds = new Set(
-    (list?.items || []).filter((i) => i.mealId).map((i) => i.mealId)
+  const addedMealIds = useMemo(
+    () => new Set((list?.items || []).filter((i) => i.mealId).map((i) => i.mealId)),
+    [list?.items]
   );
 
-  const filteredMeals = meals.filter((m) =>
-    m.name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  // ── Item building ─────────────────────────────────────────────────────────
 
-  const buildIngredientName = (ing) =>
-    ing.quantity ? `${ing.name} (${ing.quantity})` : ing.name;
-
-  // checkedIngredients = base ingredients the user kept checked (needs to buy)
-  // selectedChoices = option group choices picked in the picker
-  const buildGroupItem = (meal, checkedIngredients, selectedChoices) => {
-    const baseSubItems = checkedIngredients.map((ing) => ({
+  const buildGroupItem = (meal, resolvedIngredients) => {
+    const subItems = resolvedIngredients.map((ing) => ({
       id: uuid(),
-      name: buildIngredientName(ing),
+      ingredientId: ing.ingredientId,
+      name: ing.quantity && ing.unit
+        ? `${ing.name} — ${ing.quantity} ${ing.unit}`
+        : ing.name,
       completed: false,
     }));
-
-    // Option choice ingredients — if a choice has no sub-ingredients, add the choice name itself
-    const optionSubItems = selectedChoices.flatMap((choice) => {
-      const ings = choice.ingredients || [];
-      if (ings.length === 0) {
-        return [{ id: uuid(), name: choice.name, completed: false }];
-      }
-      return ings.map((ing) => ({
-        id: uuid(),
-        name: buildIngredientName(ing),
-        completed: false,
-      }));
-    });
 
     return {
       id: uuid(),
       name: meal.name,
-      itemType: "group",
+      itemType: 'group',
       mealId: meal.id,
       completed: false,
-      subItems: [...baseSubItems, ...optionSubItems],
+      subItems,
     };
   };
 
-  const handleAddMeal = (meal, checkedIngredients = [], selectedChoices = []) => {
-    const groupItem = buildGroupItem(meal, checkedIngredients, selectedChoices);
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleAddMeal = (meal, resolvedIngredients = []) => {
+    const groupItem = buildGroupItem(meal, resolvedIngredients);
     const updatedItems = [...(list?.items || []), groupItem];
     onUpdateList({ ...list, items: updatedItems });
     setPendingMeal(null);
@@ -89,49 +69,74 @@ const AddMealsContent = ({ list, onUpdateList }) => {
     onUpdateList({ ...list, items: updatedItems });
   };
 
-  const handleTapAdd = (meal) => {
+  const handleTapMeal = (meal) => {
+    if (addedMealIds.has(meal.id)) {
+      handleRemoveMeal(meal.id);
+      return;
+    }
+
     const hasIngredients = (meal.ingredients || []).length > 0;
-    const hasOptions = (meal.optionGroups || []).length > 0;
-    if (hasIngredients || hasOptions) {
+    const hasChoices =
+      (meal.requiredChoices || []).length > 0 ||
+      (meal.optionalChoices || []).length > 0 ||
+      (meal.optionGroups || []).length > 0 ||
+      (meal.optionalAddOns || []).length > 0;
+
+    if (hasIngredients || hasChoices) {
       setPendingMeal(meal);
     } else {
-      // No ingredients, no options — add directly with nothing to pick
-      handleAddMeal(meal, [], []);
+      handleAddMeal(meal, []);
     }
   };
 
+  // ── Styles ────────────────────────────────────────────────────────────────
+
   const styles = StyleSheet.create({
     flex: { flex: 1 },
-    searchRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: getSpacing.sm,
-      paddingHorizontal: getSpacing.lg,
-      paddingVertical: getSpacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: getTypography.body.fontSize,
-      color: theme.text.primary,
-      paddingVertical: getSpacing.sm,
-    },
     scrollContent: {
       paddingHorizontal: getSpacing.lg,
+      paddingTop: getSpacing.md,
       paddingBottom: getSpacing.xl,
     },
     emptyContainer: {
       flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
       padding: getSpacing.xl,
     },
     emptyText: {
       fontSize: getTypography.body.fontSize,
       color: theme.text.secondary,
-      textAlign: "center",
+      textAlign: 'center',
       marginTop: getSpacing.md,
+    },
+    mealRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: getSpacing.sm,
+      paddingHorizontal: getSpacing.md,
+      borderRadius: getBorderRadius.md,
+      borderWidth: 1.5,
+      marginBottom: getSpacing.sm,
+      gap: getSpacing.md,
+    },
+    mealRowAdded: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '10',
+    },
+    mealRowDefault: {
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    mealName: {
+      flex: 1,
+      fontSize: getTypography.body.fontSize,
+      color: theme.text.primary,
+      fontWeight: '500',
+    },
+    subCount: {
+      fontSize: getTypography.bodySmall.fontSize,
+      color: theme.text.secondary,
     },
   });
 
@@ -143,54 +148,50 @@ const AddMealsContent = ({ list, onUpdateList }) => {
     );
   }
 
+  if (meals.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="restaurant-outline" size={48} color={theme.text.tertiary} />
+        <Text style={styles.emptyText}>No meals in the library yet.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.flex}>
-      {/* Search bar */}
-      <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={18} color={theme.text.secondary} />
-        <TextInput
-          style={styles.searchInput}
-          value={searchText}
-          onChangeText={setSearchText}
-          placeholder="Search meals…"
-          placeholderTextColor={theme.text.tertiary}
-          autoCorrect={false}
-          autoCapitalize="none"
-          clearButtonMode="while-editing"
-        />
-      </View>
-
-      {filteredMeals.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="restaurant-outline" size={48} color={theme.text.tertiary} />
-          <Text style={styles.emptyText}>
-            {searchText ? "No meals match your search." : "No meals in the library yet."}
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {filteredMeals.map((meal) => (
-            <MealCard
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {meals.map((meal) => {
+          const added = addedMealIds.has(meal.id);
+          const ingredientCount = (meal.ingredients || []).length;
+          return (
+            <TouchableOpacity
               key={meal.id}
-              meal={meal}
-              isAdded={addedMealIds.has(meal.id)}
-              onAdd={() => handleTapAdd(meal)}
-              onRemove={() => handleRemoveMeal(meal.id)}
-            />
-          ))}
-        </ScrollView>
-      )}
+              style={[styles.mealRow, added ? styles.mealRowAdded : styles.mealRowDefault]}
+              onPress={() => handleTapMeal(meal)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={added ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={added ? theme.primary : theme.text.secondary}
+              />
+              <Text style={styles.mealName}>{meal.name}</Text>
+              {ingredientCount > 0 && (
+                <Text style={styles.subCount}>{ingredientCount} items</Text>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       <MealOptionPicker
         meal={pendingMeal}
         visible={pendingMeal !== null}
-        onConfirm={(checkedIngredients, selectedChoices) =>
-          handleAddMeal(pendingMeal, checkedIngredients, selectedChoices)
-        }
+        onConfirm={(resolvedIngredients) => handleAddMeal(pendingMeal, resolvedIngredients)}
         onCancel={() => setPendingMeal(null)}
       />
     </View>

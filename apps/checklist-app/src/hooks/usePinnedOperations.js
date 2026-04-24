@@ -1,6 +1,7 @@
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { generateUUID, showSuccessToast } from '@my-apps/utils';
+import { isGroceryList } from '../utils/pinnedChecklistUtils';
 
 export const usePinnedOperations = (
   db,
@@ -66,6 +67,7 @@ export const usePinnedOperations = (
   };
 
   const handleUnpinChecklist = async (checklist) => {
+    if (isGroceryList(checklist)) return;
     try {
       const docId = checklist.isGroupChecklist
         ? checklist.groupId

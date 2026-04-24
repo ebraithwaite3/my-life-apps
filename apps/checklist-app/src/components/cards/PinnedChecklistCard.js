@@ -5,6 +5,7 @@ import { useTheme } from "@my-apps/contexts";
 import { ModalDropdown } from "@my-apps/ui";
 import { ProgressBar } from "@my-apps/ui";
 import { calculateChecklistProgress } from "@my-apps/utils";
+import { isGroceryList } from "../../utils/pinnedChecklistUtils";
 import { Swipeable } from "react-native-gesture-handler";
 
 const PinnedChecklistCard = ({ 
@@ -165,8 +166,9 @@ const formatReminderTime = () => {
     );
   };
 
-  // Render swipe actions (delete button)
+  // Render swipe actions (delete button) — hidden for protected lists
   const renderRightActions = (progress, dragX) => {
+    if (isGroceryList(checklist)) return null;
     const scale = dragX.interpolate({
       inputRange: [-80, 0],
       outputRange: [1, 0],

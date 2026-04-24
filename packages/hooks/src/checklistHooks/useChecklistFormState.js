@@ -43,7 +43,7 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
   // Get initial items for useChecklistItems hook
   const getInitialItems = () => {
     if (isEditing && checklist) {
-      return checklist.items?.map((item, index) => ({
+      const mappedItems = checklist.items?.map((item, index) => ({
         id: item.id || String(Date.now() + index),
         name: item.name || "",
         completed: isTemplate ? false : item.completed ?? false,
@@ -55,7 +55,9 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
         parentId: item.parentId || null,
         ...(item.sourceChecklistId && { sourceChecklistId: item.sourceChecklistId }),
         ...(item.sourceItemId && { sourceItemId: item.sourceItemId }),
-      })) || [
+      }));
+      // [] is truthy so `|| fallback` won't trigger — check length explicitly
+      return (mappedItems && mappedItems.length > 0) ? mappedItems : [
         {
           id: uuidv4(),
           name: "",

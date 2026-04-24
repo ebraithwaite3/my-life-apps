@@ -17,6 +17,7 @@ const ChecklistItemRow = ({
   isMoveable = true,
   selectedItems = new Set(),
   onNavigateToLinkedChecklist,
+  warningItemIds = new Set(),
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
@@ -92,6 +93,11 @@ const handlePress = () => {
     },
     itemRowCompleted: {
       backgroundColor: `${theme.success || '#4CAF50'}15`,
+    },
+    itemRowWarning: {
+      backgroundColor: '#F59E0B12',
+      borderWidth: 1,
+      borderColor: '#F59E0B50',
     },
     rowContent: {
       flexDirection: 'row',
@@ -262,6 +268,7 @@ const handlePress = () => {
           style={[
             styles.itemRow,
             item.completed && !selectionMode && styles.itemRowCompleted,
+            !selectionMode && !item.completed && warningItemIds.has(item.id) && styles.itemRowWarning,
             !isMoveable && selectionMode && styles.disabledRow,
           ]}
           onPress={handlePress}
@@ -328,6 +335,10 @@ const handlePress = () => {
                 </View>
               )}
 
+              {!selectionMode && warningItemIds.has(item.id) && (
+                <Ionicons name="warning-outline" size={16} color={theme.warning || '#F59E0B'} />
+              )}
+
               {/* Reset button for multiChoice/fillIn/guided (hide in selection mode) */}
               {!selectionMode && (isMultiChoice || isFillIn || isGuided) && onResetYesNo && (
                 <TouchableOpacity
@@ -364,6 +375,7 @@ const handlePress = () => {
               isMoveable={isMoveable}
               selectedItems={selectedItems}
               onNavigateToLinkedChecklist={onNavigateToLinkedChecklist}
+              warningItemIds={warningItemIds}
             />
             {/* Timer for guided steps with hasTimer */}
             {isGuided && subItem.hasTimer && !selectionMode && (
@@ -453,6 +465,7 @@ const handlePress = () => {
       style={[
         styles.itemRow,
         item.completed && !selectionMode && styles.itemRowCompleted,
+        !selectionMode && !item.completed && warningItemIds.has(item.id) && styles.itemRowWarning,
         !isMoveable && selectionMode && styles.disabledRow,
       ]}
       onPress={handlePress}

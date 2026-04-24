@@ -38,6 +38,7 @@ const ChecklistContent = ({
   eventStartTime = null,
   eventActivities = [],
   onNavigateToLinkedChecklist,
+  warningItemIds = new Set(),
 }) => {
   console.log(
     "🔍 ChecklistContent checklist:", checklist);
@@ -330,11 +331,14 @@ const ChecklistContent = ({
       }
     }
 
-    // Helper to update a sub-item's yesNoConfig inside its parent
+    // Helper to update a sub-item's yesNoConfig inside its parent,
+    // and auto-complete the parent header when all sub-items are done.
     const updateSubItem = (updatedSub) => {
       const updatedItems = items.map((i) => {
         if (i.id !== parentItem.id) return i;
-        return { ...i, subItems: i.subItems.map((s) => s.id === updatedSub.id ? updatedSub : s) };
+        const updatedSubItems = i.subItems.map((s) => s.id === updatedSub.id ? updatedSub : s);
+        const allDone = updatedSubItems.every((s) => s.completed);
+        return { ...i, subItems: updatedSubItems, completed: allDone };
       });
       setItems(updatedItems);
       if (onItemToggle) onItemToggle(updatedItems);
@@ -405,10 +409,15 @@ const ChecklistContent = ({
 
     // Sub-item simple yes/no answer
     if (parentItem) {
+      // 'no' always completes. 'yes' on simple/linkedNavigate is terminal — also mark complete
+      // so the parent header can auto-complete when all siblings are done.
+      // guided/multiChoice/fillIn/assignable are handled above and set completed via their own flows.
+      const yesNoType = item?.yesNoConfig?.type || 'simple';
+      const isTerminalYes = answer === 'yes' && ['simple', 'linkedNavigate'].includes(yesNoType);
       const updatedSub = {
         ...item,
         yesNoConfig: { ...item.yesNoConfig, answered: true, answer },
-        ...(answer === "no" && { completed: true }),
+        ...((answer === "no" || isTerminalYes) && { completed: true }),
       };
       updateSubItem(updatedSub);
       return;
@@ -856,6 +865,7 @@ const ChecklistContent = ({
                 isMoveable={isItemMoveable(item)}
                 selectedItems={selectedItems}
                 onNavigateToLinkedChecklist={onNavigateToLinkedChecklist}
+                warningItemIds={warningItemIds}
               />
             ))}
           </>
@@ -1002,13 +1012,12 @@ const ChecklistContent = ({
           if (assignableParentItem) {
             updatedItems = items.map((i) => {
               if (i.id !== assignableParentItem.id) return i;
-              return {
-                ...i,
-                subItems: i.subItems.map((s) => {
-                  if (s.id !== assignableItem.id) return s;
-                  return { ...s, yesNoConfig: { ...s.yesNoConfig, answered: true, answer: "yes" }, completed: true };
-                }),
-              };
+              const updatedSubItems = i.subItems.map((s) => {
+                if (s.id !== assignableItem.id) return s;
+                return { ...s, yesNoConfig: { ...s.yesNoConfig, answered: true, answer: "yes" }, completed: true };
+              });
+              const allDone = updatedSubItems.every((s) => s.completed);
+              return { ...i, subItems: updatedSubItems, completed: allDone };
             });
           } else {
             updatedItems = items.map((i) => {
@@ -1034,7 +1043,7 @@ const ChecklistContent = ({
               .map((id) => allMembers.find((m) => m.userId === id))
               .filter(Boolean);
             try {
-              const results = await assignTask({ members: resolvedMembers, taskName, currentUserId: user?.userId });
+              const results = await assignTask({ members: resolvedMembers, taskName, currentUserId: user?.userId, targetDate: eventStartTime });
               const failures = results.filter((r) => !r.success && !r.skipped);
               if (failures.length > 0) {
                 const failedNames = failures
