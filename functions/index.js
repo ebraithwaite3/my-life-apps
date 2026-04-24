@@ -23,6 +23,7 @@ const modules = [
   require("./src/shortcuts/addToPinnedList"),
   require("./src/shortcuts/addWorkout"),
   require("./src/shortcuts/getCalendarEvents"),
+  require("./src/shortcuts/addToChecklist"),
   require("./src/calendar/applyScheduleTemplate"),
   // Add more as you create them
 ];
