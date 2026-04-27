@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { DateTime } from "luxon";
 
-export const useActivityDocs = (db, userId, groupIds = [], currentMonth, currentYear) => {
+export const useActivityDocs = (db, userId, groupIds = [], currentMonth, currentYear, extraIds = []) => {
   const [allActivities, setAllActivities] = useState({});
   const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -25,6 +25,7 @@ export const useActivityDocs = (db, userId, groupIds = [], currentMonth, current
     }
   }, [currentMonth, currentYear]);
 
+  // entityIds: used for subscriptions AND aggregated in getActivitiesForDay/Month
   const entityIds = useMemo(() => {
     const ids = [];
     if (userId) ids.push(userId);
@@ -32,8 +33,14 @@ export const useActivityDocs = (db, userId, groupIds = [], currentMonth, current
     return ids;
   }, [userId, groupIds]);
 
+  // allSubscribeIds: entityIds + extraIds — all get subscriptions but extraIds are NOT aggregated
+  const allSubscribeIds = useMemo(() => {
+    const extra = Array.isArray(extraIds) ? extraIds.filter(Boolean) : [];
+    return [...entityIds, ...extra];
+  }, [entityIds, extraIds.join(",")]);
+
   useEffect(() => {
-    if (!db || entityIds.length === 0 || monthKeys.length === 0) {
+    if (!db || allSubscribeIds.length === 0 || monthKeys.length === 0) {
       setAllActivities({});
       setActivitiesLoading(false);
       return;
@@ -42,7 +49,7 @@ export const useActivityDocs = (db, userId, groupIds = [], currentMonth, current
     const { doc, onSnapshot } = require("firebase/firestore");
     const newSubs = { ...activeSubscriptions };
 
-    entityIds.forEach((entityId) => {
+    allSubscribeIds.forEach((entityId) => {
       monthKeys.forEach((monthKey) => {
         const subKey = `${entityId}-${monthKey}`;
         if (activeSubscriptions[subKey]) return;
@@ -76,7 +83,7 @@ export const useActivityDocs = (db, userId, groupIds = [], currentMonth, current
     setActivitiesLoading(false);
 
     return () => Object.values(activeSubscriptions).forEach((fn) => fn());
-  }, [db, entityIds.join(","), monthKeys.join(",")]);
+  }, [db, allSubscribeIds.join(","), monthKeys.join(",")]);
 
   // Helpers
   const getActivitiesForMonth = useCallback(

@@ -82,6 +82,14 @@ const SharedCalendarScreen = ({
   addChecklistModalVisible,
   showChecklistModal,
 
+  // Kids banners (admin only)
+  kidsBanners = [],
+  showKidsBanners = false,
+  onToggleKidsBanners,
+  onKidBannerPress,
+  isAdmin = false,
+  onCreateToDo,
+
   // Loading
   isDeleting = false,
 }) => {
@@ -341,6 +349,24 @@ const SharedCalendarScreen = ({
       });
     }
 
+    // Admin-only: Kids banner toggle chip
+    if (isAdmin) {
+      chips.push({
+        label: "Kids",
+        active: showKidsBanners,
+        onPress: onToggleKidsBanners,
+      });
+    }
+
+    // Admin-only: Create a new To Do chip
+    if (isAdmin && onCreateToDo) {
+      chips.push({
+        label: "+ To Do",
+        active: false,
+        onPress: onCreateToDo,
+      });
+    }
+
     return chips.length > 0 ? chips : undefined;
   }, [
     joinedAppsCount,
@@ -353,6 +379,10 @@ const SharedCalendarScreen = ({
     setShowDeletedEvents,
     selectedView,
     user,
+    isAdmin,
+    showKidsBanners,
+    onToggleKidsBanners,
+    onCreateToDo,
   ]);
 
   // Build PageHeader subtext for day view
@@ -453,6 +483,8 @@ const SharedCalendarScreen = ({
           onSwipeLeft={navigateToNextDay}
           onSwipeRight={navigateToPreviousDay}
           navigation={navigation}
+          kidsBanners={kidsBanners}
+          onKidBannerPress={onKidBannerPress}
         />
       )}
 

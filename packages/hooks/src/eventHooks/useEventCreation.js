@@ -77,6 +77,7 @@ export const useEventCreation = ({ user, db }) => {
     activities = [],
     appName = "app",
     membersToNotify = [],
+    targetUserId = null,
   }) => {
     console.log("Creating event with reminder:", reminderMinutes);
 
@@ -131,6 +132,7 @@ export const useEventCreation = ({ user, db }) => {
         result = await saveInternalEvent({
           ...eventData,
           reminderMinutes, // Full object: { scheduledFor, isRecurring, recurringConfig? }
+          targetUserId,
         });
 
         if (result.success) {

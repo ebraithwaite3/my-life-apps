@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator
 import { useTheme } from "@my-apps/contexts";
 import { Ionicons } from "@expo/vector-icons";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import useMeals from "../../hooks/useMeals";
+import { useMeals, useIngredients } from "@my-apps/hooks";
 import MealEditorModal from "./MealEditorModal";
 import { PageHeader } from "@my-apps/ui";
 
@@ -16,7 +16,8 @@ import { PageHeader } from "@my-apps/ui";
  */
 const MealsManagementView = ({ onClose }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  const { meals, loading } = useMeals();
+  const { meals, loading, saveMeal, deleteMeal } = useMeals();
+  const { ingredients: allIngredients, addIngredient } = useIngredients();
 
   const [showEditor, setShowEditor] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState(null);
@@ -132,6 +133,11 @@ const MealsManagementView = ({ onClose }) => {
       <MealEditorModal
         visible={showEditor}
         meal={selectedMeal}
+        meals={meals}
+        saveMeal={saveMeal}
+        deleteMeal={deleteMeal}
+        allIngredients={allIngredients}
+        addIngredient={addIngredient}
         onClose={() => {
           setShowEditor(false);
           setSelectedMeal(null);

@@ -9,29 +9,30 @@ export const useSaveInternalEvent = () => {
   
     const saveInternalEvent = async (eventData) => {
       try {
-        const { 
-          id, 
-          summary, 
-          description, 
-          location, 
-          start, 
-          end, 
-          reminderMinutes, 
+        const {
+          id,
+          summary,
+          description,
+          location,
+          start,
+          end,
+          reminderMinutes,
           activities,
-          groupId
+          groupId,
+          targetUserId,
         } = eventData;
-  
+
         const startDateStr = start.dateTime || start.date;
         const startDT = DateTime.fromISO(startDateStr);
-  
+
         const endDateStr = end?.dateTime || end?.date || null;
         const endDT = endDateStr
           ? DateTime.fromISO(endDateStr)
           : start.date
           ? startDT.endOf("day")
           : null;
-  
-        const entityId = groupId || authUser.uid;
+
+        const entityId = groupId || targetUserId || authUser.uid;
         const yearMonth = startDT.toFormat("yyyy-LL");
   
         const shardRef = doc(db, "activities", entityId, "months", yearMonth);

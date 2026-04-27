@@ -30,9 +30,9 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useChecklistTemplates } from "@my-apps/hooks";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { collection, addDoc } from "firebase/firestore";
-import useMeals from "../hooks/useMeals";
-import MealEditorModal from "../components/grocery/MealEditorModal";
+import { useMeals, useIngredients } from "@my-apps/hooks";
 import MealsManagementView from "../components/grocery/MealsManagementView";
+import IngredientsManagementView from "../components/grocery/IngredientsManagementView";
 import useHouseholdTasks from "../hooks/useHouseholdTasks";
 import HouseholdTasksManagementView from "../components/household/HouseholdTasksManagementView";
 import { getLogs, clearLogs } from "../hooks/useLogCapture";
@@ -66,6 +66,7 @@ const PreferencesScreen = ({ navigation, route }) => {
   const [showQuickSend, setShowQuickSend] = useState(false); // ← NEW
   const [quickSendMode, setQuickSendMode] = useState("now"); // 'now' or 'schedule'
   const { meals, loading: mealsLoading } = useMeals();
+  const { ingredients, loading: ingredientsLoading } = useIngredients();
   const { tasks: householdTasks } = useHouseholdTasks();
   const [showLogViewer, setShowLogViewer] = useState(false);
   const [logEntries, setLogEntries] = useState([]);
@@ -681,10 +682,10 @@ const PreferencesScreen = ({ navigation, route }) => {
   </View>
 )}
 
-            {/* 🥘 Meals (Admin Only) */}
+            {/* 🥘 Meals & Ingredients (Admin Only) */}
             {user?.admin && (
               <View style={styles.settingContainer}>
-                <Text style={styles.sectionHeaderText}>Meals</Text>
+                <Text style={styles.sectionHeaderText}>Grocery</Text>
                 <TouchableOpacity
                   style={styles.templateCard}
                   onPress={() => setCurrentView("meals")}
@@ -696,6 +697,21 @@ const PreferencesScreen = ({ navigation, route }) => {
                     <Text style={styles.templateName}>Manage Meals</Text>
                     <Text style={styles.templateDetails}>
                       {mealsLoading ? "Loading…" : `${meals.length} meal${meals.length !== 1 ? "s" : ""}`}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.text.secondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.templateCard}
+                  onPress={() => setCurrentView("ingredients")}
+                >
+                  <View style={styles.iconContainer}>
+                    <Icon name="leaf" size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.templateInfo}>
+                    <Text style={styles.templateName}>Manage Ingredients</Text>
+                    <Text style={styles.templateDetails}>
+                      {ingredientsLoading ? "Loading…" : `${ingredients.length} ingredient${ingredients.length !== 1 ? "s" : ""}`}
                     </Text>
                   </View>
                   <Icon name="chevron-right" size={20} color={theme.text.secondary} />
@@ -786,6 +802,10 @@ const PreferencesScreen = ({ navigation, route }) => {
       ) : currentView === "meals" ? (
         <View style={{ flex: 1 }}>
           <MealsManagementView onClose={handleBackToPreferences} />
+        </View>
+      ) : currentView === "ingredients" ? (
+        <View style={{ flex: 1 }}>
+          <IngredientsManagementView onClose={handleBackToPreferences} />
         </View>
       ) : currentView === "householdTasks" ? (
         <View style={{ flex: 1 }}>

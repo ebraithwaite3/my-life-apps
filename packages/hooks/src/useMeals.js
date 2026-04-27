@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, query, where, getDocs, getCountFromServer, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getCountFromServer, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { DateTime } from 'luxon';
 import { useAuth } from '@my-apps/contexts';
 
@@ -166,6 +166,31 @@ export const useMeals = () => {
     }
   };
 
+  const saveMeal = async (meal) => {
+    const now = DateTime.now().toISO();
+    const mealData = { ...meal, updatedAt: now };
+    await setDoc(doc(db, 'meals', meal.id), mealData, { merge: true });
+
+    const updatedMeals = meals.some((m) => m.id === meal.id)
+      ? meals.map((m) => (m.id === meal.id ? mealData : m))
+      : [...meals, mealData];
+
+    setMeals(updatedMeals);
+    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(updatedMeals));
+    await AsyncStorage.setItem(LAST_UPDATED_KEY, now);
+    console.log(`[useMeals] Saved meal "${meal.name}" (${meal.id}) — cache updated`);
+  };
+
+  const deleteMeal = async (id) => {
+    await deleteDoc(doc(db, 'meals', id));
+    const updatedMeals = meals.filter((m) => m.id !== id);
+    setMeals(updatedMeals);
+    const now = DateTime.now().toISO();
+    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(updatedMeals));
+    await AsyncStorage.setItem(LAST_UPDATED_KEY, now);
+    console.log(`[useMeals] Deleted meal ${id} — cache updated`);
+  };
+
   const mealMap = useMemo(() => {
     return new Map(meals.map((m) => [m.nameLower || m.name?.toLowerCase(), m]));
   }, [meals]);
@@ -176,6 +201,8 @@ export const useMeals = () => {
     loading,
     refreshing,
     refreshMeals,
+    saveMeal,
+    deleteMeal,
     lastUpdated,
   };
 };

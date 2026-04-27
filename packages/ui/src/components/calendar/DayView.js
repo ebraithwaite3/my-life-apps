@@ -23,6 +23,8 @@ const DayView = ({
   onSwipeLeft,  // ← Next day
   onSwipeRight, // ← Previous day
   navigation,
+  kidsBanners = [],
+  onKidBannerPress,
 }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
   const scrollViewRef = useRef(null);
@@ -43,7 +45,7 @@ const DayView = ({
     const todoEvents = [];
     const regularEvents = [];
     sortedEvents.forEach(event => {
-      if (event.title?.trim().toLowerCase() === 'to do') {
+      if (event.title?.trim().toLowerCase().includes('to do')) {
         todoEvents.push(event);
       } else {
         regularEvents.push(event);
@@ -144,6 +146,32 @@ const DayView = ({
             >
               <Text style={[styles.todoBannerText, isDone && { color: theme.success || '#4CAF50' }]}>
                 {`☑️ To Do — ${completed} of ${total} complete`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        {kidsBanners.map((banner, idx) => {
+          const isDone = banner.total > 0 && banner.completed === banner.total;
+          return (
+            <TouchableOpacity
+              key={`kid-banner-${idx}`}
+              style={isDone ? styles.todoBannerComplete : styles.todoBannerIncomplete}
+              onPress={() => onKidBannerPress?.(banner)}
+              onLongPress={() => {
+                if (!banner.event) return;
+                Alert.alert(
+                  `Delete ${banner.label}`,
+                  `Are you sure you want to delete this To Do event?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => onDeleteEvent({ ...banner.event, targetUserId: banner.entityId }) },
+                  ]
+                );
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.todoBannerText, isDone && { color: theme.success || '#4CAF50' }]}>
+                {`☑️ ${banner.label} — ${banner.completed} of ${banner.total} complete`}
               </Text>
             </TouchableOpacity>
           );

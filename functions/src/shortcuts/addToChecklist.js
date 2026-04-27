@@ -2,15 +2,9 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const {DateTime} = require("luxon");
 
-const USER_ID = "LCqH5hKx2bP8Q5gDGPmzRd65PB32";
-const JACK_CALENDAR_ID = [
-  "84bb416ffcf57bf9ef64e5c0d7e4867fdebc51d60f38fec83c5a9c9611e62f8a",
-  "@group.calendar.google.com",
-].join("");
-const ELLIE_CALENDAR_ID = [
-  "60fb54bfbf0fc690d655bf2057eee90906183010ef2f228c22483960bd4f29b9",
-  "@group.calendar.google.com",
-].join("");
+const ERIC_USER_ID = "LCqH5hKx2bP8Q5gDGPmzRd65PB32";
+const JACK_USER_ID = "ObqbPOKgzwYr2SmlN8UQOaDbkzE2";
+const ELLIE_USER_ID = "CjW9bPGIjrgEqkjE9HxNF6xuxfA3";
 
 const TIMEZONE = "America/New_York";
 
@@ -55,27 +49,6 @@ const findInternalEvent = (items, targetDate, titleMatch) => {
       eventDate === targetDate &&
       titleLower === titleMatch.toLowerCase()
     ) {
-      return {eventId, event};
-    }
-  }
-  return null;
-};
-
-/**
- * Finds an event in the external events map matching title on date.
- * @param {Object} events - Firestore events map
- * @param {string} targetDate - yyyy-MM-dd
- * @param {string} titleMatch - exact title to match
- * @return {Object|null} { eventId, event } or null
- */
-const findExternalEvent = (events, targetDate, titleMatch) => {
-  for (const [eventId, event] of Object.entries(events)) {
-    if (!event.startTime) continue;
-    const eventDate = DateTime.fromISO(event.startTime)
-        .setZone(TIMEZONE)
-        .toFormat("yyyy-MM-dd");
-    const title = (event.title || "").trim();
-    if (eventDate === targetDate && title === titleMatch) {
       return {eventId, event};
     }
   }
@@ -145,95 +118,45 @@ exports.addToChecklist = functions.https.onRequest(async (req, res) => {
   const luxonDate = DateTime.fromFormat(targetDate, "yyyy-MM-dd", {
     zone: TIMEZONE,
   });
-  const internalMonthKey = luxonDate.toFormat("yyyy-LL");
-  const externalMonthKey = luxonDate.toFormat("yyyy-MM");
+  const monthKey = luxonDate.toFormat("yyyy-LL");
   const itemName = capitalize(item);
 
-  console.log(`📅 Target: ${targetDate}, months: ${internalMonthKey}`);
+  // Resolve userId and display name
+  const userMap = {
+    me: {userId: ERIC_USER_ID, displayName: "My", titleMatch: "to do"},
+    jack: {userId: JACK_USER_ID, displayName: "Jack's", titleMatch: "to do"},
+    ellie: {userId: ELLIE_USER_ID, displayName: "Ellie's", titleMatch: "to do"},
+  };
+  const {userId, displayName, titleMatch} = userMap[nameLower];
+
+  console.log(`📅 Target: ${targetDate}, month: ${monthKey}, user: ${userId}`);
 
   const db = admin.firestore();
 
   try {
-    // ── ME ─────────────────────────────────────────────────────────────────
-    if (nameLower === "me") {
-      const monthRef = db
-          .collection("activities")
-          .doc(USER_ID)
-          .collection("months")
-          .doc(internalMonthKey);
-
-      const monthDoc = await monthRef.get();
-
-      if (!monthDoc.exists || !monthDoc.data().items) {
-        return res.status(404).json({
-          error: "To Do List not created yet",
-          message: `No events found for ${targetDate}.`,
-        });
-      }
-
-      const items = monthDoc.data().items;
-      const found = findInternalEvent(items, targetDate, "to do");
-
-      if (!found) {
-        return res.status(404).json({
-          error: "To Do List not created yet",
-          message: `No To Do event found for ${targetDate}.`,
-        });
-      }
-
-      const {eventId, event} = found;
-      const {updatedActivities, error} = appendItemToChecklist(
-          event.activities || [],
-          itemName,
-      );
-
-      if (error) {
-        return res.status(404).json({
-          error: "To Do List not created yet",
-          message: `To Do on ${targetDate}: ${error}`,
-        });
-      }
-
-      const updated = {...event, activities: updatedActivities};
-      await monthRef.set(
-          {items: {...items, [eventId]: updated}},
-          {merge: true},
-      );
-
-      console.log(`✅ Added "${itemName}" to My To Do on ${targetDate}`);
-      return res.status(200).json({
-        message: `Added "${itemName}" to your To Do list for ${when}`,
-      });
-    }
-
-    // ── JACK / ELLIE ───────────────────────────────────────────────────────
-    const isJack = nameLower === "jack";
-    const calendarId = isJack ? JACK_CALENDAR_ID : ELLIE_CALENDAR_ID;
-    const eventTitle = isJack ? "Jack Checklist" : "Ellie Checklist";
-    const displayName = isJack ? "Jack" : "Ellie";
-
     const monthRef = db
-        .collection("calendars")
-        .doc(calendarId)
+        .collection("activities")
+        .doc(userId)
         .collection("months")
-        .doc(externalMonthKey);
+        .doc(monthKey);
 
     const monthDoc = await monthRef.get();
 
-    if (!monthDoc.exists || !monthDoc.data().events) {
+    if (!monthDoc.exists || !monthDoc.data().items) {
       return res.status(404).json({
-        error: "Checklist not created yet",
-        message: `No events for ${displayName} on ${targetDate}.`,
+        error: "To Do List not created yet",
+        message: `No events found for ${displayName} list on ${targetDate}.`,
       });
     }
 
-    const events = monthDoc.data().events;
-    const found = findExternalEvent(events, targetDate, eventTitle);
+    const items = monthDoc.data().items;
+    const found = findInternalEvent(items, targetDate, titleMatch);
 
     if (!found) {
       return res.status(404).json({
-        error: "Checklist not created yet",
-        message: `No "${eventTitle}" event found for ${targetDate}.`,
+        error: "To Do List not created yet",
+        message: `No "To Do" event found for ${displayName}` +
+          ` list on ${targetDate}.`,
       });
     }
 
@@ -245,20 +168,22 @@ exports.addToChecklist = functions.https.onRequest(async (req, res) => {
 
     if (error) {
       return res.status(404).json({
-        error: "Checklist not created yet",
-        message: `${eventTitle} on ${targetDate}: ${error}`,
+        error: "To Do List not created yet",
+        message: `${displayName} To Do on ${targetDate}: ${error}`,
       });
     }
 
     const updated = {...event, activities: updatedActivities};
     await monthRef.set(
-        {events: {...events, [eventId]: updated}},
+        {items: {...items, [eventId]: updated}},
         {merge: true},
     );
 
-    console.log(`✅ Added "${itemName}" to ${displayName} on ${targetDate}`);
+    console.log(
+        `✅ Added "${itemName}" to ${displayName} To Do on ${targetDate}`,
+    );
     return res.status(200).json({
-      message: `Added "${itemName}" to ${displayName}'s checklist for ${when}`,
+      message: `Added "${itemName}" to ${displayName} To Do list for ${when}`,
     });
   } catch (error) {
     console.error("❌ addToChecklist error:", error);

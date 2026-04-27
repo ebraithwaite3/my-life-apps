@@ -15,9 +15,102 @@ import { useTheme } from "@my-apps/contexts";
 import { ModalWrapper, ModalHeader } from "@my-apps/ui";
 import MealIngredientRow from "./MealIngredientRow";
 import MealOptionGroupEditor from "./MealOptionGroupEditor";
-import useMeals from "../../hooks/useMeals";
 
 const uuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+/**
+ * Normalize Firestore meal's requiredChoices/optionalChoices into a unified
+ * optionGroups format for editing:
+ *   { id, label, required, pickOne, choices: [{id, name, type, ingredientId?}] }
+ */
+const normalizeOptionGroups = (meal) => {
+  if (!meal) return [];
+  const groups = [];
+
+  (meal.requiredChoices || []).forEach((group) => {
+    groups.push({
+      id: uuid(),
+      label: group.label || "",
+      required: true,
+      pickOne: group.pickOne ?? false,
+      choices: (group.options || []).map((opt) => ({
+        id: opt.id || uuid(),
+        name: opt.name || "",
+        type: opt.type || "ingredient",
+      })),
+    });
+  });
+
+  (meal.optionalChoices || []).forEach((group) => {
+    groups.push({
+      id: uuid(),
+      label: group.label || "",
+      required: false,
+      pickOne: group.pickOne ?? false,
+      choices: (group.options || []).map((opt) => ({
+        id: opt.id || uuid(),
+        name: opt.name || "",
+        type: opt.type || "ingredient",
+      })),
+    });
+  });
+
+  // Also handle optionGroups if present (forward-compat)
+  (meal.optionGroups || []).forEach((group) => {
+    groups.push({
+      ...group,
+      id: group.id || uuid(),
+      choices: (group.choices || []).map((c) => ({
+        id: c.id || uuid(),
+        name: c.name || "",
+        type: c.type || "ingredient",
+      })),
+    });
+  });
+
+  return groups;
+};
+
+/**
+ * Denormalize unified optionGroups back to requiredChoices/optionalChoices
+ * for saving to Firestore (preserving the schema the picker expects).
+ */
+const denormalizeOptionGroups = (optionGroups) => {
+  const requiredChoices = [];
+  const optionalChoices = [];
+
+  optionGroups.forEach((group) => {
+    const entry = {
+      label: group.label,
+      pickOne: group.pickOne ?? false,
+      options: (group.choices || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type || "ingredient",
+      })),
+    };
+    if (group.required) {
+      requiredChoices.push(entry);
+    } else {
+      optionalChoices.push(entry);
+    }
+  });
+
+  return { requiredChoices, optionalChoices };
+};
+
+// Firestore rejects undefined values — strip them recursively
+const cleanForFirestore = (obj) => {
+  if (Array.isArray(obj)) return obj.map(cleanForFirestore);
+  if (obj !== null && typeof obj === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) out[k] = cleanForFirestore(v);
+    }
+    return out;
+  }
+  return obj;
+};
 
 /**
  * Admin-only modal for creating or editing a meal.
@@ -27,9 +120,17 @@ const uuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
  *   meal     {object|null}  - null = create mode
  *   onClose  {function}
  */
-const MealEditorModal = ({ visible, meal, onClose }) => {
+const MealEditorModal = ({
+  visible,
+  meal,
+  onClose,
+  meals = [],
+  saveMeal,
+  deleteMeal,
+  allIngredients = [],
+  addIngredient,
+}) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  const { meals, saveMeal, deleteMeal } = useMeals();
 
   const [name, setName] = useState("");
   const [ingredients, setIngredients] = useState([]);
@@ -39,13 +140,22 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
   useEffect(() => {
     if (visible) {
       setName(meal?.name || "");
-      setIngredients(meal?.ingredients || []);
-      setOptionGroups(meal?.optionGroups || []);
+      // Ensure every base ingredient has a stable local id for keying
+      setIngredients(
+        (meal?.ingredients || []).map((ing) => ({
+          ...ing,
+          id: ing.id || uuid(),
+        }))
+      );
+      setOptionGroups(normalizeOptionGroups(meal));
     }
   }, [visible, meal?.id]);
 
   const handleAddIngredient = () => {
-    setIngredients((prev) => [...prev, { id: uuid(), name: "", quantity: undefined }]);
+    setIngredients((prev) => [
+      ...prev,
+      { id: uuid(), name: "", quantity: undefined, ingredientId: undefined },
+    ]);
   };
 
   const handleChangeIngredient = (updated) => {
@@ -61,7 +171,7 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
   const handleAddOptionGroup = () => {
     setOptionGroups((prev) => [
       ...prev,
-      { id: uuid(), label: "", required: false, choices: [] },
+      { id: uuid(), label: "", required: false, pickOne: false, choices: [] },
     ]);
   };
 
@@ -75,39 +185,37 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
     setOptionGroups((prev) => prev.filter((g) => g.id !== id));
   };
 
-  // Firestore rejects undefined values — strip them recursively
-  const cleanForFirestore = (obj) => {
-    if (Array.isArray(obj)) return obj.map(cleanForFirestore);
-    if (obj !== null && typeof obj === "object") {
-      const out = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (v !== undefined) out[k] = cleanForFirestore(v);
-      }
-      return out;
-    }
-    return obj;
-  };
-
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert("Name Required", "Please enter a meal name.");
       return;
     }
     const isNew = !meal?.id;
+
+    // Strip the local `id` field from base ingredients before saving
+    // (Firestore stores them identified by ingredientId, not a local id)
+    const cleanedIngredients = ingredients.map(({ id: _localId, ...rest }) => rest);
+
+    const { requiredChoices, optionalChoices } = denormalizeOptionGroups(optionGroups);
+
     const mealData = cleanForFirestore({
       id: meal?.id || uuid(),
       name: name.trim(),
-      ingredients,
-      optionGroups,
+      nameLower: name.trim().toLowerCase(),
+      ingredients: cleanedIngredients,
+      requiredChoices,
+      optionalChoices,
       sortOrder: isNew ? meals.length : (meal.sortOrder ?? meals.length),
       createdAt: meal?.createdAt || new Date().toISOString(),
+      notes: meal?.notes || "",
     });
+
     try {
       await saveMeal(mealData);
       onClose();
     } catch (e) {
       console.error("❌ Failed to save meal:", e);
-      Alert.alert("Save Failed", e?.message || "Could not save the meal. Check Firestore rules.");
+      Alert.alert("Save Failed", e?.message || "Could not save the meal.");
     }
   };
 
@@ -235,7 +343,7 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
                 style={styles.nameInput}
                 value={name}
                 onChangeText={setName}
-                placeholder="e.g. Pasta with Sauce"
+                placeholder="e.g. Flatbread Pizza"
                 placeholderTextColor={theme.text.tertiary}
                 autoCorrect={false}
                 autoCapitalize="words"
@@ -251,6 +359,8 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
                   ingredient={ing}
                   onChange={handleChangeIngredient}
                   onDelete={() => handleDeleteIngredient(ing.id)}
+                  allIngredients={allIngredients}
+                  addIngredient={addIngredient}
                 />
               ))}
               <TouchableOpacity
@@ -259,7 +369,7 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
                 activeOpacity={0.7}
               >
                 <Ionicons name="add-circle-outline" size={20} color={theme.primary} />
-                <Text style={styles.addButtonText}>Add Ingredient</Text>
+                <Text style={styles.addButtonText}>Add Base Ingredient</Text>
               </TouchableOpacity>
 
               <Text style={styles.sectionHeader}>Option Groups</Text>
@@ -272,6 +382,8 @@ const MealEditorModal = ({ visible, meal, onClose }) => {
                   group={group}
                   onChange={handleChangeOptionGroup}
                   onDelete={() => handleDeleteOptionGroup(group.id)}
+                  allIngredients={allIngredients}
+                  addIngredient={addIngredient}
                 />
               ))}
               <TouchableOpacity

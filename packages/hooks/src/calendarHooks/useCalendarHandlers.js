@@ -32,10 +32,12 @@ const getCalendarType = (event) => {
 
   if (calendarId === "internal") {
     const groupId = event?.groupId || null;
+    const targetUserId = event?.targetUserId || null;
     return {
       isInternal: true,
       isGroup: !!groupId,
       groupId,
+      targetUserId,
     };
   }
 
@@ -99,10 +101,12 @@ export const useCalendarHandlers = ({
 
               if (event.calendarId === "internal") {
                 const groupId = event.groupId || null;
+                const targetUserId = event.targetUserId || null;
                 result = await deleteInternalEvent(
                   event.eventId,
                   event.startTime,
-                  groupId
+                  groupId,
+                  targetUserId
                 );
               } else if (calendar?.calendarType === "ical") {
                 result = await deleteIcalEvent(
@@ -206,7 +210,7 @@ export const useCalendarHandlers = ({
       const currentActivities = selectedEvent?.activities || [];
       const updatedActivities = [...currentActivities, cleanedActivity];
 
-      const { isInternal, isGroup, groupId } = getCalendarType(selectedEvent);
+      const { isInternal, isGroup, groupId, targetUserId } = getCalendarType(selectedEvent);
 
       let result;
       if (isInternal || isGroup) {
@@ -214,7 +218,8 @@ export const useCalendarHandlers = ({
           selectedEvent.eventId,
           selectedEvent.startTime,
           updatedActivities,
-          groupId
+          groupId,
+          targetUserId
         );
       } else {
         result = await updateExternalActivities(
@@ -424,15 +429,16 @@ export const useCalendarHandlers = ({
         return cleanUndefined(activity);
       });
   
-      const { isInternal, isGroup, groupId } = getCalendarType(eventRef);
-  
+      const { isInternal, isGroup, groupId, targetUserId } = getCalendarType(eventRef);
+
       let result;
       if (isInternal || isGroup) {
         result = await updateInternalActivities(
           eventRef.eventId,
           eventRef.startTime,
           updatedActivities,
-          groupId
+          groupId,
+          targetUserId
         );
       } else {
         result = await updateExternalActivities(
@@ -638,7 +644,7 @@ export const useCalendarHandlers = ({
                 .filter((a) => a.id !== activity.id)
                 .map(cleanUndefined);
 
-              const { isInternal, isGroup, groupId } = getCalendarType(event);
+              const { isInternal, isGroup, groupId, targetUserId } = getCalendarType(event);
 
               let result;
               if (isInternal || isGroup) {
@@ -646,7 +652,8 @@ export const useCalendarHandlers = ({
                   event.eventId,
                   event.startTime,
                   updatedActivities,
-                  groupId
+                  groupId,
+                  targetUserId
                 );
               } else {
                 result = await updateExternalActivities(

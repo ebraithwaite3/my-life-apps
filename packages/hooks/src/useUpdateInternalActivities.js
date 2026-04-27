@@ -6,23 +6,26 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 export const useUpdateInternalActivities = () => {
   const { user: authUser, db } = useAuth();
 
-  const updateInternalActivities = async (eventId, startTime, activities, groupId = null) => {
+  const updateInternalActivities = async (eventId, startTime, activities, groupId = null, targetUserId = null) => {
     if (!authUser?.uid) {
       console.error('No authUser ID available');
       return { success: false, error: 'User not authenticated' };
     }
-    
+
     try {
       const eventDateTime = DateTime.fromISO(startTime);
       const monthKey = eventDateTime.toFormat("yyyy-LL");
-      
-      console.log("📝 Updating internal event activities:", monthKey, eventId, groupId ? `(Group: ${groupId})` : '(User)');
+
+      console.log("📝 Updating internal event activities:", monthKey, eventId, groupId ? `(Group: ${groupId})` : targetUserId ? `(Target user: ${targetUserId})` : '(User)');
 
       let monthRef;
-      
+
       if (groupId) {
         // GROUP PATH: activities/{groupId}/months/{monthKey}
         monthRef = doc(db, 'activities', groupId, 'months', monthKey);
+      } else if (targetUserId) {
+        // TARGET USER PATH: activities/{targetUserId}/months/{monthKey} (e.g. admin editing a kid's list)
+        monthRef = doc(db, 'activities', targetUserId, 'months', monthKey);
       } else {
         // USER PATH: activities/{userId}/months/{monthKey}
         monthRef = doc(db, 'activities', authUser.uid, 'months', monthKey);

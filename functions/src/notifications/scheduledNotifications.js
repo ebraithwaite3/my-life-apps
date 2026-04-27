@@ -99,7 +99,7 @@ exports.sendScheduledNotifications = onSchedule(
 
             const message = {
               to: pushToken,
-              sound: "default",
+              sound: notification.silent === true ? null : "default",
               title,
               body,
               data: notification.data || {},

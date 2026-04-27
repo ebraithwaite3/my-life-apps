@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState, useRef } from "react";
+import React, { useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { SharedCalendarScreen } from "@my-apps/screens";
 import {
   ChecklistModal,
@@ -49,6 +49,8 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     getEventsForDay,
     getEventsForWeek,
     getActivitiesForDay,
+    getActivitiesForEntity,
+    isAdmin,
     preferences,
     groups,
     addingToEvent,
@@ -61,8 +63,60 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     return user?.joinedApps ? Object.keys(user.joinedApps).length : 0;
   }, [user]);
 
+  // Kids banner state (admin only)
+  const JACK_USER_ID  = "ObqbPOKgzwYr2SmlN8UQOaDbkzE2";
+  const ELLIE_USER_ID = "CjW9bPGIjrgEqkjE9HxNF6xuxfA3";
+  const [showKidsBanners, setShowKidsBanners] = useState(false);
+
+  const computeKidBanner = useCallback((entityId, label) => {
+    const all = getActivitiesForEntity(entityId);
+    const date = DateTime.fromISO(selectedDate);
+    const start = date.startOf('day');
+    const end = date.endOf('day');
+    let total = 0, completed = 0;
+    let matchedEvent = null;
+    let matchedChecklist = null;
+    all.forEach(item => {
+      if (!item.startTime) return;
+      const s = DateTime.fromISO(item.startTime);
+      if (s < start || s > end) return;
+      const checklist = item.activities?.find(a => a.activityType === 'checklist');
+      if (!checklist) return;
+      total += checklist.items?.length ?? 0;
+      completed += checklist.items?.filter(i => i.completed).length ?? 0;
+      if (!matchedEvent) { matchedEvent = item; matchedChecklist = checklist; }
+    });
+    return { label, total, completed, event: matchedEvent, activity: matchedChecklist, entityId };
+  }, [getActivitiesForEntity, selectedDate]);
+
+  const kidsBanners = useMemo(() => {
+    if (!showKidsBanners) return [];
+    return [
+      computeKidBanner(JACK_USER_ID, "Jack To Do"),
+      computeKidBanner(ELLIE_USER_ID, "Ellie To Do"),
+    ];
+  }, [showKidsBanners, computeKidBanner]);
+
   const updateInternalActivities = useUpdateInternalActivities();
   const updateExternalActivities = useUpdateExternalActivities();
+
+  const [pendingKidUserId, setPendingKidUserId] = useState(null);
+  const [pendingToDoMode, setPendingToDoMode] = useState(false);
+
+  const computeKidCarryover = useCallback((entityId) => {
+    const yesterday = DateTime.fromISO(selectedDate).minus({ days: 1 }).toISODate();
+    const all = getActivitiesForEntity(entityId);
+    const date = DateTime.fromISO(yesterday);
+    const start = date.startOf('day');
+    const end = date.endOf('day');
+    const yesterdayToDo = all.find(item => {
+      if (!item.startTime) return false;
+      const s = DateTime.fromISO(item.startTime);
+      return s >= start && s <= end && item.title?.trim().toLowerCase().includes('to do');
+    });
+    const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
+    return checklistActivity?.items?.filter(i => !i.completed) ?? [];
+  }, [getActivitiesForEntity, selectedDate]);
 
   // HOOK 1: Calendar UI state
   const calendarState = useCalendarState(preferences);
@@ -200,6 +254,37 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     }
   }, [addingToEvent.isActive]);
 
+  const handleCreateToDo = useCallback(() => {
+    Alert.alert(
+      "Whose To Do?",
+      `Create a To Do for ${selectedDate}`,
+      [
+        {
+          text: "Mine",
+          onPress: () => {
+            setPendingToDoMode(true);
+            calendarState.setEventModalVisible(true);
+          },
+        },
+        {
+          text: "Jack",
+          onPress: () => {
+            setPendingKidUserId(JACK_USER_ID);
+            calendarState.setEventModalVisible(true);
+          },
+        },
+        {
+          text: "Ellie",
+          onPress: () => {
+            setPendingKidUserId(ELLIE_USER_ID);
+            calendarState.setEventModalVisible(true);
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  }, [selectedDate, calendarState]);
+
   const handleEventSuccess = async () => {
     if (addingToEvent.isActive) {
       console.log("✅ Event created successfully, cleaning up adding mode");
@@ -235,20 +320,21 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     // Compute carryover items from yesterday's To Do checklist.
     // Use getActivitiesForDay (live activities collection) not getEventsForDay
     // (which embeds a stale snapshot of activities at event-creation time).
-    if (event.title?.trim().toLowerCase() === 'to do') {
+    if (event.title?.trim().toLowerCase().includes('to do')) {
       const yesterday = DateTime.fromISO(selectedDate).minus({ days: 1 }).toISODate();
-      console.log('[CARRYOVER] selectedDate:', selectedDate, '→ yesterday:', yesterday);
-      const yesterdayActivities = getActivitiesForDay(yesterday);
-      console.log('[CARRYOVER] yesterdayActivities count:', yesterdayActivities.length, yesterdayActivities.map(a => ({ title: a.title, eventId: a.eventId })));
-      const yesterdayToDo = yesterdayActivities.find(
-        a => a.title?.trim().toLowerCase() === 'to do'
-      );
-      console.log('[CARRYOVER] yesterdayToDo:', yesterdayToDo ? { title: yesterdayToDo.title, activitiesCount: yesterdayToDo.activities?.length } : 'NOT FOUND');
-      const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
-      console.log('[CARRYOVER] checklistActivity:', checklistActivity ? { itemCount: checklistActivity.items?.length, items: checklistActivity.items?.map(i => ({ name: i.name, completed: i.completed })) } : 'NOT FOUND');
-      const incomplete = checklistActivity?.items?.filter(i => !i.completed) ?? [];
-      console.log('[CARRYOVER] incomplete items to carry:', incomplete.length, incomplete.map(i => i.name));
-      setCarryoverItems(incomplete);
+      const kidUserId = event.targetUserId;
+      if (kidUserId) {
+        // Kid event — look up their activities via getActivitiesForEntity
+        setCarryoverItems(computeKidCarryover(kidUserId));
+      } else {
+        // Eric — use the aggregated day lookup
+        const yesterdayActivities = getActivitiesForDay(yesterday);
+        const yesterdayToDo = yesterdayActivities.find(
+          a => a.title?.trim().toLowerCase().includes('to do')
+        );
+        const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
+        setCarryoverItems(checklistActivity?.items?.filter(i => !i.completed) ?? []);
+      }
     } else {
       setCarryoverItems([]);
     }
@@ -447,6 +533,17 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         setAddingToEvent={setAddingToEvent}
         setSelectedChecklist={setSelectedChecklist}
         isDeleting={calendarState.isDeleting}
+        kidsBanners={kidsBanners}
+        showKidsBanners={showKidsBanners}
+        isAdmin={isAdmin}
+        onToggleKidsBanners={() => setShowKidsBanners(v => !v)}
+        onCreateToDo={handleCreateToDo}
+        onKidBannerPress={(banner) => {
+          if (banner.event && banner.activity) {
+            const eventWithTarget = { ...banner.event, targetUserId: banner.entityId };
+            calendarHandlers.handleViewChecklist(eventWithTarget, banner.activity);
+          }
+        }}
       />
 
       {/* Shared Event Modal with Checklist Configuration */}
@@ -455,8 +552,17 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         onClose={() => {
           calendarState.setSelectedEvent(null);
           calendarState.setEventModalVisible(false);
+          setPendingKidUserId(null);
+          setPendingToDoMode(false);
         }}
-        onSuccess={handleEventSuccess}
+        targetUserId={pendingKidUserId}
+        suppressWorkoutAlert={pendingKidUserId != null}
+        externalCarryoverItems={pendingKidUserId != null ? computeKidCarryover(pendingKidUserId) : null}
+        onSuccess={() => {
+          setPendingKidUserId(null);
+          setPendingToDoMode(false);
+          handleEventSuccess();
+        }}
         event={calendarState.selectedEvent}
         userCalendars={user?.calendars || []}
         groups={groups || []}
@@ -465,7 +571,12 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         // App-specific config
         appName="checklist"
         eventTitles={{ new: "New List", edit: "Edit List" }}
-        defaultTitle="Checklist"
+        defaultTitle={
+          pendingKidUserId === JACK_USER_ID ? "Jack To Do" :
+          pendingKidUserId === ELLIE_USER_ID ? "Ellie To Do" :
+          pendingToDoMode ? "To Do" :
+          "Checklist"
+        }
         // Activity configuration
         activities={[
           {

@@ -730,13 +730,9 @@ class SportsReferenceScraper {
  */
 async function processEPLScheduleFromJSON(jsonData, teamName, season) {
   const games = [];
-  let gameNum = 0;
-
   for (const row of jsonData) {
     // Skip header rows or empty rows
     if (row.Date === "Date" || !row.Date || !row.Opponent) continue;
-
-    gameNum++;
 
     // Extract time - it's in format "16:30 (11:30)"
     // We want the local time (the part in parentheses)
@@ -749,7 +745,7 @@ async function processEPLScheduleFromJSON(jsonData, teamName, season) {
     }
 
     const game = {
-      week: gameNum.toString(),
+      week: `${row.Date}-${row.Opponent.replace(/[^a-zA-Z0-9]/g, "_")}`,
       date: row.Date, // Already in ISO format
       time: gameTime || "TBD",
       opponent: row.Opponent,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, query, where, getDocs, getCountFromServer, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getCountFromServer, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { DateTime } from 'luxon';
 import { useAuth } from '@my-apps/contexts';
 
@@ -189,6 +189,16 @@ export const useIngredients = () => {
     return updatedIngredients.find((i) => i.id === ingredientId);
   };
 
+  const deleteIngredient = async (ingredientId) => {
+    await deleteDoc(doc(db, 'ingredients', ingredientId));
+    const updatedIngredients = ingredients.filter((i) => i.id !== ingredientId);
+    setIngredients(updatedIngredients);
+    const now = DateTime.now().toISO();
+    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(updatedIngredients));
+    await AsyncStorage.setItem(LAST_UPDATED_KEY, now);
+    console.log(`[useIngredients] Deleted ingredient ${ingredientId} — cache updated`);
+  };
+
   const refreshIngredients = async () => {
     if (!db || refreshing) return 0;
     console.log('[useIngredients] Full refresh triggered manually by admin');
@@ -227,6 +237,7 @@ export const useIngredients = () => {
     refreshIngredients,
     addIngredient,
     updateIngredient,
+    deleteIngredient,
     lastUpdated,
   };
 };

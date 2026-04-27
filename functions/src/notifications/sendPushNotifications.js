@@ -36,7 +36,7 @@ exports.sendPushNotification = onCall(async (request) => {
     // Build message for Expo Push Service
     const message = {
       to: pushToken,
-      sound: "default",
+      sound: data?.silent === true ? null : "default",
       title: title || "MyOrganizer",
       body: body || "",
       data: data || {},
@@ -128,7 +128,7 @@ exports.sendBatchPushNotification = onCall(async (request) => {
         // Send individual notification
         const message = {
           to: pushToken,
-          sound: "default",
+          sound: data?.silent === true ? null : "default",
           title: title || "Notification",
           body: body || "",
           data: data || {},

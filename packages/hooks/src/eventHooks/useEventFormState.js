@@ -65,6 +65,8 @@ export const useEventFormState = ({
   groups = [],
   defaultTitle = "Event",
   userPreferences = {},
+  suppressWorkoutAlert = false,
+  externalCarryoverItems = null, // When set, skips internal lookup (used for kids' activities)
 }) => {
   //console.log("Groups in useEventFormState:", groups);
   const { allCalendars: fullCalendars, getActivitiesForDay } = useData();
@@ -231,14 +233,60 @@ export const useEventFormState = ({
         newEndDate = getOneHourAfterRounded();
       }
 
+      const isToDo = defaultTitle.trim().toLowerCase().includes('to do');
+
       setStartDate(newStartDate);
       setEndDate(newEndDate);
       setTitle(defaultTitle);
-      setIsAllDay(false);
-      setReminderMinutes(null);
-      setSelectedCalendarId(defaultCalendarId);
+      setIsAllDay(isToDo ? true : false);
+      setSelectedCalendarId(isToDo ? 'internal' : defaultCalendarId);
       setDescription("");
       setSelectedActivity(null);
+
+      if (isToDo) {
+        const eventDay = DateTime.fromJSDate(newStartDate);
+        const firstReminder = eventDay.set({ hour: 17, minute: 0, second: 0, millisecond: 0 });
+        const reminderISO = firstReminder.toISO();
+        setReminderMinutes({
+          scheduledFor: reminderISO,
+          isRecurring: true,
+          recurringConfig: {
+            intervalSeconds: 3600,
+            totalOccurrences: 5,
+            currentOccurrence: 1,
+            completedCancelsRecurring: true,
+            nextScheduledFor: reminderISO,
+            lastSentAt: null,
+          },
+        });
+
+        if (externalCarryoverItems !== null) {
+          setCarryoverItems(externalCarryoverItems);
+        } else {
+          const yesterday = eventDay.minus({ days: 1 }).toISODate();
+          const yesterdayActivities = getActivitiesForDay(yesterday);
+          const yesterdayToDo = yesterdayActivities.find(
+            a => a.title?.trim().toLowerCase().includes('to do')
+          );
+          const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
+          const incomplete = checklistActivity?.items?.filter(i => !i.completed) ?? [];
+          setCarryoverItems(incomplete);
+        }
+
+        if (!suppressWorkoutAlert) {
+          Alert.alert(
+            'Add a Workout?',
+            'Add a workout for this day?',
+            [
+              { text: 'No', style: 'cancel' },
+              { text: 'Yes', onPress: () => setShowWorkoutModal(true) },
+            ]
+          );
+        }
+      } else {
+        setReminderMinutes(null);
+        setCarryoverItems([]);
+      }
     }
 
     setErrors([]);
@@ -295,7 +343,7 @@ export const useEventFormState = ({
       const yesterdayActivities = getActivitiesForDay(yesterday);
       console.log('[CARRYOVER] yesterdayActivities count:', yesterdayActivities.length, yesterdayActivities.map(a => ({ title: a.title, eventId: a.eventId })));
       const yesterdayToDo = yesterdayActivities.find(
-        a => a.title?.trim().toLowerCase() === 'to do'
+        a => a.title?.trim().toLowerCase().includes('to do')
       );
       console.log('[CARRYOVER] yesterdayToDo:', yesterdayToDo ? { title: yesterdayToDo.title, activitiesCount: yesterdayToDo.activities?.length } : 'NOT FOUND');
       const checklistActivity = yesterdayToDo?.activities?.find(a => a.activityType === 'checklist');
@@ -303,14 +351,16 @@ export const useEventFormState = ({
       console.log('[CARRYOVER] incomplete items:', incomplete.length, incomplete.map(i => i.name));
       setCarryoverItems(incomplete);
 
-      Alert.alert(
-        'Add a Workout?',
-        'Add a workout for this day?',
-        [
-          { text: 'No', style: 'cancel' },
-          { text: 'Yes', onPress: () => setShowWorkoutModal(true) },
-        ]
-      );
+      if (!suppressWorkoutAlert) {
+        Alert.alert(
+          'Add a Workout?',
+          'Add a workout for this day?',
+          [
+            { text: 'No', style: 'cancel' },
+            { text: 'Yes', onPress: () => setShowWorkoutModal(true) },
+          ]
+        );
+      }
     } else {
       setCarryoverItems([]);
     }

@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { useAuth } from "./AuthContext";
 import { DateTime } from "luxon";
+import { doc, onSnapshot } from "firebase/firestore";
 import {
   useUserDoc,
   useMessagesDoc,
@@ -26,6 +27,14 @@ import {
 } from "@my-apps/utils";
 
 const DataContext = createContext();
+
+// Hardcoded IDs that get the kids activity view (Eric + test user)
+const ADMIN_USER_IDS = [
+  "LCqH5hKx2bP8Q5gDGPmzRd65PB32", // Eric
+  "eylhN1q46shFnFu6FdxgKqI2I1g2",  // test user
+];
+const JACK_USER_ID  = "ObqbPOKgzwYr2SmlN8UQOaDbkzE2";
+const ELLIE_USER_ID = "CjW9bPGIjrgEqkjE9HxNF6xuxfA3";
 
 export const useData = () => {
   const context = useContext(DataContext);
@@ -82,6 +91,17 @@ export const DataProvider = ({ children }) => {
     return [...user.groups]; // Create new array only when content changes
   }, [user?.groups?.length, user?.groups?.join(",")]);
 
+  const isAdmin = useMemo(() => {
+    const result = ADMIN_USER_IDS.includes(user?.userId);
+    console.log("👑 isAdmin:", result, "userId:", user?.userId);
+    return result;
+  }, [user?.userId]);
+
+  // Extra IDs to subscribe to (not aggregated into getActivitiesForDay)
+  const kidsIds = useMemo(() => {
+    return isAdmin ? [JACK_USER_ID, ELLIE_USER_ID] : [];
+  }, [isAdmin]);
+
   // Calendar shards hook
   const {
     allCalendars,
@@ -103,7 +123,8 @@ export const DataProvider = ({ children }) => {
     getCurrentMonthActivities,
     getActivitiesForEntity,
     getActivitiesForEvent,
-  } = useActivityDocs(db, user?.userId, groupIds, selectedMonth, selectedYear);
+  } = useActivityDocs(db, user?.userId, groupIds, selectedMonth, selectedYear, kidsIds);
+  console.log("📦 allActivities keys:", Object.keys(allActivities));
 
   // Schedule templates hook (admin only for now)
   const {
@@ -126,6 +147,27 @@ export const DataProvider = ({ children }) => {
     toggleReminderActive,
   } = useStandAloneReminders(db, user?.userId, user?.admin);
   console.log("📬 Reminders:", reminders, "Loading:", remindersLoading);
+
+  // masterConfig real-time listener
+  const [masterConfigAlerts, setMasterConfigAlerts] = useState([]);
+
+  useEffect(() => {
+    if (!db || !user?.userId) return;
+
+    const ref = doc(db, "masterConfig", user.userId);
+    const unsub = onSnapshot(ref, (snap) => {
+      if (!snap.exists()) {
+        setMasterConfigAlerts([]);
+        return;
+      }
+      const alerts = snap.data().alerts || [];
+      setMasterConfigAlerts(alerts);
+    }, (err) => {
+      console.error("❌ masterConfig listener error:", err);
+    });
+
+    return () => unsub();
+  }, [db, user?.userId]);
 
   //console.log("👤 User:", user?.userId, "Loading:", loading, "Full User", user);
   if (userError) console.error("❌ User error:", userError);
@@ -261,6 +303,8 @@ export const DataProvider = ({ children }) => {
       userLoading: loading,
       isUserAdmin,
       adminUserId,
+      isAdmin,
+      masterConfigAlerts,
 
       // Date states
       currentDate,
@@ -372,6 +416,8 @@ export const DataProvider = ({ children }) => {
       messagesCount,
       isUserAdmin,
       adminUserId,
+      isAdmin,
+      masterConfigAlerts,
       selectedDate,
       selectedMonth,
       selectedYear,

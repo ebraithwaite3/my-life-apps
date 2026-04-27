@@ -6,12 +6,15 @@ import { DateTime } from "luxon";
 
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const silent = notification.request.content.data?.silent === true;
+    return {
+      shouldShowBanner: !silent,
+      shouldShowList: !silent,
+      shouldPlaySound: !silent,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 export async function requestNotificationPermissions() {

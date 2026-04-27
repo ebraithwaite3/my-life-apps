@@ -101,7 +101,9 @@ exports.updateEPLSchedule = onCall(
         const mappingRef = db.collection("schedules").doc(mappingDocId);
         const mappingDoc = await mappingRef.get();
 
-        const mapping = mappingDoc.exists ? mappingDoc.data() : {games: {}};
+        const mapping = mappingDoc.exists ?
+          {...mappingDoc.data(), games: mappingDoc.data().games || {}} :
+          {games: {}};
         const scrapedWeeks = new Set();
 
         let created = 0;

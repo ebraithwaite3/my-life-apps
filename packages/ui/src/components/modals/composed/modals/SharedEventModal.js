@@ -52,6 +52,11 @@ const SharedEventModal = ({
 
   // Activity configurations
   activities = [], // Array of activity configs
+
+  // Optional: write event to a different user's activities path (admin creating for a kid)
+  targetUserId = null,
+  suppressWorkoutAlert = false,
+  externalCarryoverItems = null,
 }) => {
   const { theme, getSpacing, getBorderRadius } = useTheme();
   const { db } = useAuth();
@@ -68,6 +73,8 @@ const SharedEventModal = ({
     groups,
     defaultTitle,
     userPreferences: user?.preferences,
+    suppressWorkoutAlert,
+    externalCarryoverItems,
   });
   //console.log("FORM STATE: ", formState);
 
@@ -278,6 +285,7 @@ const SharedEventModal = ({
           activities: activitiesData,
           appName,
           membersToNotify: formState.membersToNotify,
+          targetUserId,
         });
 
     formState.setIsLoading(false);
