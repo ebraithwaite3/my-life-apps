@@ -109,6 +109,18 @@ const AddChecklistToEventModal = ({
         delete instantiated.subItems;
       }
 
+      // Reset completion and yesNo state on header sub-items
+      if (instantiated.subItems && Array.isArray(instantiated.subItems)) {
+        instantiated.subItems = instantiated.subItems.map((sub) => {
+          const resetSub = { ...sub, completed: false };
+          if (resetSub.yesNoConfig) {
+            const { answered: _a, answer: _b, ...staticSubConfig } = resetSub.yesNoConfig;
+            resetSub.yesNoConfig = staticSubConfig;
+          }
+          return resetSub;
+        });
+      }
+
       return instantiated;
     });
 
@@ -124,6 +136,16 @@ const AddChecklistToEventModal = ({
           ...item,
           id: `carryover_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           completed: false,
+          yesNoConfig: item.yesNoConfig
+            ? { ...item.yesNoConfig, answered: false, answer: null }
+            : null,
+          subItems: (item.subItems || []).map((sub) => ({
+            ...sub,
+            completed: false,
+            yesNoConfig: sub.yesNoConfig
+              ? { ...sub.yesNoConfig, answered: false, answer: null }
+              : null,
+          })),
         }));
       console.log('[AddChecklist] To Do carryover — raw:', carryoverItems.length, '| template names:', [...templateNames], '| merging:', carryoverToMerge.length, carryoverToMerge.map(i => i.name));
     } else {

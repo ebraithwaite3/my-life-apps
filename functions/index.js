@@ -25,6 +25,8 @@ const modules = [
   require("./src/shortcuts/getCalendarEvents"),
   require("./src/shortcuts/addToChecklist"),
   require("./src/calendar/applyScheduleTemplate"),
+  require("./src/voice/voiceTest"),
+  require("./src/voice/updateTodos"),
   // Add more as you create them
 ];
 

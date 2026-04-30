@@ -10,8 +10,8 @@ import {
   Switch,
   Modal,
   FlatList,
-  Clipboard,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@my-apps/contexts";
 import {
@@ -36,6 +36,7 @@ import IngredientsManagementView from "../components/grocery/IngredientsManageme
 import useHouseholdTasks from "../hooks/useHouseholdTasks";
 import HouseholdTasksManagementView from "../components/household/HouseholdTasksManagementView";
 import { getLogs, clearLogs } from "../hooks/useLogCapture";
+import EndpointHitter from "../components/developer/EndpointHitter";
 
 const defaultPreferences = {
   defaultCalendarView: "day",
@@ -741,7 +742,7 @@ const PreferencesScreen = ({ navigation, route }) => {
               </View>
             )}
 
-            {/* 🪵 Log Viewer (Admin Only) */}
+            {/* 🪵 Developer Tools (Admin Only) */}
             {user?.admin && (
               <View style={styles.settingContainer}>
                 <Text style={styles.sectionHeaderText}>Developer</Text>
@@ -758,6 +759,19 @@ const PreferencesScreen = ({ navigation, route }) => {
                   <View style={styles.templateInfo}>
                     <Text style={styles.templateName}>View Logs</Text>
                     <Text style={styles.templateDetails}>Console output</Text>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.text.secondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.templateCard}
+                  onPress={() => setCurrentView("endpointHitter")}
+                >
+                  <View style={styles.iconContainer}>
+                    <Icon name="api" size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.templateInfo}>
+                    <Text style={styles.templateName}>Endpoint Hitter</Text>
+                    <Text style={styles.templateDetails}>POST JSON to configured endpoints</Text>
                   </View>
                   <Icon name="chevron-right" size={20} color={theme.text.secondary} />
                 </TouchableOpacity>
@@ -811,6 +825,10 @@ const PreferencesScreen = ({ navigation, route }) => {
         <View style={{ flex: 1 }}>
           <HouseholdTasksManagementView onClose={handleBackToPreferences} />
         </View>
+      ) : currentView === "endpointHitter" ? (
+        <View style={{ flex: 1 }}>
+          <EndpointHitter onClose={handleBackToPreferences} />
+        </View>
       ) : null}
 
       {/* 🪵 Log Viewer Modal */}
@@ -856,7 +874,7 @@ const PreferencesScreen = ({ navigation, route }) => {
               contentContainerStyle={{ padding: 12 }}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  onPress={() => Clipboard.setString(item.message)}
+                  onPress={() => Clipboard.setStringAsync(item.message)}
                   activeOpacity={0.7}
                 >
                   <View style={{

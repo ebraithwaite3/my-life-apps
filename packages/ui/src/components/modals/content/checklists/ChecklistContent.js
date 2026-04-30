@@ -331,6 +331,13 @@ const ChecklistContent = ({
       }
     }
 
+    console.log('[YesNo] handleYesNoAnswer — itemId:', itemId, '| answer:', answer);
+    console.log('[YesNo] item found:', item ? { name: item.name, type: item.yesNoConfig?.type, completed: item.completed, answered: item.yesNoConfig?.answered } : 'NOT FOUND');
+    console.log('[YesNo] parentItem:', parentItem ? { name: parentItem.name, completed: parentItem.completed, subItemCount: parentItem.subItems?.length } : 'none');
+    if (item?.subItems?.length) {
+      console.log('[YesNo] item.subItems:', item.subItems.map(s => ({ name: s.name, completed: s.completed, answered: s.yesNoConfig?.answered })));
+    }
+
     // Helper to update a sub-item's yesNoConfig inside its parent,
     // and auto-complete the parent header when all sub-items are done.
     const updateSubItem = (updatedSub) => {
@@ -338,6 +345,7 @@ const ChecklistContent = ({
         if (i.id !== parentItem.id) return i;
         const updatedSubItems = i.subItems.map((s) => s.id === updatedSub.id ? updatedSub : s);
         const allDone = updatedSubItems.every((s) => s.completed);
+        console.log('[YesNo] updateSubItem — parent:', parentItem.name, '| allDone:', allDone, '| sibling completion:', updatedSubItems.map(s => ({ name: s.name, completed: s.completed })));
         return { ...i, subItems: updatedSubItems, completed: allDone };
       });
       setItems(updatedItems);
@@ -347,6 +355,7 @@ const ChecklistContent = ({
     // Header: reveal existing sub-items, no generation needed
     if (answer === "yes" && item?.yesNoConfig?.type === "header") {
       const updated = { ...item, yesNoConfig: { ...item.yesNoConfig, answered: true, answer: "yes" } };
+      console.log('[YesNo] header branch — updated.completed:', updated.completed, '| subItems:', (updated.subItems || []).map(s => ({ name: s.name, completed: s.completed })));
       if (parentItem) { updateSubItem(updated); } else {
         const updatedItems = items.map((i) => i.id === itemId ? updated : i);
         setItems(updatedItems);
@@ -413,7 +422,10 @@ const ChecklistContent = ({
       // so the parent header can auto-complete when all siblings are done.
       // guided/multiChoice/fillIn/assignable are handled above and set completed via their own flows.
       const yesNoType = item?.yesNoConfig?.type || 'simple';
-      const isTerminalYes = answer === 'yes' && ['simple', 'linkedNavigate'].includes(yesNoType);
+      // 'simple' sub-items inside a header: Yes converts to a checkbox (user checks manually).
+      // Only 'linkedNavigate' is still terminal-yes for sub-items.
+      const isTerminalYes = answer === 'yes' && yesNoType === 'linkedNavigate';
+      console.log('[YesNo] sub-item path — yesNoType:', yesNoType, '| isTerminalYes:', isTerminalYes, '| will complete:', answer === "no" || isTerminalYes);
       const updatedSub = {
         ...item,
         yesNoConfig: { ...item.yesNoConfig, answered: true, answer },

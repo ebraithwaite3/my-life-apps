@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import * as Crypto from 'expo-crypto';
 
+// Reset yesNo answered state so carried-over items start fresh each day
+const resetYesNoConfig = (config) => {
+  if (!config) return null;
+  const { answered: _a, answer: _b, ...rest } = config;
+  return { ...rest, answered: false, answer: null };
+};
+
 export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isEditing, carryoverItems = []) => {
   const uuidv4 = () => Crypto.randomUUID();
   
@@ -76,11 +83,12 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
           itemType: item.itemType || "checkbox",
           requiredForScreenTime: item.requiredForScreenTime ?? false,
           requiresParentApproval: item.requiresParentApproval ?? false,
-          yesNoConfig: item.yesNoConfig || null,
+          yesNoConfig: resetYesNoConfig(item.yesNoConfig),
           subItems: (item.subItems || []).map(sub => ({
             ...sub,
             id: uuidv4(),
             completed: false,
+            yesNoConfig: resetYesNoConfig(sub.yesNoConfig),
           })),
           parentId: null,
           ...(item.sourceChecklistId && { sourceChecklistId: item.sourceChecklistId }),

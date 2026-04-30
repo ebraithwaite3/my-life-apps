@@ -159,6 +159,16 @@ const SharedEventModal = ({
           ...item,
           id: `carryover_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           completed: false,
+          yesNoConfig: item.yesNoConfig
+            ? { ...item.yesNoConfig, answered: false, answer: null }
+            : null,
+          subItems: (item.subItems || []).map((sub) => ({
+            ...sub,
+            completed: false,
+            yesNoConfig: sub.yesNoConfig
+              ? { ...sub.yesNoConfig, answered: false, answer: null }
+              : null,
+          })),
         }));
       console.log('[SharedEventModal] Merging carryover into template — raw:', formState.carryoverItems.length, '| filtered:', carryoverToMerge.length, carryoverToMerge.map(i => i.name));
       newActivity.items = [...(newActivity.items || []), ...carryoverToMerge];
