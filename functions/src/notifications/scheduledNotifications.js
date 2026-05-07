@@ -3,252 +3,288 @@ const admin = require("firebase-admin");
 const {DateTime} = require("luxon");
 const handlers = require("./handlers");
 
+/**
+ * Advance a recurring masterConfig notification to its next scheduledTime,
+ * or remove it if it's one-time / final occurrence.
+ * Returns the updated notifications array.
+ */
+function advanceOrRemoveMCNotif(notifications, notif, nowDate) {
+  if (!notif.isRecurring || !notif.recurringConfig) {
+    return notifications.filter((n) => n.id !== notif.id);
+  }
+
+  const config = notif.recurringConfig;
+  const isInfinite = config.totalOccurrences === null;
+  const hasMore = config.currentOccurrence < config.totalOccurrences;
+
+  if (!isInfinite && !hasMore) {
+    return notifications.filter((n) => n.id !== notif.id);
+  }
+
+  // DST-safe: advance by calendar days in the notification's timezone if
+  // intervalSeconds is a whole number of days and a timezone is present.
+  const tz = notif.data?.handlerParams?.timezone;
+  const intervalDays = config.intervalSeconds / 86400;
+  const isWholeDays = Number.isInteger(intervalDays);
+
+  let nextScheduledTime;
+  if (tz && isWholeDays) {
+    nextScheduledTime = DateTime.fromISO(notif.scheduledTime, {zone: tz})
+        .plus({days: intervalDays})
+        .toISO();
+  } else {
+    nextScheduledTime = DateTime.fromISO(notif.scheduledTime)
+        .plus({seconds: config.intervalSeconds})
+        .toISO();
+  }
+
+  const nextOccurrence = config.currentOccurrence + 1;
+  console.log(
+      `[MC notifs] 🔁 Recurring ${nextOccurrence}/${config.totalOccurrences || "∞"} → ${nextScheduledTime}`,
+  );
+
+  return notifications.map((n) =>
+    n.id !== notif.id ? n : {
+      ...n,
+      scheduledTime: nextScheduledTime,
+      recurringConfig: {
+        ...config,
+        currentOccurrence: nextOccurrence,
+        lastSentAt: nowDate.toISOString(),
+      },
+    },
+  );
+}
+
 exports.sendScheduledNotifications = onSchedule(
     "*/10 * * * *",
     async () => {
       console.log("⏰ Checking for scheduled notifications...");
 
       const db = admin.firestore();
-      const now = admin.firestore.Timestamp.now();
-      console.log("Now is:", now.toDate().toISOString());
-      console.log("Now in timestamp as it will come back:", now);
+      const now = new Date();
+
+      // Pre-fetch all masterConfig docs
+      const masterConfigSnap = await db.collection("masterConfig").get();
+      const masterConfigByUser = {};
+      for (const configDoc of masterConfigSnap.docs) {
+        masterConfigByUser[configDoc.id] = configDoc.data();
+      }
+      console.log("Now is:", now.toISOString());
 
       try {
-        const snapshot = await db
-            .collection("pendingNotifications")
-            .where("scheduledFor", "<=", now)
-            .limit(50)
-            .get();
+        // ─── Process masterConfig.notifications ───────────────────────────
+        console.log("[MC notifs] ⏰ Checking masterConfig.notifications...");
 
-        if (snapshot.empty) {
-          console.log("📭 No notifications to send");
-          return;
+        const nowDateMC = now;
+        let mcSent = 0;
+        let mcFailed = 0;
+        let mcRescheduled = 0;
+
+        for (const [mcUserId, configData] of Object.entries(masterConfigByUser)) {
+          const mcNotifications = configData.notifications || [];
+          if (mcNotifications.length === 0) continue;
+
+          const dueNotifs = mcNotifications.filter(
+              (n) => n.scheduledTime && new Date(n.scheduledTime) <= nowDateMC,
+          );
+          if (dueNotifs.length === 0) continue;
+
+          console.log(`[MC notifs] 📬 ${dueNotifs.length} due for user ${mcUserId}`);
+
+          // Look up user doc once per user for push token
+          const mcUserDoc = await db.collection("users").doc(mcUserId).get();
+          const mcUserData = mcUserDoc.exists ? mcUserDoc.data() : null;
+
+          let updatedMCNotifs = [...mcNotifications];
+
+          for (const notif of dueNotifs) {
+            try {
+              const targetApp = notif.data?.app || "organizer-app";
+              let title = notif.title || "MyOrganizer";
+              let body = notif.body || "";
+
+              // handlerName lives at notif.data.handlerName in masterConfig shape
+              const handlerName = notif.data?.handlerName;
+              const handlerParams = notif.data?.handlerParams;
+              if (handlerName) {
+                const handler = handlers[handlerName];
+                if (handler) {
+                  try {
+                    const result = await handler(mcUserId, handlerParams || {}, db);
+                    title = result.title;
+                    body = result.body;
+                    console.log(`[MC notifs] 🧠 Handler "${handlerName}" resolved`);
+                  } catch (hErr) {
+                    console.error(`[MC notifs] ❌ Handler "${handlerName}" failed:`, hErr);
+                    // Falls through to static title/body
+                  }
+                } else {
+                  console.warn(`[MC notifs] ⚠️ Unknown handler: ${handlerName}`);
+                }
+              }
+
+              // Silent mode check
+              const userConfig = masterConfigByUser[mcUserId] || {};
+              if (userConfig.silentMode === true) {
+                const arrayUnion = admin.firestore.FieldValue.arrayUnion;
+                const increment = admin.firestore.FieldValue.increment(1);
+                const configRef = db.doc(`masterConfig/${mcUserId}`);
+
+                if (notif.linkedAlertId) {
+                  await configRef.set({silentModeCount: increment}, {merge: true});
+                } else {
+                  const silentAlert = {
+                    id: `silent-${notif.id}`,
+                    title,
+                    message: body,
+                    scheduledTime: new Date().toISOString(),
+                    acknowledged: false,
+                    deleteOnConfirm: true,
+                    createdAt: new Date().toISOString(),
+                  };
+                  await configRef.set(
+                      {alerts: arrayUnion(silentAlert), silentModeCount: increment},
+                      {merge: true},
+                  );
+                }
+
+                const beforeLen = updatedMCNotifs.length;
+                updatedMCNotifs = advanceOrRemoveMCNotif(updatedMCNotifs, notif, nowDateMC);
+                if (updatedMCNotifs.length === beforeLen) mcRescheduled++;
+                console.log(`[MC notifs] 🔕 Silent mode: suppressed push for ${mcUserId}`);
+                mcSent++;
+                continue;
+              }
+
+              // Push token check
+              if (!mcUserData) {
+                console.log(`[MC notifs] ⚠️ User ${mcUserId} not found — removing notif`);
+                updatedMCNotifs = updatedMCNotifs.filter((n) => n.id !== notif.id);
+                mcFailed++;
+                continue;
+              }
+              const pushToken = mcUserData.pushTokens?.[targetApp];
+              if (!pushToken) {
+                console.log(`[MC notifs] ⚠️ No ${targetApp} token for ${mcUserId} — removing notif`);
+                updatedMCNotifs = updatedMCNotifs.filter((n) => n.id !== notif.id);
+                mcFailed++;
+                continue;
+              }
+
+              // Send via Expo push API
+              const mcMessage = {
+                to: pushToken,
+                sound: notif.silent === true ? null : "default",
+                title,
+                body,
+                data: notif.data || {},
+              };
+
+              const mcResponse = await fetch(
+                  "https://exp.host/--/api/v2/push/send",
+                  {
+                    method: "POST",
+                    headers: {
+                      "Accept": "application/json",
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(mcMessage),
+                  },
+              );
+              const mcResponseData = await mcResponse.json();
+              console.log(
+                  "[MC notifs] Expo response:",
+                  JSON.stringify(mcResponseData, null, 2),
+              );
+
+              let mcSendSuccess = mcResponse.ok;
+              if (mcResponseData.data?.[0]?.status === "error") {
+                console.log(`[MC notifs] ❌ Expo error: ${mcResponseData.data[0].message}`);
+                mcSendSuccess = false;
+              } else if (mcResponseData.errors) {
+                console.log(`[MC notifs] ❌ Validation errors:`, JSON.stringify(mcResponseData.errors));
+                mcSendSuccess = false;
+              }
+
+              if (mcSendSuccess) {
+                console.log(`[MC notifs] ✅ Sent ${targetApp} to ${mcUserId}`);
+                mcSent++;
+                const beforeLen = updatedMCNotifs.length;
+                updatedMCNotifs = advanceOrRemoveMCNotif(updatedMCNotifs, notif, nowDateMC);
+                if (updatedMCNotifs.length === beforeLen) mcRescheduled++;
+              } else {
+                console.log(`[MC notifs] ❌ Send failed for ${mcUserId} — removing notif`);
+                mcFailed++;
+                updatedMCNotifs = updatedMCNotifs.filter((n) => n.id !== notif.id);
+              }
+            } catch (notifErr) {
+              console.error(`[MC notifs] ❌ Error processing notif:`, notifErr);
+              mcFailed++;
+              updatedMCNotifs = updatedMCNotifs.filter((n) => n.id !== notif.id);
+            }
+          }
+
+          // Write all changes for this user in one atomic update
+          try {
+            await db.doc(`masterConfig/${mcUserId}`).update({notifications: updatedMCNotifs});
+            console.log(`[MC notifs] 💾 Updated array for ${mcUserId}`);
+          } catch (writeErr) {
+            console.error(`[MC notifs] ❌ Write failed for ${mcUserId}:`, writeErr);
+          }
         }
 
-        console.log(`📬 Found ${snapshot.size} notifications to send`);
+        console.log(
+            `[MC notifs] ✅ Done: ${mcSent} sent, ${mcFailed} failed, ${mcRescheduled} rescheduled`,
+        );
 
-        let sent = 0;
-        let failed = 0;
-        let rescheduled = 0;
+        // ─── Process recurring alerts in masterConfig ─────────────────────
+        console.log("⏰ Checking masterConfig for recurring alerts...");
 
-        for (const doc of snapshot.docs) {
-          try {
-            const notification = doc.data();
+        const nowDate = now;
+        let alertsRescheduled = 0;
 
-            // Get app from notification data
-            const targetApp = notification.data?.app || "organizer-app";
+        for (const [userId, configData] of Object.entries(masterConfigByUser)) {
+          const alerts = configData.alerts || [];
+          if (alerts.length === 0) continue;
 
-            const userDoc = await db
-                .collection("users")
-                .doc(notification.userId)
-                .get();
+          let changed = false;
+          const updatedAlerts = alerts.map((alert) => {
+            if (alert.acknowledged) return alert;
+            if (!alert.recurringIntervalMinutes) return alert;
+            if (!alert.scheduledTime) return alert;
 
-            if (!userDoc.exists) {
-              console.log(`⚠️  User ${notification.userId} not found`);
-              await doc.ref.delete();
-              failed++;
-              continue;
-            }
+            const scheduledTime = new Date(alert.scheduledTime);
+            if (scheduledTime > nowDate) return alert;
 
-            // Get app-specific token
-            const userData = userDoc.data();
-            const pushToken = userData.pushTokens?.[targetApp];
-
-            if (!pushToken) {
-              console.log(
-                  `⚠️  User ${notification.userId} ` +
-                  `doesn't have ${targetApp}`,
-              );
-              await doc.ref.delete();
-              failed++;
-              continue;
-            }
-
-            // Resolve dynamic content via handler if specified
-            let title = notification.title || "MyOrganizer";
-            let body = notification.body || "";
-
-            if (notification.handlerName) {
-              const handler = handlers[notification.handlerName];
-              if (handler) {
-                try {
-                  const result = await handler(
-                      notification.userId,
-                      notification.handlerParams || {},
-                      db,
-                  );
-                  title = result.title;
-                  body = result.body;
-                  console.log(
-                      `🧠 Handler "${notification.handlerName}" ` +
-                      `resolved content`,
-                  );
-                } catch (handlerErr) {
-                  console.error(
-                      `❌ Handler "${notification.handlerName}" failed:`,
-                      handlerErr,
-                  );
-                  // Falls through to static title/body as fallback
-                }
-              } else {
-                console.warn(
-                    `⚠️  Unknown handler: ${notification.handlerName}`,
-                );
-              }
-            }
-
-            const message = {
-              to: pushToken,
-              sound: notification.silent === true ? null : "default",
-              title,
-              body,
-              data: notification.data || {},
-            };
-
-            const response = await fetch(
-                "https://exp.host/--/api/v2/push/send",
-                {
-                  method: "POST",
-                  headers: {
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify(message),
-                },
+            // Past-due, unacknowledged, recurring — advance to next window
+            const nextTime = new Date(
+                nowDate.getTime() +
+                alert.recurringIntervalMinutes * 60 * 1000,
             );
+            changed = true;
+            alertsRescheduled++;
+            return {...alert, scheduledTime: nextTime.toISOString()};
+          });
 
-            const responseData = await response.json();
-
-            console.log(
-                "Expo API response:",
-                JSON.stringify(responseData, null, 2),
-            );
-
-            let sendSuccess = false;
-
-            if (response.ok) {
-              sendSuccess = true;
-            }
-
-            if (responseData.data) {
-              const result = responseData.data[0];
-              if (result && result.status === "error") {
-                console.log(`❌ Expo error: ${result.message}`);
-                sendSuccess = false;
-              }
-            } else if (responseData.errors) {
-              console.log(
-                  `❌ Validation errors:`,
-                  JSON.stringify(responseData.errors),
-              );
-              sendSuccess = false;
-            }
-
-            if (sendSuccess) {
-              console.log(
-                  `✅ Sent ${targetApp} notification to ` +
-                  `${notification.userId}`,
-              );
-              sent++;
-
-              // ✅ Handle recurring notifications
-              if (notification.isRecurring &&
-                  notification.recurringConfig) {
-                const config = notification.recurringConfig;
-                const isInfinite = config.totalOccurrences === null;
-                const hasMore =
-                    config.currentOccurrence < config.totalOccurrences;
-
-                if (isInfinite || hasMore) {
-                  // Calculate next scheduled time.
-                  // If a timezone is provided (e.g. for daily notifications),
-                  // advance by calendar days in that zone so wall-clock time
-                  // stays fixed across DST transitions.
-                  // Otherwise fall back to adding raw intervalSeconds.
-                  const currentScheduledTime = notification.scheduledFor;
-                  let nextScheduledFor;
-
-                  const tz = notification.handlerParams?.timezone;
-                  const intervalDays = config.intervalSeconds / 86400;
-                  const isWholeDays = Number.isInteger(intervalDays);
-
-                  if (tz && isWholeDays) {
-                    const nextDt = DateTime
-                        .fromSeconds(currentScheduledTime.seconds, {zone: tz})
-                        .plus({days: intervalDays});
-                    nextScheduledFor = new admin.firestore.Timestamp(
-                        Math.floor(nextDt.toSeconds()),
-                        0,
-                    );
-                  } else {
-                    const nextSeconds =
-                        currentScheduledTime.seconds + config.intervalSeconds;
-                    nextScheduledFor = new admin.firestore.Timestamp(
-                        nextSeconds,
-                        0,
-                    );
-                  }
-
-                  const nowIso = admin.firestore.Timestamp.now()
-                      .toDate().toISOString();
-
-                  await doc.ref.update({
-                    "recurringConfig.currentOccurrence":
-                        config.currentOccurrence + 1,
-                    "recurringConfig.lastSentAt": nowIso,
-                    "scheduledFor": nextScheduledFor,
-                  });
-
-                  const nextOccur = config.currentOccurrence + 1;
-                  const total = config.totalOccurrences || "∞";
-                  console.log(
-                      `🔁 Rescheduled recurring notification ` +
-                      `(occurrence ${nextOccur}/${total})`,
-                  );
-                  console.log(
-                      `   Next send: ` +
-                      `${nextScheduledFor.toDate().toISOString()}`,
-                  );
-                  rescheduled++;
-                } else {
-                  // ✅ Final occurrence reached
-                  await doc.ref.delete();
-                  const current = config.currentOccurrence;
-                  const total = config.totalOccurrences;
-                  console.log(
-                      `✅ Final recurring occurrence sent ` +
-                      `(${current}/${total}) - deleted`,
-                  );
-                }
-              } else {
-                // ✅ Non-recurring notification - delete as normal
-                await doc.ref.delete();
-              }
-            } else {
-              console.log(
-                  `❌ Failed to send to ${notification.userId}`,
-              );
-              failed++;
-              await doc.ref.delete();
-            }
-          } catch (error) {
-            console.error(
-                `❌ Error processing notification:`,
-                error,
-            );
-            failed++;
-
+          if (changed) {
             try {
-              await doc.ref.delete();
-            } catch (deleteError) {
-              console.error("Failed to delete doc:", deleteError);
+              await db
+                  .doc(`masterConfig/${userId}`)
+                  .update({alerts: updatedAlerts});
+              console.log(
+                  `🔁 Rescheduled recurring alerts for user ${userId}`,
+              );
+            } catch (err) {
+              console.error(
+                  `❌ Failed to update alerts for ${userId}:`, err,
+              );
             }
           }
         }
 
         console.log(
-            `✅ Batch complete: ${sent} sent, ` +
-            `${failed} failed, ${rescheduled} rescheduled`,
+            `✅ Alert check complete: ${alertsRescheduled} alert(s) rescheduled`,
         );
       } catch (error) {
         console.error("❌ Scheduler error:", error);

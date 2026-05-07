@@ -15,6 +15,7 @@ import {
   TextInput,
   Keyboard,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme, useData } from "@my-apps/contexts";
 import ReminderSelector from "../../../forms/ReminderSelector";
@@ -22,7 +23,7 @@ import FilterChips from "../../../general/FilterChips";
 import ChecklistEditingRow from "../../../checklists/ChecklistEditingRow";
 import ChecklistItemConfigModal from "../../composed/modals/ChecklistItemConfigModal";
 import { useAutoScrollOnFocus } from "@my-apps/hooks";
-import { getChecklistStats } from "@my-apps/utils";
+import { getChecklistStats, showSuccessToast } from "@my-apps/utils";
 import { useChecklistState } from "@my-apps/hooks";
 import { KeyboardActionBar } from "../../../keyboard";
 import { useChecklistItems } from "@my-apps/hooks";
@@ -451,6 +452,18 @@ const EditChecklistContent = forwardRef(
 
           <View style={{ flexDirection: "row", alignItems: "center", marginBottom: getSpacing.xs }}>
             <Text style={[styles.sectionHeader, { flex: 1, marginBottom: 0 }]}>Items</Text>
+            {isUserAdmin && isEditing && (
+              <TouchableOpacity
+                onPress={async () => {
+                  await Clipboard.setStringAsync(JSON.stringify(checklist, null, 2));
+                  showSuccessToast("Copied to clipboard");
+                }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4, marginRight: useQuickAddMode ? getSpacing.sm : 0 }}
+              >
+                <Ionicons name="sparkles-outline" size={16} color={theme.primary} />
+                <Text style={{ fontSize: getTypography.bodySmall.fontSize, fontWeight: "600", color: theme.primary }}>Claude</Text>
+              </TouchableOpacity>
+            )}
             {isUserAdmin && useQuickAddMode && (
               <TouchableOpacity
                 onPress={() => setShowQuickAddPicker(true)}

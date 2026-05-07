@@ -18,13 +18,6 @@ import PillSelectionButton from "../../../buttons/PillSelectionButton";
 import { generateUUID } from "@my-apps/utils";
 import { useNotificationHandlers, useNotifications } from "@my-apps/hooks";
 import { useAuth } from "@my-apps/contexts";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-} from "firebase/firestore";
 
 const ChecklistModal = ({
   // From calendarState
@@ -97,10 +90,11 @@ const ChecklistModal = ({
   } = useNotificationHandlers(
     selectedChecklist ? selectedChecklist.id : null,
     "checklist",
-    selectedChecklistEvent ? selectedChecklistEvent.id : null
+    selectedChecklistEvent ? selectedChecklistEvent.id : null,
+    selectedChecklistEvent?.targetUserId || null
   );
 
-  const { scheduleGroupReminder } = useNotifications();
+  const { scheduleGroupReminder, deleteGroupReminder } = useNotifications();
 
   // Unified working state for the checklist
   const [workingChecklist, setWorkingChecklist] = useState(null);
@@ -430,23 +424,9 @@ const ChecklistModal = ({
         } else if (isGroupEvent && !reminderToSave) {
           console.log("🗑️ Deleting group checklist reminders");
 
+          const notifId = `${eventIdToUse}-checklist-${selectedChecklist.id}`;
           try {
-            const notificationsRef = collection(db, "pendingNotifications");
-            const q = query(
-              notificationsRef,
-              where("data.checklistId", "==", selectedChecklist.id),
-              where("eventId", "==", eventIdToUse)
-            );
-
-            const snapshot = await getDocs(q);
-            const deletePromises = snapshot.docs.map((doc) =>
-              deleteDoc(doc.ref)
-            );
-            await Promise.all(deletePromises);
-
-            console.log(
-              `✅ Deleted ${snapshot.docs.length} group notifications`
-            );
+            await deleteGroupReminder(selectedChecklistEvent.groupId, notifId);
           } catch (error) {
             console.error("❌ Error deleting group notifications:", error);
           }

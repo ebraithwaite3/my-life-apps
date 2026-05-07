@@ -221,12 +221,12 @@ export const useEventCreation = ({ user, db }) => {
                       app: `${appName}-app`,
                       date: startDate.toISOString(),
                       ...activityData,
-                      // ✅ Include recurring config
                       ...(reminderMinutes.isRecurring && {
                         isRecurring: true,
                         recurringConfig: reminderMinutes.recurringConfig,
                       }),
-                    }
+                    },
+                    targetUserId
                   );
                   console.log("✅ Personal reminder scheduled");
                 } catch (error) {

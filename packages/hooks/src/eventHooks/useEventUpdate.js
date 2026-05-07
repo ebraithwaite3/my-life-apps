@@ -73,6 +73,7 @@ export const useEventUpdate = ({ user, db }) => {
     appName = "app",
     membersToNotify = [],
     event = null,
+    targetUserId = null,
   }) => {
     console.log("Updating event:", eventId);
     console.log("Reminder data:", reminderMinutes);
@@ -162,18 +163,18 @@ export const useEventUpdate = ({ user, db }) => {
             console.log("⚠️ Reminder changed, updating notifications");
 
             // Delete old event notifications using the hook
-            const deleteResult = await deleteNotification(eventId);
+            const deleteResult = await deleteNotification(eventId, targetUserId);
             if (deleteResult.success && deleteResult.deletedCount > 0) {
               console.log(`🗑️ Deleted ${deleteResult.deletedCount} old notification(s)`);
             }
-        
+
             // Schedule new reminder if set
             if (reminderMinutes != null) {
               const reminderTimeISO = getReminderTime(reminderMinutes);
               const reminderTime = new Date(reminderTimeISO);
               console.log("⏰ Rescheduling reminder for:", reminderTime);
               console.log("   Recurring:", reminderMinutes.isRecurring);
-        
+
               if (reminderTime > new Date()) {
                 if (isSharedEvent) {
                   await scheduleBatchNotification(
@@ -211,7 +212,8 @@ export const useEventUpdate = ({ user, db }) => {
                         isRecurring: true,
                         recurringConfig: reminderMinutes.recurringConfig,
                       }),
-                    }
+                    },
+                    targetUserId
                   );
                 }
               }
@@ -258,18 +260,18 @@ export const useEventUpdate = ({ user, db }) => {
             console.log("⚠️ Reminder changed, updating notifications");
 
             // Delete old event notifications using the hook
-            const deleteResult = await deleteNotification(eventId);
+            const deleteResult = await deleteNotification(eventId, targetUserId);
             if (deleteResult.success && deleteResult.deletedCount > 0) {
               console.log(`🗑️ Deleted ${deleteResult.deletedCount} old notification(s)`);
             }
-      
+
             // Schedule new reminder if set
             if (reminderMinutes != null) {
               const reminderTimeISO = getReminderTime(reminderMinutes);
               const reminderTime = new Date(reminderTimeISO);
               console.log("⏰ Rescheduling reminder for:", reminderTime);
               console.log("   Recurring:", reminderMinutes.isRecurring);
-      
+
               if (reminderTime > new Date()) {
                 if (isSharedEvent) {
                   const { scheduleBatchNotification: scheduleBatch } =
@@ -293,7 +295,7 @@ export const useEventUpdate = ({ user, db }) => {
                 } else {
                   const { scheduleNotification } = await import("@my-apps/services");
                   await scheduleNotification(
-                    user.userId,
+                    targetUserId || user.userId,
                     `Reminder: ${title.trim()}`,
                     description.trim() || "Event reminder",
                     eventId,

@@ -150,7 +150,10 @@ export const DataProvider = ({ children }) => {
 
   // masterConfig real-time listener
   const [masterConfigAlerts, setMasterConfigAlerts] = useState([]);
-
+  const [masterConfigNotifications, setMasterConfigNotifications] =
+    useState([]);
+  const [masterConfigSilentMode, setMasterConfigSilentMode] =
+    useState(false);
   useEffect(() => {
     if (!db || !user?.userId) return;
 
@@ -158,16 +161,68 @@ export const DataProvider = ({ children }) => {
     const unsub = onSnapshot(ref, (snap) => {
       if (!snap.exists()) {
         setMasterConfigAlerts([]);
+        setMasterConfigNotifications([]);
+        setMasterConfigSilentMode(false);
         return;
       }
-      const alerts = snap.data().alerts || [];
-      setMasterConfigAlerts(alerts);
+      const data = snap.data();
+      setMasterConfigAlerts(data.alerts || []);
+      setMasterConfigNotifications(data.notifications || []);
+      setMasterConfigSilentMode(data.silentMode || false);
     }, (err) => {
       console.error("❌ masterConfig listener error:", err);
     });
 
     return () => unsub();
   }, [db, user?.userId]);
+
+  // Kids' masterConfig (admin only)
+  const [jackMasterConfig, setJackMasterConfig] = useState(
+    { alerts: [], notifications: [], silentMode: false }
+  );
+  const [ellieMasterConfig, setEllieMasterConfig] = useState(
+    { alerts: [], notifications: [], silentMode: false }
+  );
+
+  useEffect(() => {
+    if (!db || !isAdmin) return;
+
+    const unsubJack = onSnapshot(
+      doc(db, "masterConfig", JACK_USER_ID),
+      (snap) => {
+        if (!snap.exists()) {
+          setJackMasterConfig({ alerts: [], notifications: [], silentMode: false });
+          return;
+        }
+        const d = snap.data();
+        setJackMasterConfig({
+          alerts: d.alerts || [],
+          notifications: d.notifications || [],
+          silentMode: d.silentMode || false,
+        });
+      },
+      (err) => console.error("❌ jackMasterConfig listener error:", err),
+    );
+
+    const unsubEllie = onSnapshot(
+      doc(db, "masterConfig", ELLIE_USER_ID),
+      (snap) => {
+        if (!snap.exists()) {
+          setEllieMasterConfig({ alerts: [], notifications: [], silentMode: false });
+          return;
+        }
+        const d = snap.data();
+        setEllieMasterConfig({
+          alerts: d.alerts || [],
+          notifications: d.notifications || [],
+          silentMode: d.silentMode || false,
+        });
+      },
+      (err) => console.error("❌ ellieMasterConfig listener error:", err),
+    );
+
+    return () => { unsubJack(); unsubEllie(); };
+  }, [db, isAdmin]);
 
   //console.log("👤 User:", user?.userId, "Loading:", loading, "Full User", user);
   if (userError) console.error("❌ User error:", userError);
@@ -305,6 +360,12 @@ export const DataProvider = ({ children }) => {
       adminUserId,
       isAdmin,
       masterConfigAlerts,
+      masterConfigNotifications,
+      masterConfigSilentMode,
+
+      // Kids' masterConfig (admin only)
+      jackMasterConfig,
+      ellieMasterConfig,
 
       // Date states
       currentDate,
@@ -418,6 +479,10 @@ export const DataProvider = ({ children }) => {
       adminUserId,
       isAdmin,
       masterConfigAlerts,
+      masterConfigNotifications,
+      masterConfigSilentMode,
+      jackMasterConfig,
+      ellieMasterConfig,
       selectedDate,
       selectedMonth,
       selectedYear,

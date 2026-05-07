@@ -5,7 +5,7 @@ import {
   scheduleNotification,
   scheduleBatchNotification 
 } from '@my-apps/services';
-import { collection, query, where, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { DateTime } from 'luxon';
 
 export const useNotifications = () => {
@@ -14,35 +14,29 @@ export const useNotifications = () => {
   const userId = user?.userId;
 
   /**
-   * Delete pending notifications by eventId
-   * NOW: Also handles recurring notifications
+   * Delete notifications by eventId from the current user's masterConfig.notifications
    */
   const deleteNotificationsByEventId = async (eventId) => {
     try {
-      console.log(`🗑️ Searching for notifications with eventId:`, eventId);
-      
-      const notificationsRef = collection(db, 'pendingNotifications');
-      const q = query(notificationsRef, where('eventId', '==', eventId));
-      const querySnapshot = await getDocs(q);
+      console.log(`🗑️ Removing notifications from masterConfig for eventId:`, eventId);
 
-      if (querySnapshot.empty) {
-        console.log(`ℹ️ No pending notifications found for eventId:`, eventId);
+      if (!userId) return { success: true, deletedCount: 0 };
+
+      const configRef = doc(db, 'masterConfig', userId);
+      const snap = await getDoc(configRef);
+      if (!snap.exists()) return { success: true, deletedCount: 0 };
+
+      const existing = snap.data().notifications || [];
+      const filtered = existing.filter((n) => n.eventId !== eventId);
+      const deletedCount = existing.length - filtered.length;
+
+      if (deletedCount === 0) {
+        console.log(`ℹ️ No notifications found in masterConfig for eventId:`, eventId);
         return { success: true, deletedCount: 0 };
       }
 
-      console.log(`📋 Found ${querySnapshot.size} notification(s) to delete`);
-
-      let deletedCount = 0;
-      for (const docSnap of querySnapshot.docs) {
-        const notifData = docSnap.data();
-        if (notifData.isRecurring) {
-          console.log(`🔁 Deleting recurring notification:`, docSnap.id);
-        }
-        await deleteDoc(docSnap.ref);
-        deletedCount++;
-      }
-
-      console.log(`✅ Deleted ${deletedCount} notification(s) for eventId:`, eventId);
+      await setDoc(configRef, { notifications: filtered }, { merge: true });
+      console.log(`✅ Deleted ${deletedCount} notification(s) from masterConfig for eventId:`, eventId);
       return { success: true, deletedCount };
     } catch (err) {
       console.error('❌ Error deleting notification', err);
@@ -92,6 +86,30 @@ export const useNotifications = () => {
       return await sendBatchNotification(memberIds, title, body, data);
     } catch (error) {
       console.error('Error notifying group members:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Delete a group reminder from every member's masterConfig.notifications by notification id
+   */
+  const deleteGroupReminder = async (groupId, notifId) => {
+    try {
+      const memberIds = await getGroupMemberIds(groupId);
+      await Promise.all(memberIds.map(async (memberId) => {
+        const configRef = doc(db, 'masterConfig', memberId);
+        const snap = await getDoc(configRef);
+        if (!snap.exists()) return;
+        const existing = snap.data().notifications || [];
+        const filtered = existing.filter((n) => n.id !== notifId);
+        if (filtered.length !== existing.length) {
+          await setDoc(configRef, { notifications: filtered }, { merge: true });
+        }
+      }));
+      console.log(`✅ Deleted group reminder "${notifId}" from ${memberIds.length} masterConfig docs`);
+      return { success: true };
+    } catch (error) {
+      console.error('❌ deleteGroupReminder error:', error);
       throw error;
     }
   };
@@ -227,11 +245,12 @@ export const useNotifications = () => {
    * NOW: Passes recurring config through to scheduleNotification
    */
   const scheduleActivityReminder = async (
-    activity, 
+    activity,
     activityType = 'Activity',
-    eventId = null, 
+    eventId = null,
     eventStartTime = null,
-    customData = {}
+    customData = {},
+    overrideUserId = null
   ) => {
     let reminderTime;
 
@@ -280,7 +299,7 @@ export const useNotifications = () => {
     }); 
 
     return await scheduleNotification(
-      userId,
+      overrideUserId || userId,
       title,
       body,
       eventId || activity.id,
@@ -316,11 +335,12 @@ export const useNotifications = () => {
   return {
     // Deletion
     deleteNotificationsByEventId,
-    
+
     // Group helpers
     getGroupMemberIds,
     notifyGroupMembers,
     scheduleGroupReminder,
+    deleteGroupReminder,
     
     // Specific helpers
     notifyEventCreated,

@@ -282,6 +282,7 @@ const SharedEventModal = ({
           appName,
           membersToNotify: formState.membersToNotify,
           event,
+          targetUserId,
         })
       : await createEvent({
           title: formState.title,

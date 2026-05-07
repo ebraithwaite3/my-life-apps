@@ -1,88 +1,68 @@
 import { useState, useEffect } from "react";
 import {
-  collection,
-  query,
-  where,
-  getDocs,
   doc,
-  updateDoc,
-  deleteDoc,
-  addDoc,
-  Timestamp,
-  deleteField,
+  getDoc,
+  setDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import { useAuth, useData } from "@my-apps/contexts";
 
 /**
- * Generic hook to manage reminders for any activity type
- * Fetches once when mounted, no real-time updates
+ * Generic hook to manage reminders for any activity type.
+ * Reads/writes to masterConfig/{targetUserId || loggedInUserId}.notifications.
+ * Pass targetUserId when managing reminders on behalf of another user (e.g. admin setting Jack's reminder).
  */
 export const useNotificationHandlers = (
   activityId,
   activityType = "checklist",
-  eventId = null
+  eventId = null,
+  targetUserId = null
 ) => {
   const { db } = useAuth();
   const { user } = useData();
 
   const [reminder, setReminder] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Stores the notification's id field (not a Firestore doc ID)
   const [notificationDocId, setNotificationDocId] = useState(null);
 
-  // Build the query field based on activity type
-  const getQueryField = () => {
+  const getDataKey = () => {
     switch (activityType) {
-      case "checklist":
-        return "data.checklistId";
-      case "workout":
-        return "data.workoutId";
-      case "golf":
-        return "data.golfId";
-      default:
-        return `data.${activityType}Id`;
+      case "checklist": return "checklistId";
+      case "workout":   return "workoutId";
+      case "golf":      return "golfId";
+      default:          return `${activityType}Id`;
     }
   };
 
-  // ✅ Fetch reminder ONCE when activity changes
+  const resolvedUserId = targetUserId || user?.userId;
+
+  // Fetch reminder once when activity changes — reads from masterConfig.notifications
   useEffect(() => {
     const fetchReminder = async () => {
-      if (!activityId || !db || !user?.userId) {
+      if (!activityId || !db || !resolvedUserId) {
         setLoading(false);
         return;
       }
 
       try {
-        const notificationsRef = collection(db, "pendingNotifications");
-        const queryField = getQueryField();
+        const snap = await getDoc(doc(db, "masterConfig", resolvedUserId));
+        const notifications = snap.exists() ? (snap.data().notifications || []) : [];
+        const dataKey = getDataKey();
+        const match = notifications.find((n) => n.data?.[dataKey] === activityId);
 
-        const q = query(
-          notificationsRef,
-          where(queryField, "==", activityId),
-          where("userId", "==", user?.userId)
-        );
-
-        const snapshot = await getDocs(q);
-
-        console.log(`📥 Fetched reminder for ${activityType}:`, {
-          found: !snapshot.empty,
-          docCount: snapshot.docs.length,
+        console.log(`📥 Fetched reminder for ${activityType} (user: ${resolvedUserId}):`, {
+          found: !!match,
+          id: match?.id || null,
         });
 
-        if (!snapshot.empty) {
-          const docData = snapshot.docs[0];
-          const data = docData.data();
-
-          // Normalize to our standard format
-          const normalizedReminder = {
-            scheduledFor: data.scheduledFor?.toDate().toISOString() || null,
-            isRecurring: data.isRecurring || false,
-            ...(data.recurringConfig && {
-              recurringConfig: data.recurringConfig,
-            }),
-          };
-
-          setReminder(normalizedReminder);
-          setNotificationDocId(docData.id);
+        if (match) {
+          setReminder({
+            scheduledFor: match.scheduledTime || null,
+            isRecurring: match.isRecurring || false,
+            ...(match.recurringConfig && { recurringConfig: match.recurringConfig }),
+          });
+          setNotificationDocId(match.id);
         } else {
           setReminder(null);
           setNotificationDocId(null);
@@ -95,13 +75,13 @@ export const useNotificationHandlers = (
     };
 
     fetchReminder();
-  }, [activityId, activityType, db, user?.userId]);
+  }, [activityId, activityType, db, resolvedUserId]);
 
   /**
    * Update existing reminder or create new one
    */
   const updateReminder = async (reminderData, activityName, eventStartTime = null) => {
-    console.log('⏰ updateReminder called with:', { reminderData, activityName, eventStartTime });
+    console.log('⏰ updateReminder called with:', { reminderData, activityName, eventStartTime, resolvedUserId });
     try {
       if (!reminderData) {
         if (notificationDocId) await deleteReminder();
@@ -109,71 +89,60 @@ export const useNotificationHandlers = (
         setNotificationDocId(null);
         return { success: true };
       }
-  
+
       const { isRecurring, recurringConfig } = reminderData;
       const scheduledTime = new Date(reminderData.scheduledFor);
-  
-      const activityData = {};
-      activityData[`${activityType}Id`] = activityId;
-  
+      const dataKey = getDataKey();
+
+      const notifId = eventId
+        ? `${eventId}-${activityType}-${activityId}`
+        : activityId;
+
       const notificationData = {
-        userId: user?.userId,
+        id: notifId,
+        userId: resolvedUserId,
         title: `Reminder: ${activityName}`,
         body: `${activityType.charAt(0).toUpperCase() + activityType.slice(1)} reminder`,
         eventId: eventId || activityId,
-        notificationId: eventId 
-          ? `${eventId}-${activityType}-${activityId}`
-          : activityId,
-        scheduledFor: Timestamp.fromDate(scheduledTime),
-        createdAt: Timestamp.now(),
+        scheduledTime: scheduledTime.toISOString(),
+        createdAt: new Date().toISOString(),
         data: {
           screen: eventId ? 'Calendar' : 'Pinned',
-          eventId: eventId,
-          ...activityData,
+          eventId,
+          [dataKey]: activityId,
           app: `${activityType}-app`,
           ...(eventStartTime && { date: eventStartTime }),
         },
         isRecurring: isRecurring || false,
-        // ✅ Only include recurringConfig if it exists
         ...(isRecurring && recurringConfig && { recurringConfig }),
       };
-  
-      // ✅ Try to update, but if doc doesn't exist, create new one
+
+      const configRef = doc(db, "masterConfig", resolvedUserId);
+
       if (notificationDocId) {
-        try {
-          // ✅ For updates, we need to explicitly delete recurringConfig if not recurring
-          const updateData = {
-            ...notificationData,
-            // ✅ Only use deleteField when UPDATING and NOT recurring
-            ...(!isRecurring && { recurringConfig: deleteField() }),
-          };
-          
-          await updateDoc(doc(db, 'pendingNotifications', notificationDocId), updateData);
-        } catch (error) {
-          if (error.code === 'not-found') {
-            console.log('📝 Document was deleted, creating new notification');
-            // ✅ For new docs, just don't include recurringConfig if not recurring
-            const docRef = await addDoc(collection(db, 'pendingNotifications'), notificationData);
-            setNotificationDocId(docRef.id);
-          } else {
-            throw error;
-          }
+        // Update: read-modify-write to replace the existing notification
+        const snap = await getDoc(configRef);
+        const existing = snap.exists() ? (snap.data().notifications || []) : [];
+        const updated = existing.map((n) => n.id === notificationDocId ? notificationData : n);
+        // Edge case: was deleted externally — append instead
+        if (!updated.some((n) => n.id === notifId)) {
+          updated.push(notificationData);
         }
+        await setDoc(configRef, { notifications: updated }, { merge: true });
       } else {
-        // ✅ Creating new doc - just don't include recurringConfig if not recurring
-        const docRef = await addDoc(collection(db, 'pendingNotifications'), notificationData);
-        setNotificationDocId(docRef.id);
+        await setDoc(configRef, { notifications: arrayUnion(notificationData) }, { merge: true });
       }
-  
-      // ✅ Update local state immediately after save
+
+      setNotificationDocId(notifId);
+
       const normalizedReminder = {
         scheduledFor: scheduledTime.toISOString(),
         isRecurring: isRecurring || false,
         ...(recurringConfig && { recurringConfig }),
       };
-      console.log('✅ Reminder updated locally:', normalizedReminder);
+      console.log('✅ Reminder updated in masterConfig:', resolvedUserId);
       setReminder(normalizedReminder);
-  
+
       return { success: true };
     } catch (error) {
       console.error('❌ updateReminder Error:', error);
@@ -187,8 +156,13 @@ export const useNotificationHandlers = (
   const deleteReminder = async () => {
     try {
       if (!notificationDocId) return { success: true };
-      await deleteDoc(doc(db, "pendingNotifications", notificationDocId));
-      // ✅ Update local state immediately
+      const configRef = doc(db, "masterConfig", resolvedUserId);
+      const snap = await getDoc(configRef);
+      if (snap.exists()) {
+        const existing = snap.data().notifications || [];
+        const filtered = existing.filter((n) => n.id !== notificationDocId);
+        await setDoc(configRef, { notifications: filtered }, { merge: true });
+      }
       setReminder(null);
       setNotificationDocId(null);
       return { success: true };

@@ -123,7 +123,8 @@ export const useCalendarHandlers = ({
 
               if (result.success) {
                 const notificationResult = await deleteNotification(
-                  event.eventId
+                  event.eventId,
+                  event.targetUserId || null
                 );
 
                 if (

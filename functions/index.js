@@ -27,6 +27,9 @@ const modules = [
   require("./src/calendar/applyScheduleTemplate"),
   require("./src/voice/voiceTest"),
   require("./src/voice/updateTodos"),
+  require("./src/voice/handleCombinedPayload"),
+  require("./src/alerts/createAlertAndNotification"),
+  require("./src/user/setSilentMode"),
   // Add more as you create them
 ];
 

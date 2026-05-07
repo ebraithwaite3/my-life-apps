@@ -12,23 +12,25 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { useTheme } from "@my-apps/contexts";
 import { PageHeader, SelectModal } from "@my-apps/ui";
-import { useScheduleTodayData } from "./useEndpointData";
+import { useCombinedPayloadData } from "./useEndpointData";
 
 // ---------------------------------------------------------------------------
 // Endpoint registry — add more here as needed.
 // dataFunction: name of a hook result to call on "Get Data" press.
 // ---------------------------------------------------------------------------
+const BASE_URL = "https://us-central1-calendarconnectionv2.cloudfunctions.net";
+
 const ENDPOINTS = [
   {
     id: "voiceTest",
     name: "Voice Test",
-    url: "https://us-central1-calendarconnectionv2.cloudfunctions.net/voiceTest",
+    url: `${BASE_URL}/voiceTest`,
   },
   {
-    id: "scheduleToday",
-    name: "Update To Dos",
-    url: "https://us-central1-calendarconnectionv2.cloudfunctions.net/updateTodos",
-    dataFunction: "useScheduleTodayData",
+    id: "combinedPayload",
+    name: "Combined Payload",
+    url: `${BASE_URL}/handleCombinedPayload`,
+    dataFunction: "useCombinedPayloadData",
   },
 ];
 
@@ -39,17 +41,13 @@ const EndpointHitter = ({ onClose }) => {
   const { theme, getSpacing, getTypography } = useTheme();
 
   const [selectedEndpoint, setSelectedEndpoint] = useState(ENDPOINTS[0]);
-  const [jsonInput, setJsonInput] = useState("{\n  \n}");
+  const [jsonInput, setJsonInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [getDataDisabled, setGetDataDisabled] = useState(false);
   const [result, setResult] = useState(null);
 
-  // Resolve all data hooks up front (hooks must not be called conditionally)
-  const getScheduleTodayData = useScheduleTodayData();
-
-  const DATA_FUNCTIONS = {
-    useScheduleTodayData: getScheduleTodayData,
-  };
+  const getCombinedPayloadData = useCombinedPayloadData();
+  const DATA_FUNCTIONS = { useCombinedPayloadData: getCombinedPayloadData };
 
   const endpointOptions = ENDPOINTS.map((e) => ({ label: e.name, value: e.id }));
 
@@ -71,7 +69,6 @@ const EndpointHitter = ({ onClose }) => {
 
     try {
       const clipboardString = fn();
-      setJsonInput(clipboardString);
       await Clipboard.setStringAsync(clipboardString);
       Alert.alert(
         "Copied to Clipboard",
@@ -103,14 +100,50 @@ const EndpointHitter = ({ onClose }) => {
       });
 
       const text = await response.text();
+      let responseJson;
       let body;
       try {
-        body = JSON.stringify(JSON.parse(text), null, 2);
+        responseJson = JSON.parse(text);
+        body = JSON.stringify(responseJson, null, 2);
       } catch {
         body = text;
       }
 
-      setResult({ ok: response.ok, status: response.status, body });
+      // Build per-operation summary for combined payload responses
+      const ops = [];
+      if (responseJson?.results) {
+        const r = responseJson.results;
+        if (r.todos) {
+          const todoItems = Array.isArray(r.todos) ? r.todos : [r.todos];
+          todoItems.forEach((t) => {
+            ops.push({
+              ok: t.status === "updated",
+              label: `Todo: ${t.person || "unknown"}`,
+              detail: t.status + (t.itemCount != null ? ` (${t.itemCount} items)` : "") + (t.reason ? ` — ${t.reason}` : ""),
+            });
+          });
+        }
+        if (Array.isArray(r.alerts)) {
+          r.alerts.forEach((a, i) => {
+            ops.push({
+              ok: !a.status || a.status !== "error",
+              label: `Alert ${i + 1}${a.userId ? ` (${a.userId.slice(0, 6)}…)` : ""}`,
+              detail: a.alert?.status || a.status || "ok",
+            });
+          });
+        }
+        if (Array.isArray(r.notifications)) {
+          r.notifications.forEach((n, i) => {
+            ops.push({
+              ok: n.status !== "error",
+              label: `Notification ${i + 1}`,
+              detail: n.status || "ok",
+            });
+          });
+        }
+      }
+
+      setResult({ ok: response.ok, status: response.status, body, ops });
     } catch (err) {
       setResult({ ok: false, status: null, body: `Network error: ${err.message}` });
     } finally {
@@ -184,6 +217,15 @@ const EndpointHitter = ({ onClose }) => {
       fontSize: 15,
       fontWeight: "600",
     },
+    jsonLabelRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    clearText: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
     resultBox: {
       marginTop: getSpacing.lg,
       borderRadius: 8,
@@ -229,20 +271,6 @@ const EndpointHitter = ({ onClose }) => {
         />
         <Text style={styles.urlText}>{selectedEndpoint.url}</Text>
 
-        {/* JSON input */}
-        <Text style={styles.label}>JSON Payload</Text>
-        <TextInput
-          style={styles.jsonInput}
-          value={jsonInput}
-          onChangeText={setJsonInput}
-          multiline
-          autoCorrect={false}
-          autoCapitalize="none"
-          spellCheck={false}
-          placeholder='{ "key": "value" }'
-          placeholderTextColor={theme.text.tertiary}
-        />
-
         {/* Buttons */}
         <View style={styles.buttonRow}>
           {hasDataFunction && (
@@ -277,6 +305,44 @@ const EndpointHitter = ({ onClose }) => {
           </TouchableOpacity>
         </View>
 
+        {/* JSON input */}
+        <View style={styles.jsonLabelRow}>
+          <Text style={styles.label}>JSON Payload</Text>
+          <TouchableOpacity
+            onPress={() =>
+              Alert.alert(
+                "Clear Payload",
+                "Clear the JSON input?",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Clear",
+                    style: "destructive",
+                    onPress: () => { setJsonInput(""); setResult(null); },
+                  },
+                ],
+              )
+            }
+          >
+            <Text style={[styles.clearText, { color: theme.error || "#F44336" }]}>
+              Clear
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <TextInput
+          style={styles.jsonInput}
+          value={jsonInput}
+          onChangeText={setJsonInput}
+          multiline
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
+          placeholder='{ "key": "value" }'
+          placeholderTextColor={theme.text.tertiary}
+          returnKeyType="done"
+          submitBehavior="blurAndSubmit"
+        />
+
         {/* Result */}
         {result && (
           <View style={[
@@ -301,6 +367,26 @@ const EndpointHitter = ({ onClose }) => {
             <Text style={[styles.resultBody, { color: theme.text.primary }]}>
               {result.body}
             </Text>
+            {result.ops && result.ops.length > 0 && (
+              <View style={{ marginTop: 8 }}>
+                {result.ops.map((op, i) => (
+                  <Text
+                    key={i}
+                    style={[
+                      styles.resultBody,
+                      {
+                        color: op.ok
+                          ? (theme.success || "#4CAF50")
+                          : (theme.error || "#F44336"),
+                        marginTop: 2,
+                      },
+                    ]}
+                  >
+                    {op.ok ? "✓" : "✗"} {op.label}: {op.detail}
+                  </Text>
+                ))}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>

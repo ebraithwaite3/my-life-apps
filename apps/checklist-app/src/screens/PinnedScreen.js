@@ -26,7 +26,6 @@ import { showSuccessToast, showErrorToast } from "@my-apps/utils";
 import { usePinnedSort } from "../hooks/usePinnedSort";
 import { usePinnedOperations } from "../hooks/usePinnedOperations";
 import { usePinnedChecklistModal } from "../hooks/usePinnedChecklistModal";
-import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { isSpellingList, isGroceryList } from '../utils/pinnedChecklistUtils';
 import SpellingTestModal from '../components/spelling/SpellingTestModal';
 import VocabTestModal from '../components/vocab/VocabTestModal';
@@ -42,7 +41,7 @@ const PinnedScreen = () => {
   const deleteNotification = useDeleteNotification();
   const { allTemplates, saveTemplate, promptForContext } = useChecklistTemplates();
   const { createPinnedChecklist, updatePinnedChecklist } = usePinnedChecklists();
-  const { scheduleGroupReminder } = useNotifications();
+  const { scheduleGroupReminder, deleteGroupReminder } = useNotifications();
   const editContentRef = useRef(null);
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -644,19 +643,11 @@ const handleSaveWithToast = async (checklist) => {
                       } else {
                         // ✅ DELETE all group notifications for this checklist
                         console.log('🗑️ Deleting group pinned checklist reminders');
-                        
+                        // notifId mirrors what scheduleBatchNotification generates for pinned group checklists
+                        // (eventId === checklistId for pinned items, per scheduleGroupReminder call above)
+                        const notifId = `${checklist.id}-checklist-${checklist.id}`;
                         try {
-                          const notificationsRef = collection(db, 'pendingNotifications');
-                          const q = query(
-                            notificationsRef,
-                            where('data.checklistId', '==', checklist.id)
-                          );
-                          
-                          const snapshot = await getDocs(q);
-                          const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-                          await Promise.all(deletePromises);
-                          
-                          console.log(`✅ Deleted ${snapshot.docs.length} group notifications`);
+                          await deleteGroupReminder(checklistContext.groupId, notifId);
                         } catch (error) {
                           console.error('❌ Error deleting group notifications:', error);
                         }
@@ -844,19 +835,9 @@ const handleSaveWithToast = async (checklist) => {
                         } else {
                           // ✅ DELETE all group notifications
                           console.log('🗑️ Deleting group pinned checklist reminders');
-                          
+                          const notifId = `${checklistToSave.id}-checklist-${checklistToSave.id}`;
                           try {
-                            const notificationsRef = collection(db, 'pendingNotifications');
-                            const q = query(
-                              notificationsRef,
-                              where('data.checklistId', '==', checklistToSave.id)
-                            );
-                            
-                            const snapshot = await getDocs(q);
-                            const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-                            await Promise.all(deletePromises);
-                            
-                            console.log(`✅ Deleted ${snapshot.docs.length} group notifications`);
+                            await deleteGroupReminder(checklistContext.groupId, notifId);
                           } catch (error) {
                             console.error('❌ Error deleting group notifications:', error);
                           }
