@@ -306,13 +306,12 @@ const MainApp = () => {
 
       let updatedNotifications = masterConfigNotifications;
       if (button.affectsLinked) {
-        if (activeAlert.linkedNotificationId) {
-          updatedNotifications = masterConfigNotifications.map((n) =>
-            n.id !== activeAlert.linkedNotificationId ? n : { ...n, scheduledTime: newTime }
-          );
-        } else {
-          console.warn("⚠️ affectsLinked: true but no linkedNotificationId on", activeAlert.id);
-        }
+        updatedNotifications = masterConfigNotifications.map((n) =>
+          (n.id === activeAlert.linkedNotificationId ||
+           n.linkedAlertId === activeAlert.id)
+            ? { ...n, scheduledTime: newTime }
+            : n
+        );
       }
 
       try {
@@ -346,13 +345,12 @@ const MainApp = () => {
 
       let updatedNotifications = masterConfigNotifications;
       if (button.affectsLinked) {
-        if (activeAlert.linkedNotificationId) {
-          updatedNotifications = masterConfigNotifications.map((n) =>
-            n.id !== activeAlert.linkedNotificationId ? n : { ...n, scheduledTime: newTime }
-          );
-        } else {
-          console.warn("⚠️ affectsLinked: true but no linkedNotificationId on", activeAlert.id);
-        }
+        updatedNotifications = masterConfigNotifications.map((n) =>
+          (n.id === activeAlert.linkedNotificationId ||
+           n.linkedAlertId === activeAlert.id)
+            ? { ...n, scheduledTime: newTime }
+            : n
+        );
       }
 
       try {
@@ -376,6 +374,10 @@ const MainApp = () => {
       try {
         await updateDocument("masterConfig", userId, {
           alerts: masterConfigAlerts.filter((a) => a.id !== activeAlert.id),
+          notifications: masterConfigNotifications.filter(
+            (n) => n.id !== activeAlert.linkedNotificationId &&
+                   n.linkedAlertId !== activeAlert.id,
+          ),
         });
         console.log(`✅ Done: deleted alert "${activeAlert.id}"`);
       } catch (err) {
