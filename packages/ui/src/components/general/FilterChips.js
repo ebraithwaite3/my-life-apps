@@ -65,35 +65,38 @@ const FilterChips = ({ filters, marginTop = 0, chipMarginBottom = 0 }) => {
   return (
     <View style={styles.container}>
       {filters.map((filter, index) => {
-        // Determine the icon and color based on the filter's state
-        const iconName = filter.active
-          ? "checkmark-circle-sharp" // A strong, checked icon
-          : "ellipse-outline"; // An outline circle for unchecked
-
-        const iconColor = filter.active ? theme.primary : theme.text.secondary;
+        const isAction = !!filter.icon;
+        const iconName = filter.icon
+          ?? (filter.active ? "checkmark-circle-sharp" : "ellipse-outline");
+        const iconColor = (isAction || filter.active)
+          ? theme.primary
+          : theme.text.secondary;
 
         return (
           <TouchableOpacity
             key={index}
             style={[
               styles.chip,
-              filter.active ? styles.chipActive : styles.chipInactive,
+              isAction
+                ? [styles.chipInactive, { borderColor: theme.primary }]
+                : (filter.active ? styles.chipActive : styles.chipInactive),
             ]}
             onPress={filter.onPress}
-            {...(filter.onLongPress && { onLongPress: filter.onLongPress })} // ← Only add if exists
+            {...(filter.onLongPress && { onLongPress: filter.onLongPress })}
             activeOpacity={0.7}
           >
-            {/* 1. The Ionicons component for checked/unchecked state */}
             <Ionicons
               name={iconName}
               size={16}
               color={iconColor}
               style={styles.iconStyle}
             />
-
-            {/* 2. The filter label text */}
             <Text
-              style={filter.active ? styles.labelActive : styles.labelInactive}
+              style={
+                (isAction || filter.active)
+                  ? styles.labelActive
+                  : styles.labelInactive
+              }
             >
               {filter.label}
             </Text>

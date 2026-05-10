@@ -1,4 +1,4 @@
-import { getFirestore, doc, setDoc, arrayUnion } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 /**
@@ -28,47 +28,62 @@ export const sendNotification = async (userId, title, body, data = {}) => {
 };
 
 /**
- * Schedule push notification for future delivery — writes to masterConfig/{userId}.notifications
- * NOW: Supports recurring notifications via isRecurring and recurringConfig
+ * Schedule push notification for future delivery — upserts into masterConfig/{userId}.reminders[]
  */
 export const scheduleNotification = async (userId, title, body, eventId, scheduledFor, data = {}) => {
   try {
     const db = getFirestore();
-
     const { isRecurring, recurringConfig, ...cleanData } = data;
 
     const notifId = cleanData.checklistId
       ? `${eventId}-checklist-${cleanData.checklistId}`
       : eventId;
 
-    const notificationData = {
+    const intervalMinutes = isRecurring
+      ? (recurringConfig?.intervalMinutes
+         || (recurringConfig?.intervalSeconds
+           ? Math.round(recurringConfig.intervalSeconds / 60)
+           : null))
+      : null;
+
+    const reminderData = {
       id: notifId,
-      userId,
+      deliveryMode: 'push',
       title,
-      body,
+      message: body,
       eventId,
       scheduledTime: scheduledFor.toISOString(),
-      createdAt: new Date().toISOString(),
-      data: {
-        ...cleanData,
-        app: cleanData.app || 'organizer-app',
+      acknowledgedAt: null,
+      notification: {
+        title,
+        body,
+        screen: cleanData.screen || null,
+        handlerName: null,
+        handlerParams: null,
+        data: { ...cleanData, app: cleanData.app || 'organizer-app' },
       },
-      ...(isRecurring && {
-        isRecurring: true,
-        recurringConfig,
-      }),
+      paused: false,
+      pausedUntil: null,
+      reminderType: isRecurring ? 'persistent' : 'oneTime',
+      recurringIntervalMinutes: intervalMinutes,
+      recurringIntervalDays: null,
+      recurringSchedule: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletable: true,
     };
 
-    await setDoc(
-      doc(db, 'masterConfig', userId),
-      { notifications: arrayUnion(notificationData) },
-      { merge: true },
-    );
+    const configRef = doc(db, 'masterConfig', userId);
+    const snap = await getDoc(configRef);
+    const existing = snap.exists() ? (snap.data().reminders || []) : [];
+    const updated = existing.some((r) => r.id === notifId)
+      ? existing.map((r) => r.id === notifId ? reminderData : r)
+      : [...existing, reminderData];
 
-    console.log('✅ Notification scheduled in masterConfig:', notifId);
-    if (isRecurring) {
-      console.log('   📅 Recurring:', recurringConfig);
-    }
+    await setDoc(configRef, { reminders: updated }, { merge: true });
+
+    console.log('✅ Reminder scheduled in masterConfig:', notifId);
+    if (isRecurring) console.log('   📅 Recurring:', recurringConfig);
     return { success: true, notificationId: notifId };
   } catch (error) {
     console.error('❌ Failed to schedule notification:', error);
@@ -104,51 +119,66 @@ export const sendBatchNotification = async (userIds, title, body, data = {}) => 
 };
 
 /**
- * Schedule notification to multiple users — writes to each user's masterConfig.notifications
- * NOW: Supports recurring notifications
+ * Schedule notification to multiple users — upserts into each user's masterConfig.reminders[]
  */
 export const scheduleBatchNotification = async (userIds, title, body, scheduledFor, data = {}) => {
   try {
     const db = getFirestore();
     const notificationIds = [];
-
     const { isRecurring, recurringConfig, ...cleanData } = data;
+
+    const intervalMinutes = isRecurring
+      ? (recurringConfig?.intervalMinutes
+         || (recurringConfig?.intervalSeconds
+           ? Math.round(recurringConfig.intervalSeconds / 60)
+           : null))
+      : null;
 
     for (const userId of userIds) {
       const notifId = cleanData.checklistId
         ? `${cleanData.eventId}-checklist-${cleanData.checklistId}`
         : cleanData.eventId;
 
-      const notificationData = {
+      const reminderData = {
         id: notifId,
-        userId,
-        eventId: cleanData.eventId,
+        deliveryMode: 'push',
         title,
-        body,
+        message: body,
+        eventId: cleanData.eventId,
         scheduledTime: scheduledFor.toISOString(),
-        createdAt: new Date().toISOString(),
-        data: {
-          ...cleanData,
-          app: cleanData.app || 'checklist-app',
+        acknowledgedAt: null,
+        notification: {
+          title,
+          body,
+          screen: cleanData.screen || null,
+          handlerName: null,
+          handlerParams: null,
+          data: { ...cleanData, app: cleanData.app || 'checklist-app' },
         },
-        ...(isRecurring && {
-          isRecurring: true,
-          recurringConfig,
-        }),
+        paused: false,
+        pausedUntil: null,
+        reminderType: isRecurring ? 'persistent' : 'oneTime',
+        recurringIntervalMinutes: intervalMinutes,
+        recurringIntervalDays: null,
+        recurringSchedule: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        deletable: true,
       };
 
-      await setDoc(
-        doc(db, 'masterConfig', userId),
-        { notifications: arrayUnion(notificationData) },
-        { merge: true },
-      );
+      const configRef = doc(db, 'masterConfig', userId);
+      const snap = await getDoc(configRef);
+      const existing = snap.exists() ? (snap.data().reminders || []) : [];
+      const updated = existing.some((r) => r.id === notifId)
+        ? existing.map((r) => r.id === notifId ? reminderData : r)
+        : [...existing, reminderData];
+
+      await setDoc(configRef, { reminders: updated }, { merge: true });
       notificationIds.push(notifId);
     }
 
-    console.log(`✅ Scheduled ${notificationIds.length} notifications in masterConfig`);
-    if (isRecurring) {
-      console.log('   📅 Recurring:', recurringConfig);
-    }
+    console.log(`✅ Scheduled ${notificationIds.length} reminders in masterConfig`);
+    if (isRecurring) console.log('   📅 Recurring:', recurringConfig);
     return { success: true, notificationIds };
   } catch (error) {
     console.error('❌ Failed to schedule batch notifications:', error);

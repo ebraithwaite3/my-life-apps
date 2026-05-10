@@ -13,20 +13,20 @@ export const useDeleteNotification = () => {
             const snap = await getDoc(configRef);
             if (!snap.exists()) return { success: true, deletedCount: 0 };
 
-            const existing = snap.data().notifications || [];
-            // Match on id (was notificationId) or eventId
+            const existing = snap.data().reminders || [];
+            // Match on id or eventId (eventId match is legacy fallback)
             const filtered = existing.filter(
-                (n) => n.id !== identifier && n.eventId !== identifier
+                (r) => r.id !== identifier && r.eventId !== identifier
             );
             const deletedCount = existing.length - filtered.length;
 
             if (deletedCount === 0) {
-                console.log(`ℹ️ No notifications found in masterConfig for:`, identifier);
+                console.log(`ℹ️ No reminders found in masterConfig for:`, identifier);
                 return { success: true, deletedCount: 0 };
             }
 
-            await setDoc(configRef, { notifications: filtered }, { merge: true });
-            console.log(`✅ Deleted ${deletedCount} notification(s) from masterConfig for:`, identifier);
+            await setDoc(configRef, { reminders: filtered }, { merge: true });
+            console.log(`✅ Deleted ${deletedCount} reminder(s) from masterConfig for:`, identifier);
             return { success: true, deletedCount };
         } catch (err) {
             console.error('❌ Error deleting notification', err);

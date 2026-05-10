@@ -149,9 +149,7 @@ export const DataProvider = ({ children }) => {
   console.log("📬 Reminders:", reminders, "Loading:", remindersLoading);
 
   // masterConfig real-time listener
-  const [masterConfigAlerts, setMasterConfigAlerts] = useState([]);
-  const [masterConfigNotifications, setMasterConfigNotifications] =
-    useState([]);
+  const [masterConfigReminders, setMasterConfigReminders] = useState([]);
   const [masterConfigSilentMode, setMasterConfigSilentMode] =
     useState(false);
   useEffect(() => {
@@ -160,14 +158,12 @@ export const DataProvider = ({ children }) => {
     const ref = doc(db, "masterConfig", user.userId);
     const unsub = onSnapshot(ref, (snap) => {
       if (!snap.exists()) {
-        setMasterConfigAlerts([]);
-        setMasterConfigNotifications([]);
+        setMasterConfigReminders([]);
         setMasterConfigSilentMode(false);
         return;
       }
       const data = snap.data();
-      setMasterConfigAlerts(data.alerts || []);
-      setMasterConfigNotifications(data.notifications || []);
+      setMasterConfigReminders(data.reminders || []);
       setMasterConfigSilentMode(data.silentMode || false);
     }, (err) => {
       console.error("❌ masterConfig listener error:", err);
@@ -178,10 +174,10 @@ export const DataProvider = ({ children }) => {
 
   // Kids' masterConfig (admin only)
   const [jackMasterConfig, setJackMasterConfig] = useState(
-    { alerts: [], notifications: [], silentMode: false }
+    { reminders: [], silentMode: false }
   );
   const [ellieMasterConfig, setEllieMasterConfig] = useState(
-    { alerts: [], notifications: [], silentMode: false }
+    { reminders: [], silentMode: false }
   );
 
   useEffect(() => {
@@ -191,13 +187,12 @@ export const DataProvider = ({ children }) => {
       doc(db, "masterConfig", JACK_USER_ID),
       (snap) => {
         if (!snap.exists()) {
-          setJackMasterConfig({ alerts: [], notifications: [], silentMode: false });
+          setJackMasterConfig({ reminders: [], silentMode: false });
           return;
         }
         const d = snap.data();
         setJackMasterConfig({
-          alerts: d.alerts || [],
-          notifications: d.notifications || [],
+          reminders: d.reminders || [],
           silentMode: d.silentMode || false,
         });
       },
@@ -208,13 +203,12 @@ export const DataProvider = ({ children }) => {
       doc(db, "masterConfig", ELLIE_USER_ID),
       (snap) => {
         if (!snap.exists()) {
-          setEllieMasterConfig({ alerts: [], notifications: [], silentMode: false });
+          setEllieMasterConfig({ reminders: [], silentMode: false });
           return;
         }
         const d = snap.data();
         setEllieMasterConfig({
-          alerts: d.alerts || [],
-          notifications: d.notifications || [],
+          reminders: d.reminders || [],
           silentMode: d.silentMode || false,
         });
       },
@@ -359,8 +353,7 @@ export const DataProvider = ({ children }) => {
       isUserAdmin,
       adminUserId,
       isAdmin,
-      masterConfigAlerts,
-      masterConfigNotifications,
+      masterConfigReminders,
       masterConfigSilentMode,
 
       // Kids' masterConfig (admin only)
@@ -478,8 +471,7 @@ export const DataProvider = ({ children }) => {
       isUserAdmin,
       adminUserId,
       isAdmin,
-      masterConfigAlerts,
-      masterConfigNotifications,
+      masterConfigReminders,
       masterConfigSilentMode,
       jackMasterConfig,
       ellieMasterConfig,

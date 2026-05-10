@@ -4,9 +4,9 @@ const admin = require("firebase-admin");
 /**
  * createAlertAndNotification
  *
- * Write to masterConfig alerts, notifications, or both.
- * Notifications are now stored in masterConfig/{userId}.notifications
- * (not pendingNotifications) and cross-referenced with their paired alert.
+ * Upsert a reminder to masterConfig/{userId}.reminders[].
+ * Notification is embedded inside the reminder object when
+ * deliveryMode is "push" or "alert+push". No cross-reference IDs.
  *
  * Expected body:
  * {
@@ -18,19 +18,18 @@ const admin = require("firebase-admin");
  *     message: string,
  *     scheduledTime: ISO string,
  *     recurringIntervalMinutes?: number,
- *     onDone?: "delete" | "acknowledge_and_reschedule" | "mark_done_today",
- *     onStop?: "delete" | "pause_today" | "pause_indefinitely",
- *     actionType?: string,
+ *     reminderType?: "persistent" | "oneTime" | "simple",
  *     deepLinkTarget?: string,
- *     deleteOnConfirm?: boolean,
- *     deleteOnView?: boolean,
- *     acknowledged: false,
+ *     acknowledgedAt?: null,
+ *     paused?: boolean,
+ *     pausedUntil?: null,
  *     createdAt?: ISO string
  *   },
  *   notification?: {
  *     title: string,
  *     body: string,
  *     scheduledTime?: ISO string,
+ *     screen?: string,
  *     data?: object
  *   }
  * }
@@ -49,7 +48,8 @@ exports.createAlertAndNotification = functions.https.onRequest(
         return res.status(405).json({error: "Method not allowed"});
       }
 
-      const {userId, deliveryMode, alert, notification} = req.body || {};
+      const {userId, deliveryMode, alert, notification} =
+        req.body || {};
 
       if (!userId) {
         return res.status(400).json({error: "userId is required"});
@@ -58,84 +58,88 @@ exports.createAlertAndNotification = functions.https.onRequest(
       const validModes = ["alert", "push", "alert+push"];
       if (!deliveryMode || !validModes.includes(deliveryMode)) {
         return res.status(400).json({
-          error: "deliveryMode must be 'alert', 'push', or 'alert+push'",
+          error:
+            "deliveryMode must be 'alert', 'push', or 'alert+push'",
         });
       }
 
       const db = admin.firestore();
-      const arrayUnion = admin.firestore.FieldValue.arrayUnion;
-      const results = {};
-
-      // Pre-generate IDs so alert and notification can cross-reference
-      const alertId = alert?.id ||
+      const reminderId = alert?.id ||
         db.collection("masterConfig").doc().id;
-      const notifId = db.collection("masterConfig").doc().id;
-      const isPaired = deliveryMode === "alert+push";
+      const hasNotif =
+        deliveryMode === "push" || deliveryMode === "alert+push";
+
+      if (!alert) {
+        return res.status(400).json({
+          error: "alert object required",
+        });
+      }
+      if (hasNotif && !notification) {
+        return res.status(400).json({
+          error: "notification object required for deliveryMode: " +
+            deliveryMode,
+        });
+      }
 
       try {
-        if (deliveryMode === "alert" || isPaired) {
-          if (!alert) {
-            return res.status(400).json({
-              error: "alert object required for deliveryMode: " +
-                deliveryMode,
-            });
-          }
+        const configRef = db.doc(`masterConfig/${userId}`);
+        const configSnap = await configRef.get();
+        const configData = configSnap.exists ?
+          configSnap.data() : {};
+        const currentReminders = configData.reminders || [];
+        const existing = currentReminders.find(
+            (r) => r.id === reminderId,
+        );
 
-          const alertData = {
-            ...alert,
-            id: alertId,
-            acknowledged: alert.acknowledged ?? false,
-            createdAt: alert.createdAt || new Date().toISOString(),
-            ...(isPaired && {linkedNotificationId: notifId}),
-          };
+        const notifData = hasNotif ? {
+          title: notification.title,
+          body: notification.body,
+          scheduledTime: notification.scheduledTime ||
+            alert.scheduledTime || new Date().toISOString(),
+          screen: notification.screen || null,
+          handlerName: notification.handlerName || null,
+          handlerParams: notification.handlerParams || null,
+          data: notification.data || {app: "checklist-app"},
+        } : undefined;
 
-          await db.doc(`masterConfig/${userId}`).set(
-              {alerts: arrayUnion(alertData)},
-              {merge: true},
-          );
+        const reminderData = {
+          ...(existing || {}),
+          ...alert,
+          id: reminderId,
+          deliveryMode,
+          acknowledgedAt: alert.acknowledgedAt ??
+            existing?.acknowledgedAt ?? null,
+          createdAt: existing?.createdAt ||
+            alert.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...(notifData !== undefined && {notification: notifData}),
+        };
+        // Strip legacy cross-reference fields if present.
+        delete reminderData.linkedNotificationId;
+        delete reminderData.acknowledged;
 
-          console.log(
-              `✅ Alert "${alertId}" written to masterConfig/${userId}`,
-          );
-          results.alert = {status: "created", id: alertId};
-        }
+        const updatedReminders = existing ?
+          currentReminders.map((r) =>
+            r.id === reminderId ? reminderData : r,
+          ) :
+          [...currentReminders, reminderData];
 
-        if (deliveryMode === "push" || isPaired) {
-          if (!notification) {
-            return res.status(400).json({
-              error: "notification object required for deliveryMode: " +
-                deliveryMode,
-            });
-          }
+        await configRef.set(
+            {reminders: updatedReminders},
+            {merge: true},
+        );
 
-          const notificationData = {
-            id: notifId,
-            title: notification.title,
-            body: notification.body,
-            scheduledTime: notification.scheduledTime ||
-              new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            data: notification.data || {app: "checklist-app"},
-            ...(isPaired && {linkedAlertId: alertId}),
-          };
-
-          await db.doc(`masterConfig/${userId}`).set(
-              {notifications: arrayUnion(notificationData)},
-              {merge: true},
-          );
-
-          console.log(
-              `✅ Notification "${notifId}" written to ` +
-            `masterConfig/${userId}`,
-          );
-          results.notification = {status: "created", id: notifId};
-        }
+        const action = existing ? "updated" : "created";
+        console.log(
+            `✅ Reminder "${reminderId}" ${action}` +
+            ` in masterConfig/${userId}`,
+        );
 
         return res.status(200).json({
           success: true,
           userId,
           deliveryMode,
-          results,
+          reminder: {status: action, id: reminderId},
         });
       } catch (err) {
         console.error("❌ createAlertAndNotification error:", err);

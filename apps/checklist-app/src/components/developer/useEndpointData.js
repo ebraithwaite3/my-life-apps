@@ -7,14 +7,14 @@ const TIMEZONE = "America/New_York";
 const JACK_USER_ID  = "ObqbPOKgzwYr2SmlN8UQOaDbkzE2";
 const ELLIE_USER_ID = "CjW9bPGIjrgEqkjE9HxNF6xuxfA3";
 
-function buildTodosPayload(getActivitiesForEntity, userId) {
+function buildTodosPayload(getActivitiesForEntity, userId, dateISO) {
   const people = [
     { id: userId,       person: "Me",    todoTitle: "To Do"       },
     { id: JACK_USER_ID,  person: "Jack",  todoTitle: "Jack To Do"  },
     { id: ELLIE_USER_ID, person: "Ellie", todoTitle: "Ellie To Do" },
   ];
 
-  const todayISO = DateTime.now().setZone(TIMEZONE).toISODate();
+  const todayISO = dateISO || DateTime.now().setZone(TIMEZONE).toISODate();
   const date  = DateTime.fromISO(todayISO, { zone: TIMEZONE });
   const start = date.startOf("day");
   const end   = date.endOf("day");
@@ -65,39 +65,146 @@ function buildTodosPayload(getActivitiesForEntity, userId) {
 export const useCombinedPayloadData = () => {
   const {
     getActivitiesForEntity, user,
-    masterConfigAlerts, masterConfigNotifications,
+    masterConfigReminders,
     jackMasterConfig, ellieMasterConfig,
   } = useData();
 
-  const getData = useCallback(() => {
-    const todosPayload = buildTodosPayload(getActivitiesForEntity, user?.userId);
+  const getData = useCallback((dateISO) => {
+    const todosPayload = buildTodosPayload(getActivitiesForEntity, user?.userId, dateISO);
     const todayISO = todosPayload.date;
     const myUserId = user?.userId || "";
 
     const masterConfigData = {
-      eric:  { alerts: masterConfigAlerts  || [], notifications: masterConfigNotifications || [] },
-      jack:  { alerts: jackMasterConfig?.alerts  || [], notifications: jackMasterConfig?.notifications  || [] },
-      ellie: { alerts: ellieMasterConfig?.alerts || [], notifications: ellieMasterConfig?.notifications || [] },
+      eric:  { reminders: masterConfigReminders  || [] },
+      jack:  { reminders: jackMasterConfig?.reminders  || [] },
+      ellie: { reminders: ellieMasterConfig?.reminders || [] },
     };
 
     const prompt = `\
 You are my daily planning assistant. Today is ${todayISO} (America/New_York).
 
 OUTPUT: A single valid JSON object — nothing else, no explanation, no markdown.
-Omit any top-level key you don't need (e.g. omit "notifications" if none).
+Omit any top-level key you don't need (e.g. omit "alerts" if none).
 
 ═══ TOP-LEVEL SHAPE ═══
 {
   "todos": { "action": "updateTodos", "date": "${todayISO}", "todos": [ ...] },
-  "alerts": [ ...top-level alerts not tied to a specific item... ],
-  "notifications": [ ...standalone push notifications... ]
+  "alerts": [ ...top-level reminders not tied to a specific item... ]
+}
+
+═══ REMINDER OBJECT — unified alert + notification ═══
+Every entry in "alerts" is a single reminder object. The notification is embedded
+directly on the reminder — no separate notification array, no cross-reference IDs.
+
+{
+  "userId": "...",
+  "deliveryMode": "alert" | "push" | "alert+push",
+  "alert": {
+    // ─── IDENTITY ─────────────────────────────────────────────
+    "id": "unique-kebab-case-string",   // generate a UUID if new, reuse if updating
+    "templateId": null,                 // future use
+
+    // ─── CONTENT ──────────────────────────────────────────────
+    "title": "...",
+    "message": "...",
+
+    // ─── TIMING ───────────────────────────────────────────────
+    "scheduledTime": "ISO 8601 UTC",
+    "acknowledgedAt": null,             // always null on creation / rescheduling.
+                                        // App writes an ISO timestamp when user confirms.
+                                        // Never set to anything other than null.
+                                        // Setting null on update re-arms the reminder.
+
+    // ─── PAUSE ────────────────────────────────────────────────
+    "paused": false,                    // true = dormant until planning chat reactivates
+    "pausedUntil": null,                // ISO UTC — Cloud Timer auto-unpauses at this time
+
+    // ─── RECURRING — use ONE, never more than one ─────────────
+    "recurringIntervalMinutes": null,   // fires every N minutes
+    "recurringIntervalDays": null,      // fires every N days (DST-safe)
+    "recurringSchedule": [              // fires on specific days at specific times
+      { "day": "MO", "time": "15:30", "timezone": "America/New_York" },
+      { "day": "WE", "time": "18:00", "timezone": "America/New_York" }
+    ],                                  // array — each day can have its own time
+                                        // mutually exclusive with interval fields
+
+    // ─── REMINDER TYPE ────────────────────────────────────────
+    // "persistent" → never deleted, always rescheduled. Use buttons to control lifecycle.
+    // "oneTime"    → fires once, deleted after user acts on it
+    // "simple"     → Yes/No only, no buttons array
+    "reminderType": "persistent",
+    "confirmLabel": null,               // custom label for primary confirm button
+
+    // ─── NAVIGATION ───────────────────────────────────────────
+    "deepLinkTarget": null,             // "Pinned" | "Calendar" | "Workouts" | null
+
+    // ─── LINKED TODO ITEM ─────────────────────────────────────
+    // When done button marks a todo item complete
+    "linkedItem": {
+      "userId": "...",
+      "monthKey": "2026-05",
+      "eventId": "...",
+      "checklistId": "...",
+      "itemId": "uuid-of-todo-item"
+    },
+
+    // ─── ON TODO COMPLETION ───────────────────────────────────
+    // What happens when linkedItem is marked done in the app
+    "onTodoComplete": "reschedule",     // "delete" | "pause" | "reschedule"
+
+    // ─── MODE SWITCHING ───────────────────────────────────────
+    // "evening" → all buttons shown
+    // "morning" → buttons with onComplete:"set_mode_morning" hidden
+    // null      → no filtering, all buttons always shown
+    "mode": null,
+
+    // ─── METADATA ─────────────────────────────────────────────
+    "deletable": true,
+
+    // ─── BUTTONS ARRAY (advanced reminders) ───────────────────
+    // If present, renders exactly these buttons. No Yes/No fallback.
+    "buttons": [
+      {
+        "id": "btn-done",
+        "label": "Done",
+        // Actions:
+        // "reschedule"         → advance scheduledTime to specific wall-clock time
+        // "snooze"             → advance scheduledTime by duration
+        // "done"               → delete reminder. If linkedItem, marks todo complete.
+        // "open"               → navigate to screen, delete reminder
+        // "remind_me_again"    → open date/time picker, reschedule in place
+        // "edit"               → same as remind_me_again
+        // "delete"             → remove reminder, no side effects
+        // "pause_indefinitely" → sets paused:true, stamps acknowledgedAt, keeps reminder
+        "action": "reschedule",
+        "rescheduleTime": "21:40",      // wall-clock time (for reschedule)
+        "timezone": "America/New_York",
+        "advanceDays": 1,
+        "rescheduleType": "next_occurrence", // finds next occurrence of rescheduleTime
+        "duration": "20m",             // for snooze: 10m|20m|30m|1h|2h|1d
+        "target": "Pinned",            // for open: Pinned|Calendar|Workouts
+        "itemId": null,                // for open: future auto-open
+        "affectsLinked": true,         // update notification.scheduledTime too
+        "onComplete": "set_mode_evening" // set_mode_evening|set_mode_morning|null
+      }
+    ]
+  },
+
+  // ─── EMBEDDED NOTIFICATION ──────────────────────────────────
+  // Only include when deliveryMode is "push" or "alert+push"
+  // Lives directly on the reminder — no separate array, no cross-reference IDs
+  "notification": {
+    "title": "...",
+    "body": "...",
+    "scheduledTime": "ISO 8601 UTC",   // always match alert.scheduledTime on creation and reschedule
+    "screen": null                     // "Calendar" | "Pinned" | "Workouts" | null
+  }
 }
 
 ═══ ITEM-LEVEL ALERTS ═══
 Any checklist item can carry a "scheduledAlert" field. The system extracts it and
-creates the alert/notification automatically. The field stays on the item in Firestore
-so the app can find and delete the linked alert later.
-Do NOT include a userId on scheduledAlert — it is derived from the parent todo entry.
+creates the reminder automatically. The field stays on the item in Firestore.
+Do NOT include a userId on scheduledAlert — derived from the parent todo entry.
 
 {
   "id": "...",
@@ -111,10 +218,11 @@ Do NOT include a userId on scheduledAlert — it is derived from the parent todo
       "message": "You scheduled laundry for now.",
       "scheduledTime": "ISO 8601 UTC",
       "recurringIntervalMinutes": 30,
-      "deepLinkTarget": "Pinned",
-      "deleteOnConfirm": true,
-      "deleteOnView": false,
-      "acknowledged": false
+      "reminderType": "persistent",
+      "paused": false,
+      "pausedUntil": null,
+      "acknowledgedAt": null,
+      "deletable": true
     },
     "notification": {
       "title": "Laundry Time",
@@ -124,61 +232,31 @@ Do NOT include a userId on scheduledAlert — it is derived from the parent todo
   }
 }
 
-═══ ALERT FLAGS (simple alerts — no buttons array) ═══
-deleteOnConfirm: true  → alert deleted when user taps Yes
-deleteOnView: true     → alert deleted as soon as the modal appears (Yes or No)
-Neither set            → Yes marks acknowledged:true; No dismisses in-memory, re-shows next session
+═══ REMINDER TYPES ═══
+persistent        → never deleted. Use buttons to control lifecycle. Good for recurring tasks.
+oneTime           → fires once, deleted after user acts on it. Good for one-off reminders.
+simple            → Yes/No only, no buttons array.
 
-Recurring snooze: When No is tapped on a recurring alert, the app writes
-acknowledged:true + advances scheduledTime by recurringIntervalMinutes.
-The timer resets acknowledged:false when that time passes.
-The alert keeps firing until the user taps Yes.
+═══ DELIVERY MODES ═══
+"alert"           → in-app modal only, no push notification
+"push"            → push notification only, no in-app modal
+"alert+push"      → both simultaneously
 
-═══ ALERT TIERS ═══
-Simple alert   → no buttons array. Uses deleteOnConfirm/deleteOnView flags. Shows Yes/No.
-Advanced alert → has buttons array. Renders exactly the buttons configured. Ignores deleteOnConfirm.
+═══ PAUSE BEHAVIOR ═══
+paused:true + pausedUntil:null     → dormant indefinitely. Planning chat reactivates it.
+paused:true + pausedUntil:"ISO"    → auto-unpauses at that time (Cloud Timer handles it)
+Use pause_indefinitely button action for tasks like dishes — done for now, ask again later.
 
-═══ ALERT TYPES ═══
-One-shot, dismiss either way     deleteOnConfirm:true,  deleteOnView:false
-One-shot, keep record            deleteOnConfirm:false, deleteOnView:false
-Recurring until confirmed        deleteOnConfirm:true,  recurringIntervalMinutes:N
-Silent / in-app only             deliveryMode:"alert"   (no push)
-Time-sensitive, needs both       deliveryMode:"alert+push"
-Persistent, never deleted        deleteOnConfirm:false, deleteOnView:false — use buttons to control lifecycle
-
-═══ ALERT BUTTON ACTIONS ═══
-Use buttons array for any alert that needs more than Yes/No.
-Each button has: id, label, action, and action-specific fields.
-
-reschedule    → advance scheduledTime to a specific wall-clock time
-  rescheduleTime: "21:40"           wall-clock time in timezone
-  timezone: "America/New_York"
-  advanceDays: 1                    days to advance from now
-  rescheduleType: "next_occurrence" → finds next occurrence of rescheduleTime
-                                      (today if before that time, tomorrow if after)
-  affectsLinked: true               → also reschedules linkedNotificationId
-
-snooze        → advance scheduledTime by duration
-  duration: "20m" | "30m" | "1h" | "2h" | "1d"
-  affectsLinked: true
-
-done          → delete alert. If linkedItem present, marks that todo item completed:true
-open          → navigate to target screen, delete alert. Does NOT mark item complete.
-  target: "Pinned" | "Calendar" | "Workouts"
-  itemId: "..."                     optional, for future auto-open support
-remind_me_again → open date/time picker, reschedule in place on submit
-edit          → open date/time picker, reschedule in place on submit (same as remind_me_again)
-delete        → remove alert, no side effects
-
-onComplete field (optional on any button):
-  "set_mode_evening" → sets mode: "evening" on the alert after action
-  "set_mode_morning" → sets mode: "morning" on the alert after action
+═══ PLANNING CHAT FREQUENCY ═══
+askFrequency: N    → only ask about this reminder every N days
+                     Check acknowledgedAt — if less than N days ago, skip asking
+                     If null or N+ days ago, ask about it
+                     Default: ask every day if field is absent
 
 ═══ MODE SWITCHING ═══
 Alerts can have mode: "evening" | "morning" to show different button sets.
 mode: "evening" → all buttons shown
 mode: "morning" → buttons with onComplete: "set_mode_morning" are hidden
-Use for alerts that behave differently depending on time of day.
 
 Example — daily planning reminder:
 buttons: [
@@ -191,66 +269,6 @@ buttons: [
     rescheduleTime: "06:40", timezone: "America/New_York", advanceDays: 1,
     onComplete: "set_mode_morning", affectsLinked: true }
 ]
-
-═══ LINKED ITEM (for done button) ═══
-When a button with action: "done" should also mark a todo item complete:
-"linkedItem": {
-  "userId": "...",
-  "monthKey": "2026-05",
-  "eventId": "...",
-  "itemId": "actual-item-id"
-}
-When the user taps Done, the alert is deleted AND that todo item is marked completed:true.
-Also: when a todo item is marked complete in the app, any alert with a matching
-linkedItem.itemId is automatically deleted from masterConfig.
-
-═══ RECURRING SCHEDULE (alternative to recurringIntervalMinutes) ═══
-Use recurringSchedule for day-of-week based recurrence instead of flat intervals.
-Mutually exclusive with recurringIntervalMinutes — use one or the other.
-
-"recurringSchedule": {
-  "daysOfWeek": ["MO","TU","WE","TH","FR"],
-  "time": "15:30",
-  "timezone": "America/New_York"
-}
-
-Days: "MO","TU","WE","TH","FR","SA","SU"
-time: wall-clock time in timezone (never pre-convert to UTC)
-Cloud Timer advances scheduledTime to next matching day+time on each occurrence.
-
-═══ ADVANCED ALERT CONFIG (onDone / onStop) ═══
-For alerts without a buttons array that need configurable behavior:
-onDone: "delete" | "acknowledge_and_reschedule" | "mark_done_today"
-onStop: "delete" | "pause_today" | "pause_indefinitely"
-paused: true → alert exists but won't show until unpaused
-
-═══ TOP-LEVEL ALERT SHAPE (alerts[] array) ═══
-{
-  "userId": "...",
-  "deliveryMode": "alert" | "push" | "alert+push",
-  "alert": {
-    "id": "unique-short-string",
-    "title": "...",
-    "message": "...",
-    "scheduledTime": "ISO 8601 UTC",
-    "recurringIntervalMinutes": null,
-    "recurringSchedule": null,
-    "deepLinkTarget": "Pinned" | "Calendar" | "Workouts" | null,
-    "deleteOnConfirm": true,
-    "deleteOnView": false,
-    "acknowledged": false,
-    "mode": "evening" | "morning" | null,
-    "buttons": [ ...see ALERT BUTTON ACTIONS... ],
-    "linkedItem": null,
-    "onDone": null,
-    "onStop": null
-  },
-  "notification": {
-    "title": "...",
-    "body": "...",
-    "scheduledTime": "ISO 8601 UTC"
-  }
-}
 
 ═══ TODO ITEM TYPES — PRESERVE ALL FIELDS ═══
 itemType:"yesNo" yesNoConfig.type:"header"       Parent item — tapping Yes expands sub-choices
@@ -265,8 +283,9 @@ itemType:"checkbox"                              Standard sub-item inside a grou
 requiredForScreenTime:true                       Gates screen time — NEVER remove or modify this flag
 subItems                                         ALWAYS preserve the full array with all nested fields
 
-KEY RULE (alerts): Alert IDs must be unique. Never reuse an existing alert ID for a new alert —
-only reuse it if explicitly updating that existing alert.
+KEY RULE (reminders): Reminder IDs must be unique. Never reuse an existing reminder ID
+for a new reminder — only reuse it if explicitly updating that existing reminder.
+Generate a UUID for any new reminder that needs one.
 
 KEY RULE: Always include the COMPLETE items array for every person with ALL existing items
 and their full data shape preserved. Only modify what was explicitly asked to change.
@@ -280,13 +299,14 @@ Ellie:     ${ELLIE_USER_ID}
 ═══ TODAY'S CURRENT DATA ═══
 ${JSON.stringify(todosPayload, null, 2)}
 
-═══ CURRENT ALERTS & NOTIFICATIONS (per person) ═══
-Use this to avoid creating duplicates. If an alert or notification already exists
+═══ CURRENT REMINDERS (per person) ═══
+Use this to avoid creating duplicates. If a reminder already exists
 for something the user asks about, update or reschedule it instead of adding a new one.
+If a reminder is paused, ask whether to reactivate it and set a new scheduledTime.
 ${JSON.stringify(masterConfigData, null, 2)}`;
 
     return prompt;
-  }, [getActivitiesForEntity, user?.userId, masterConfigAlerts, masterConfigNotifications, jackMasterConfig, ellieMasterConfig]);
+  }, [getActivitiesForEntity, user?.userId, masterConfigReminders, jackMasterConfig, ellieMasterConfig]);
 
   return getData;
 };

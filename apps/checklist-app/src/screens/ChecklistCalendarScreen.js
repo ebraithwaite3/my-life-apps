@@ -20,6 +20,9 @@ import {
 } from "@my-apps/hooks";
 import { Alert } from "react-native";
 import { DateTime } from "luxon";
+import * as Clipboard from "expo-clipboard";
+import { showSuccessToast } from "@my-apps/utils";
+import { useCombinedPayloadData } from "../components/developer/useEndpointData";
 
 /**
  * ChecklistCalendarScreen - Complete with all features
@@ -142,6 +145,13 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     selectedEvent: calendarState.selectedEvent,
     updatedItems: calendarState.updatedItems,
   });
+
+  const getCombinedPayloadData = useCombinedPayloadData();
+  const handleClaudePress = useCallback(async () => {
+    const prompt = getCombinedPayloadData(selectedDate);
+    await Clipboard.setStringAsync(prompt);
+    showSuccessToast("Copied to clipboard");
+  }, [getCombinedPayloadData, selectedDate]);
 
   const { allTemplates, saveTemplate, promptForContext } =
     useChecklistTemplates();
@@ -536,6 +546,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         kidsBanners={kidsBanners}
         showKidsBanners={showKidsBanners}
         isAdmin={isAdmin}
+        onClaudePress={user?.admin ? handleClaudePress : undefined}
         onToggleKidsBanners={() => setShowKidsBanners(v => !v)}
         onCreateToDo={handleCreateToDo}
         onKidBannerPress={(banner) => {

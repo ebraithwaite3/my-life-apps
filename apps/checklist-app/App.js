@@ -71,7 +71,7 @@ function parseDuration(duration) {
 const MainApp = () => {
   const { isDarkMode, theme } = useTheme();
   const { logout, user: authUser } = useAuth();
-  const { masterConfigAlerts, masterConfigNotifications, user: dataUser } = useData();
+  const { masterConfigReminders, user: dataUser } = useData();
 
   // Register this app when user logs in
   const { db } = useAuth();
@@ -90,56 +90,41 @@ const MainApp = () => {
   }, []);
 
   // Stable ref so the 60-second interval always calls the latest version
-  const checkAndShowAlertsRef = useRef(null);
+  const checkAndShowRemindersRef = useRef(null);
 
-  // Enqueue past-due unacknowledged alerts; re-arm snoozed recurring ones
-  const checkAndShowAlerts = useCallback(() => {
-    if (!masterConfigAlerts?.length) return;
-
-    const now = new Date();
-
-    // Snoozed recurring alerts whose time has arrived — reset acknowledged
-    // so they re-queue on the next pass (Firestore update re-triggers this)
-    const toRearm = masterConfigAlerts.filter(
-      (a) =>
-        a.acknowledged &&
-        a.recurringIntervalMinutes &&
-        a.scheduledTime &&
-        new Date(a.scheduledTime) <= now,
-    );
-    if (toRearm.length > 0) {
-      const rearmIds = new Set(toRearm.map((a) => a.id));
-      updateAlerts(
-        masterConfigAlerts.map((a) =>
-          rearmIds.has(a.id) ? { ...a, acknowledged: false } : a,
-        ),
-      );
-      return; // Firestore update triggers re-run; alert will queue then
-    }
-
-    const newAlerts = masterConfigAlerts.filter((a) => {
-      if (a.acknowledged) return false;
-      if (!a.scheduledTime || new Date(a.scheduledTime) > now) return false;
-      if (dismissedIdsRef.current.has(a.id)) return false;
-      if (alertQueueRef.current.some((q) => q.id === a.id)) return false;
-      return true;
-    });
-
-    if (newAlerts.length === 0) return;
-    alertQueueRef.current = [...alertQueueRef.current, ...newAlerts];
-    showNextAlert();
-  }, [masterConfigAlerts, showNextAlert, updateAlerts]);
-
-  // Helper: update masterConfig.alerts in Firestore
-  const updateAlerts = useCallback(async (updatedAlerts) => {
+  // Helper: write updated reminders array to masterConfig
+  const updateReminders = useCallback(async (updatedReminders) => {
     const userId = dataUser?.userId || authUser?.uid;
     if (!userId) return;
     try {
-      await updateDocument("masterConfig", userId, { alerts: updatedAlerts });
+      await updateDocument("masterConfig", userId, { reminders: updatedReminders });
     } catch (err) {
-      console.error("❌ Alert update failed:", err);
+      console.error("❌ Reminders update failed:", err);
     }
   }, [dataUser?.userId, authUser?.uid]);
+
+  // Enqueue past-due pending reminders
+  const checkAndShowReminders = useCallback(() => {
+    if (!masterConfigReminders?.length) return;
+
+    const now = new Date();
+
+    const newReminders = masterConfigReminders.filter((r) => {
+      if (r.paused) return false;
+      if (!r.scheduledTime || new Date(r.scheduledTime) > now) return false;
+      // Pending if never acknowledged, or last acknowledgement is before current scheduledTime
+      const isPending = !r.acknowledgedAt ||
+        new Date(r.acknowledgedAt) < new Date(r.scheduledTime);
+      if (!isPending) return false;
+      if (dismissedIdsRef.current.has(r.id)) return false;
+      if (alertQueueRef.current.some((q) => q.id === r.id)) return false;
+      return true;
+    });
+
+    if (newReminders.length === 0) return;
+    alertQueueRef.current = [...alertQueueRef.current, ...newReminders];
+    showNextAlert();
+  }, [masterConfigReminders, showNextAlert]);
 
   // Helper: advance to next alert in queue
   const advanceQueue = useCallback(() => {
@@ -149,86 +134,94 @@ const MainApp = () => {
     setTimeout(showNextAlert, 300);
   }, [showNextAlert]);
 
-  // "Yes" — acknowledge, deep link, then delete or mark acknowledged
+  // "Yes" — deep link if set, then delete (one-time) or acknowledge (recurring)
   const handleAlertYes = useCallback(async () => {
     if (!activeAlert) return;
 
     if (activeAlert.deepLinkTarget && navigationRef?.isReady()) {
       const screen = activeAlert.deepLinkTarget;
-      const homeScreen = `${screen}Home`;
       navigationRef.navigate("Main", {
         screen,
-        params: { screen: homeScreen },
+        params: { screen: `${screen}Home` },
       });
     }
 
-    // deleteOnConfirm: delete on Yes only
-    // deleteOnView: delete on Yes or No (handled in No too)
-    const shouldDelete =
-      activeAlert.deleteOnConfirm || activeAlert.deleteOnView;
-    if (shouldDelete) {
-      await updateAlerts(masterConfigAlerts.filter((a) => a.id !== activeAlert.id));
-    } else {
-      await updateAlerts(
-        masterConfigAlerts.map((a) =>
-          a.id === activeAlert.id ? { ...a, acknowledged: true } : a,
+    const isRecurring = !!(
+      activeAlert.recurringIntervalMinutes ||
+      activeAlert.recurringIntervalDays ||
+      activeAlert.recurringSchedule?.length
+    );
+
+    if (isRecurring) {
+      await updateReminders(
+        masterConfigReminders.map((r) =>
+          r.id !== activeAlert.id ? r : {
+            ...r,
+            acknowledgedAt: new Date().toISOString(),
+          }
         ),
+      );
+    } else {
+      await updateReminders(
+        masterConfigReminders.filter((r) => r.id !== activeAlert.id),
       );
     }
 
     dismissedIdsRef.current.add(activeAlert.id);
     advanceQueue();
-  }, [activeAlert, masterConfigAlerts, updateAlerts, advanceQueue]);
+  }, [activeAlert, masterConfigReminders, updateReminders, advanceQueue]);
 
-  // "No" — dismiss without confirming
-  // deleteOnView → delete + dismiss; recurring → re-arm only (no dismiss, re-check later);
-  // otherwise → dismiss in-memory only (re-shows next session)
+  // "No" — recurring: advance scheduledTime; otherwise dismiss in-memory only
   const handleAlertNo = useCallback(async () => {
     if (!activeAlert) return;
 
-    if (activeAlert.deleteOnView) {
-      await updateAlerts(masterConfigAlerts.filter((a) => a.id !== activeAlert.id));
-      dismissedIdsRef.current.add(activeAlert.id);
-    } else if (activeAlert.recurringIntervalMinutes) {
-      const nextTime = new Date(
-        Date.now() + activeAlert.recurringIntervalMinutes * 60 * 1000,
+    if (activeAlert.recurringIntervalMinutes) {
+      const durationMs = activeAlert.recurringIntervalMinutes * 60 * 1000;
+      const TEN_MIN = 600000;
+      const newTime = new Date(
+        Math.ceil((Date.now() + durationMs - 5 * 60000) / TEN_MIN) * TEN_MIN,
       ).toISOString();
-      await updateAlerts(
-        masterConfigAlerts.map((a) =>
-          a.id === activeAlert.id
-            ? { ...a, scheduledTime: nextTime, acknowledged: true }
-            : a,
+      await updateReminders(
+        masterConfigReminders.map((r) =>
+          r.id !== activeAlert.id ? r : { ...r, scheduledTime: newTime }
         ),
       );
-      // acknowledged:true blocks re-show via checkAndShowAlerts filter.
-      // Cloud Timer resets acknowledged:false when scheduledTime is past.
+    } else if (activeAlert.recurringIntervalDays) {
+      const newTime = DateTime.now()
+        .plus({ days: activeAlert.recurringIntervalDays })
+        .toISO();
+      await updateReminders(
+        masterConfigReminders.map((r) =>
+          r.id !== activeAlert.id ? r : { ...r, scheduledTime: newTime }
+        ),
+      );
     } else {
       dismissedIdsRef.current.add(activeAlert.id);
     }
 
     advanceQueue();
-  }, [activeAlert, masterConfigAlerts, updateAlerts, advanceQueue]);
+  }, [activeAlert, masterConfigReminders, updateReminders, advanceQueue]);
 
-  // Keep ref current so the polling interval always uses latest masterConfigAlerts
+  // Keep ref current so the polling interval always uses latest masterConfigReminders
   useEffect(() => {
-    checkAndShowAlertsRef.current = checkAndShowAlerts;
-  }, [checkAndShowAlerts]);
+    checkAndShowRemindersRef.current = checkAndShowReminders;
+  }, [checkAndShowReminders]);
 
-  // Check alerts when masterConfigAlerts updates or app comes to foreground
+  // Check reminders when masterConfigReminders updates or app comes to foreground
   useEffect(() => {
-    checkAndShowAlerts();
-  }, [checkAndShowAlerts]);
+    checkAndShowReminders();
+  }, [checkAndShowReminders]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") checkAndShowAlerts();
+      if (state === "active") checkAndShowReminders();
     });
     return () => sub.remove();
-  }, [checkAndShowAlerts]);
+  }, [checkAndShowReminders]);
 
-  // Poll every 60 seconds so recurring alerts re-queue after their interval elapses
+  // Poll every 60 seconds so recurring reminders re-queue after their interval elapses
   useEffect(() => {
-    const interval = setInterval(() => checkAndShowAlertsRef.current?.(), 60 * 1000);
+    const interval = setInterval(() => checkAndShowRemindersRef.current?.(), 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -269,7 +262,6 @@ const MainApp = () => {
   const handleButtonTap = useCallback(async (button) => {
     if (!activeAlert) return;
     const { action } = button;
-    const userId = dataUser?.userId;
 
     if (action === "reschedule") {
       const tz = button.timezone || "America/New_York";
@@ -295,69 +287,48 @@ const MainApp = () => {
         : button.onComplete === "set_mode_morning" ? { mode: "morning" }
         : {};
 
-      const updatedAlerts = masterConfigAlerts.map((a) =>
-        a.id !== activeAlert.id ? a : {
-          ...a,
-          scheduledTime: newTime,
-          ...modeUpdate,
-          ...(activeAlert.deleteOnConfirm ? { acknowledged: true } : {}),
+      const updatedReminders = masterConfigReminders.map((r) => {
+        if (r.id !== activeAlert.id) return r;
+        const updated = { ...r, scheduledTime: newTime, ...modeUpdate };
+        if (button.affectsLinked && r.notification) {
+          updated.notification = { ...r.notification, scheduledTime: newTime };
         }
-      );
-
-      let updatedNotifications = masterConfigNotifications;
-      if (button.affectsLinked) {
-        updatedNotifications = masterConfigNotifications.map((n) =>
-          (n.id === activeAlert.linkedNotificationId ||
-           n.linkedAlertId === activeAlert.id)
-            ? { ...n, scheduledTime: newTime }
-            : n
-        );
-      }
+        return updated;
+      });
 
       try {
-        await updateDocument("masterConfig", userId, {
-          alerts: updatedAlerts,
-          notifications: updatedNotifications,
-        });
+        await updateReminders(updatedReminders);
         console.log(`✅ Rescheduled "${activeAlert.id}" → ${newTime}`, modeUpdate);
       } catch (err) {
         console.error("❌ Reschedule failed:", err);
       }
 
     } else if (action === "snooze") {
-      const newTime = DateTime.now()
-        .plus(parseDuration(button.duration))
-        .toUTC()
-        .toISO();
+      const dur = button.duration || "30m";
+      const num = parseInt(dur, 10);
+      const durationMs = dur.endsWith("d") ? num * 86400000
+        : dur.endsWith("h") ? num * 3600000
+        : num * 60000;
+      const TEN_MIN = 600000;
+      const newTime = new Date(
+        Math.ceil((Date.now() + durationMs - 5 * 60000) / TEN_MIN) * TEN_MIN
+      ).toISOString();
 
       const modeUpdate = button.onComplete === "set_mode_evening" ? { mode: "evening" }
         : button.onComplete === "set_mode_morning" ? { mode: "morning" }
         : {};
 
-      const updatedAlerts = masterConfigAlerts.map((a) =>
-        a.id !== activeAlert.id ? a : {
-          ...a,
-          scheduledTime: newTime,
-          ...modeUpdate,
-          ...(activeAlert.deleteOnConfirm ? { acknowledged: true } : {}),
+      const updatedReminders = masterConfigReminders.map((r) => {
+        if (r.id !== activeAlert.id) return r;
+        const updated = { ...r, scheduledTime: newTime, ...modeUpdate };
+        if (button.affectsLinked && r.notification) {
+          updated.notification = { ...r.notification, scheduledTime: newTime };
         }
-      );
-
-      let updatedNotifications = masterConfigNotifications;
-      if (button.affectsLinked) {
-        updatedNotifications = masterConfigNotifications.map((n) =>
-          (n.id === activeAlert.linkedNotificationId ||
-           n.linkedAlertId === activeAlert.id)
-            ? { ...n, scheduledTime: newTime }
-            : n
-        );
-      }
+        return updated;
+      });
 
       try {
-        await updateDocument("masterConfig", userId, {
-          alerts: updatedAlerts,
-          notifications: updatedNotifications,
-        });
+        await updateReminders(updatedReminders);
         console.log(`✅ Snoozed "${activeAlert.id}" → ${newTime}`);
       } catch (err) {
         console.error("❌ Snooze failed:", err);
@@ -372,16 +343,12 @@ const MainApp = () => {
         }
       }
       try {
-        await updateDocument("masterConfig", userId, {
-          alerts: masterConfigAlerts.filter((a) => a.id !== activeAlert.id),
-          notifications: masterConfigNotifications.filter(
-            (n) => n.id !== activeAlert.linkedNotificationId &&
-                   n.linkedAlertId !== activeAlert.id,
-          ),
-        });
-        console.log(`✅ Done: deleted alert "${activeAlert.id}"`);
+        await updateReminders(
+          masterConfigReminders.filter((r) => r.id !== activeAlert.id),
+        );
+        console.log(`✅ Done: deleted reminder "${activeAlert.id}"`);
       } catch (err) {
-        console.error("❌ done: failed to delete alert:", err);
+        console.error("❌ done: failed to delete reminder:", err);
       }
 
     } else if (action === "open") {
@@ -392,55 +359,66 @@ const MainApp = () => {
         });
       }
       try {
-        await updateDocument("masterConfig", userId, {
-          alerts: masterConfigAlerts.filter((a) => a.id !== activeAlert.id),
-        });
-        console.log(`✅ Open: navigated to "${button.target}", deleted alert`);
+        await updateReminders(
+          masterConfigReminders.filter((r) => r.id !== activeAlert.id),
+        );
+        console.log(`✅ Open: navigated to "${button.target}", deleted reminder`);
       } catch (err) {
-        console.error("❌ open: failed to delete alert:", err);
+        console.error("❌ open: failed to delete reminder:", err);
       }
 
     } else if (action === "delete") {
       try {
-        await updateDocument("masterConfig", userId, {
-          alerts: masterConfigAlerts.filter((a) => a.id !== activeAlert.id),
-        });
-        console.log(`✅ Deleted alert "${activeAlert.id}"`);
+        await updateReminders(
+          masterConfigReminders.filter((r) => r.id !== activeAlert.id),
+        );
+        console.log(`✅ Deleted reminder "${activeAlert.id}"`);
       } catch (err) {
         console.error("❌ delete: failed:", err);
+      }
+
+    } else if (action === "pause_indefinitely") {
+      try {
+        await updateReminders(
+          masterConfigReminders.map((r) =>
+            r.id !== activeAlert.id ? r : {
+              ...r,
+              paused: true,
+              pausedUntil: null,
+              acknowledgedAt: new Date().toISOString(),
+            }
+          ),
+        );
+        console.log(`✅ Paused indefinitely "${activeAlert.id}"`);
+      } catch (err) {
+        console.error("❌ pause_indefinitely: failed:", err);
       }
     }
 
     advanceQueue();
-  }, [activeAlert, masterConfigAlerts, masterConfigNotifications, dataUser, advanceQueue, markLinkedItemComplete]);
+  }, [activeAlert, masterConfigReminders, advanceQueue, markLinkedItemComplete, updateReminders]);
 
   const handleEditSubmit = useCallback(async (isoString) => {
     if (!activeAlert) return;
-    const userId = dataUser?.userId;
 
-    const updatedAlerts = masterConfigAlerts.map((a) =>
-      a.id !== activeAlert.id ? a : { ...a, scheduledTime: isoString }
-    );
-
-    let updatedNotifications = masterConfigNotifications;
-    if (activeAlert.linkedNotificationId) {
-      updatedNotifications = masterConfigNotifications.map((n) =>
-        n.id !== activeAlert.linkedNotificationId ? n : { ...n, scheduledTime: isoString }
-      );
-    }
+    const updatedReminders = masterConfigReminders.map((r) => {
+      if (r.id !== activeAlert.id) return r;
+      const updated = { ...r, scheduledTime: isoString };
+      if (r.notification) {
+        updated.notification = { ...r.notification, scheduledTime: isoString };
+      }
+      return updated;
+    });
 
     try {
-      await updateDocument("masterConfig", userId, {
-        alerts: updatedAlerts,
-        notifications: updatedNotifications,
-      });
+      await updateReminders(updatedReminders);
       console.log(`✅ Edit saved "${activeAlert.id}" → ${isoString}`);
     } catch (err) {
       console.error("❌ Edit save failed:", err);
     }
 
     advanceQueue();
-  }, [activeAlert, masterConfigAlerts, masterConfigNotifications, dataUser, advanceQueue]);
+  }, [activeAlert, masterConfigReminders, advanceQueue, updateReminders]);
 
   const handleLogout = async () => {
     console.log("Logging out...");

@@ -26,17 +26,17 @@ export const useNotifications = () => {
       const snap = await getDoc(configRef);
       if (!snap.exists()) return { success: true, deletedCount: 0 };
 
-      const existing = snap.data().notifications || [];
-      const filtered = existing.filter((n) => n.eventId !== eventId);
+      const existing = snap.data().reminders || [];
+      const filtered = existing.filter((r) => r.eventId !== eventId);
       const deletedCount = existing.length - filtered.length;
 
       if (deletedCount === 0) {
-        console.log(`ℹ️ No notifications found in masterConfig for eventId:`, eventId);
+        console.log(`ℹ️ No reminders found in masterConfig for eventId:`, eventId);
         return { success: true, deletedCount: 0 };
       }
 
-      await setDoc(configRef, { notifications: filtered }, { merge: true });
-      console.log(`✅ Deleted ${deletedCount} notification(s) from masterConfig for eventId:`, eventId);
+      await setDoc(configRef, { reminders: filtered }, { merge: true });
+      console.log(`✅ Deleted ${deletedCount} reminder(s) from masterConfig for eventId:`, eventId);
       return { success: true, deletedCount };
     } catch (err) {
       console.error('❌ Error deleting notification', err);
@@ -100,10 +100,10 @@ export const useNotifications = () => {
         const configRef = doc(db, 'masterConfig', memberId);
         const snap = await getDoc(configRef);
         if (!snap.exists()) return;
-        const existing = snap.data().notifications || [];
-        const filtered = existing.filter((n) => n.id !== notifId);
+        const existing = snap.data().reminders || [];
+        const filtered = existing.filter((r) => r.id !== notifId);
         if (filtered.length !== existing.length) {
-          await setDoc(configRef, { notifications: filtered }, { merge: true });
+          await setDoc(configRef, { reminders: filtered }, { merge: true });
         }
       }));
       console.log(`✅ Deleted group reminder "${notifId}" from ${memberIds.length} masterConfig docs`);

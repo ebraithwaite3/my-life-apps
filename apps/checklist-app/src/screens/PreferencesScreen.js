@@ -29,7 +29,7 @@ import { updateDocument } from "@my-apps/services";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useChecklistTemplates } from "@my-apps/hooks";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { collection, addDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useMeals, useIngredients } from "@my-apps/hooks";
 import MealsManagementView from "../components/grocery/MealsManagementView";
 import IngredientsManagementView from "../components/grocery/IngredientsManagementView";
@@ -243,32 +243,52 @@ const PreferencesScreen = ({ navigation, route }) => {
   
         Alert.alert('Sent!', 'Notifications sent immediately to all recipients.');
       } else {
-        // SCHEDULE FOR LATER - Create pendingNotifications
+        // SCHEDULE FOR LATER - Write to masterConfig.reminders
         const { recipients, schedule, title, message, data, isRecurring } = notificationData;
         const scheduledFor = new Date(schedule.scheduledFor);
-  
+
         const promises = recipients.map(async (recipientId) => {
-          const payload = {
-            userId: recipientId,
+          const reminderId = `quicksend-${recipientId}-${Date.now()}`;
+          const reminderData = {
+            id: reminderId,
+            deliveryMode: 'push',
             title,
-            body: message,
-            scheduledFor,
-            createdAt: new Date(),
+            message,
+            scheduledTime: scheduledFor.toISOString(),
+            acknowledgedAt: null,
+            notification: {
+              title,
+              body: message,
+              screen: data?.screen || null,
+              handlerName: null,
+              handlerParams: null,
+              data: data || {},
+            },
+            paused: false,
+            pausedUntil: null,
+            reminderType: isRecurring ? 'persistent' : 'oneTime',
+            recurringIntervalMinutes: isRecurring
+              ? (schedule.recurringConfig?.intervalMinutes || null)
+              : null,
+            recurringIntervalDays: null,
+            recurringSchedule: null,
+            ...(isRecurring && schedule.recurringConfig && {
+              recurringConfig: schedule.recurringConfig,
+            }),
             type: 'quick_send',
-            data,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            deletable: true,
           };
-  
-          if (isRecurring) {
-            payload.isRecurring = true;
-            payload.recurringConfig = schedule.recurringConfig;
-          }
-  
-          const notificationsRef = collection(db, 'pendingNotifications');
-          await addDoc(notificationsRef, payload);
+
+          const configRef = doc(db, 'masterConfig', recipientId);
+          const snap = await getDoc(configRef);
+          const existing = snap.exists() ? (snap.data().reminders || []) : [];
+          await setDoc(configRef, { reminders: [...existing, reminderData] }, { merge: true });
         });
-  
+
         await Promise.all(promises);
-  
+
         const recurringText = isRecurring ? 'recurring ' : '';
         Alert.alert('Scheduled!', `${recurringText}Notification scheduled for all recipients.`);
       }

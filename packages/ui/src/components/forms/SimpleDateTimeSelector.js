@@ -9,7 +9,8 @@ const SimpleDateTimeSelector = ({
     label = "Date & Time",
     selectedDate,
     onDateChange,
-    hideDate = false, // ✅ Already added
+    hideDate = false,
+    compact = false,  // set true when inside a card/modal that already has padding
   }) => {
     const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   
@@ -81,11 +82,11 @@ const SimpleDateTimeSelector = ({
         color: theme.text.primary,
         marginTop: getSpacing.lg,
         marginBottom: getSpacing.sm,
-        marginHorizontal: getSpacing.lg,
+        marginHorizontal: compact ? 0 : getSpacing.lg,
       },
       formSection: {
         backgroundColor: theme.background,
-        marginHorizontal: getSpacing.lg,
+        marginHorizontal: compact ? 0 : getSpacing.lg,
         borderRadius: getBorderRadius.md,
         overflow: "hidden",
       },

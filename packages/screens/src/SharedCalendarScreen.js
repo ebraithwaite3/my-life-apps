@@ -89,6 +89,7 @@ const SharedCalendarScreen = ({
   onKidBannerPress,
   isAdmin = false,
   onCreateToDo,
+  onClaudePress,
 
   // Loading
   isDeleting = false,
@@ -315,18 +316,6 @@ const SharedCalendarScreen = ({
   const filters = useMemo(() => {
     const chips = [];
 
-    // "Checklists Only" filter (only if user has multiple apps)
-    if (joinedAppsCount > 1 && filterActivitiesFor) {
-      chips.push({
-        label: `${activityLabel} Only`,
-        active: showOnlyFilteredActivities,
-        onPress: () => {
-          console.log("Filter toggled:", !showOnlyFilteredActivities);
-          setShowOnlyFilteredActivities(!showOnlyFilteredActivities);
-        },
-      });
-    }
-
     // "Deleted" filter (only if there are deleted events)
     if (deletedEventsCount > 0) {
       chips.push({
@@ -367,13 +356,18 @@ const SharedCalendarScreen = ({
       });
     }
 
+    // Admin-only: Claude prompt chip (day view only)
+    if (isAdmin && selectedView === "day" && onClaudePress) {
+      chips.push({
+        label: "Claude",
+        icon: "sparkles-outline",
+        active: false,
+        onPress: onClaudePress,
+      });
+    }
+
     return chips.length > 0 ? chips : undefined;
   }, [
-    joinedAppsCount,
-    filterActivitiesFor,
-    activityLabel,
-    showOnlyFilteredActivities,
-    setShowOnlyFilteredActivities,
     deletedEventsCount,
     showDeletedEvents,
     setShowDeletedEvents,
@@ -383,6 +377,7 @@ const SharedCalendarScreen = ({
     showKidsBanners,
     onToggleKidsBanners,
     onCreateToDo,
+    onClaudePress,
   ]);
 
   // Build PageHeader subtext for day view

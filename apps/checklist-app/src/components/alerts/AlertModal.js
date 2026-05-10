@@ -26,25 +26,25 @@ function getDefaultEditDate() {
 }
 
 function getNextOccurrence(recurringSchedule) {
-  const { daysOfWeek, time, timezone } = recurringSchedule;
-  const tz = timezone || "America/New_York";
-  const now = DateTime.now().setZone(tz);
-  const [hour, minute] = time.split(":").map(Number);
+  const candidates = recurringSchedule.map(({ day, time, timezone }) => {
+    const tz = timezone || "America/New_York";
+    const now = DateTime.now().setZone(tz);
+    const [hour, minute] = time.split(":").map(Number);
 
-  let candidate = now.set({ hour, minute, second: 0, millisecond: 0 });
-  if (candidate <= now) candidate = candidate.plus({ days: 1 });
+    let candidate = now.set({ hour, minute, second: 0, millisecond: 0 });
+    if (candidate <= now) candidate = candidate.plus({ days: 1 });
 
-  let iterations = 0;
-  while (
-    !daysOfWeek.includes(
-      candidate.toFormat("EEE").toUpperCase().slice(0, 2)
-    ) &&
-    ++iterations <= 14
-  ) {
-    candidate = candidate.plus({ days: 1 });
-  }
+    let iterations = 0;
+    while (
+      candidate.toFormat("EEE").toUpperCase().slice(0, 2) !== day &&
+      ++iterations <= 14
+    ) {
+      candidate = candidate.plus({ days: 1 });
+    }
+    return candidate;
+  });
 
-  return candidate;
+  return candidates.reduce((min, c) => (c < min ? c : min));
 }
 
 function formatNextOccurrence(dt) {
@@ -82,7 +82,7 @@ const AlertModal = ({ alert, onYes, onNo, onButtonTap, onEditSubmit }) => {
     : false;
 
   const conflictWarning = useMemo(() => {
-    if (!editMode || !selectedDateTime || !alert?.recurringSchedule) return null;
+    if (!editMode || !selectedDateTime || !Array.isArray(alert?.recurringSchedule) || !alert.recurringSchedule.length) return null;
     const nextOcc = getNextOccurrence(alert.recurringSchedule);
     const selected = DateTime.fromJSDate(selectedDateTime);
     return selected > nextOcc ? formatNextOccurrence(nextOcc) : null;
@@ -136,6 +136,7 @@ const AlertModal = ({ alert, onYes, onNo, onButtonTap, onEditSubmit }) => {
                   label="Remind me at"
                   selectedDate={selectedDateTime}
                   onDateChange={setSelectedDateTime}
+                  compact
                 />
 
                 {conflictWarning && (

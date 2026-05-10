@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react';
-import { 
-  doc, 
-  getDoc, 
-  onSnapshot, 
-  updateDoc, 
-  deleteField, 
-  setDoc, 
-  collection, 
-  addDoc,
-  query,
-  where,
-  getDocs,
-  writeBatch
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  deleteField,
+  setDoc,
 } from 'firebase/firestore';
 
 export const useStandAloneReminders = (db, userId, isAdmin) => {
@@ -55,68 +49,83 @@ export const useStandAloneReminders = (db, userId, isAdmin) => {
     return () => unsubscribe();
   }, [db, userId]);
 
-  // Helper to delete all pendingNotifications for a reminder
-  const deletePendingNotifications = async (reminderId) => {
-    if (!db) throw new Error('Missing db');
+  // Delete this reminder from each recipient's masterConfig.reminders[]
+  const deletePendingNotifications = async (reminderId, recipients) => {
+    if (!db || !recipients?.length) return;
 
-    console.log('🗑️ Deleting pendingNotifications for reminder:', reminderId);
+    console.log('🗑️ Removing reminder from masterConfig for:', reminderId);
 
-    const notificationsRef = collection(db, 'pendingNotifications');
-    const q = query(notificationsRef, where('standAloneReminderId', '==', reminderId));
-    
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-      console.log('📭 No notifications found for reminder:', reminderId);
-      return;
-    }
+    await Promise.all(recipients.map(async (recipientId) => {
+      const configRef = doc(db, 'masterConfig', recipientId);
+      const snap = await getDoc(configRef);
+      if (!snap.exists()) return;
+      const existing = snap.data().reminders || [];
+      const filtered = existing.filter((r) => r.id !== reminderId);
+      if (filtered.length !== existing.length) {
+        await setDoc(configRef, { reminders: filtered }, { merge: true });
+      }
+    }));
 
-    const batch = writeBatch(db);
-    snapshot.docs.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-    
-    await batch.commit();
-    console.log(`✅ Deleted ${snapshot.size} notifications for reminder:`, reminderId);
+    console.log(`✅ Removed reminder "${reminderId}" from ${recipients.length} masterConfig doc(s)`);
   };
 
-  // Helper to create pendingNotifications for a reminder
+  // Upsert this reminder into each recipient's masterConfig.reminders[]
   const createPendingNotifications = async (reminder) => {
     if (!db) throw new Error('Missing db');
 
-    console.log('📤 Creating pendingNotifications for reminder:', reminder.id);
+    console.log('📤 Writing reminder to masterConfig for:', reminder.id);
 
     const { recipients, schedule, title, message, data, id: reminderId } = reminder;
     const scheduledFor = new Date(schedule.scheduledFor);
 
-    const promises = recipients.map(async (recipientId) => {
-      const notificationData = {
-        userId: recipientId,
+    const intervalMinutes = schedule.isRecurring
+      ? (schedule.recurringConfig?.intervalMinutes || null)
+      : null;
+
+    await Promise.all(recipients.map(async (recipientId) => {
+      const reminderData = {
+        id: reminderId,
+        deliveryMode: 'push',
         title,
-        body: message,
-        scheduledFor,
-        createdAt: new Date(),
-        standAloneReminderId: reminderId, // ← Link to reminder
-        type: 'standalone_reminder',
-        data: {
-          screen: data.screen,
-          app: data.app,
+        message,
+        scheduledTime: scheduledFor.toISOString(),
+        acknowledgedAt: null,
+        notification: {
+          title,
+          body: message,
+          screen: data?.screen || null,
+          handlerName: null,
+          handlerParams: null,
+          data: { screen: data?.screen, app: data?.app },
         },
+        paused: false,
+        pausedUntil: null,
+        reminderType: schedule.isRecurring ? 'persistent' : 'oneTime',
+        recurringIntervalMinutes: intervalMinutes,
+        recurringIntervalDays: null,
+        recurringSchedule: null,
+        ...(schedule.isRecurring && schedule.recurringConfig && {
+          recurringConfig: schedule.recurringConfig,
+        }),
+        standAloneReminderId: reminderId,
+        type: 'standalone_reminder',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        deletable: true,
       };
 
-      // If recurring, add recurring config
-      if (schedule.isRecurring) {
-        notificationData.isRecurring = true;
-        notificationData.recurringConfig = schedule.recurringConfig;
-      }
+      const configRef = doc(db, 'masterConfig', recipientId);
+      const snap = await getDoc(configRef);
+      const existing = snap.exists() ? (snap.data().reminders || []) : [];
+      const updated = existing.some((r) => r.id === reminderId)
+        ? existing.map((r) => r.id === reminderId ? reminderData : r)
+        : [...existing, reminderData];
 
-      const notificationsRef = collection(db, 'pendingNotifications');
-      await addDoc(notificationsRef, notificationData);
-      console.log('✅ Created notification for recipient:', recipientId);
-    });
+      await setDoc(configRef, { reminders: updated }, { merge: true });
+      console.log('✅ Reminder written to masterConfig for recipient:', recipientId);
+    }));
 
-    await Promise.all(promises);
-    console.log(`✅ Created ${recipients.length} notifications for reminder:`, reminderId);
+    console.log(`✅ Written reminder "${reminderId}" to ${recipients.length} masterConfig doc(s)`);
   };
 
   // Helper to create/update reminder
@@ -126,9 +135,9 @@ export const useStandAloneReminders = (db, userId, isAdmin) => {
     const docRef = doc(db, 'users', userId, 'standAloneReminders', 'allReminders');
     
     try {
-      // 1. Delete old notifications (if editing existing reminder)
-      if (reminder.id) {
-        await deletePendingNotifications(reminder.id);
+      // 1. Remove existing masterConfig reminders (if editing existing reminder)
+      if (reminder.id && reminder.recipients?.length) {
+        await deletePendingNotifications(reminder.id, reminder.recipients);
       }
 
       // 2. Save reminder to collection
@@ -162,10 +171,14 @@ export const useStandAloneReminders = (db, userId, isAdmin) => {
     if (!db || !userId) throw new Error('Missing db or userId');
 
     const docRef = doc(db, 'users', userId, 'standAloneReminders', 'allReminders');
-    
+
     try {
-      // 1. Delete all pendingNotifications
-      await deletePendingNotifications(reminderId);
+      // 1. Fetch recipients, then remove from masterConfig.reminders
+      const snap = await getDoc(docRef);
+      const existingReminder = snap.exists() ? snap.data().reminders?.[reminderId] : null;
+      if (existingReminder?.recipients?.length) {
+        await deletePendingNotifications(reminderId, existingReminder.recipients);
+      }
 
       // 2. Delete from collection
       await updateDoc(docRef, {
@@ -210,8 +223,10 @@ export const useStandAloneReminders = (db, userId, isAdmin) => {
         [`reminders.${reminderId}`]: updatedReminder
       });
 
-      // 3. Delete existing notifications
-      await deletePendingNotifications(reminderId);
+      // 3. Remove existing masterConfig reminders
+      if (reminder.recipients?.length) {
+        await deletePendingNotifications(reminderId, reminder.recipients);
+      }
 
       // 4. Create new notifications if turning ON
       if (isActive) {

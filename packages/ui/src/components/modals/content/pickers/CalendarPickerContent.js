@@ -132,12 +132,13 @@ const CalendarPickerContent = ({ selectedDate, onSelectDate, disablePreviousDate
       color: theme.text.secondary,
     },
     calendarGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
       paddingHorizontal: getSpacing.sm,
     },
+    weekRow: {
+      flexDirection: 'row',
+    },
     dayCell: {
-      width: `${100 / 7}%`,
+      flex: 1,
       aspectRatio: 1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -207,43 +208,45 @@ const CalendarPickerContent = ({ selectedDate, onSelectDate, disablePreviousDate
         ))}
       </View>
 
-      {/* Calendar grid */}
+      {/* Calendar grid — explicit rows of 7 to avoid flex-wrap rounding bugs */}
       <View style={styles.calendarGrid}>
-        {days.map((dayObj, i) => {
-          const today = isToday(dayObj.date);
-          const selected = isSelected(dayObj.date);
-          const disabled = isPastDate(dayObj.date);
-          
-          // Hides both leading (previous month) and trailing (next month) dates
-          const isPaddingDate = !dayObj.isCurrentMonth;
+        {Array.from({ length: 6 }, (_, weekIdx) => (
+          <View key={weekIdx} style={styles.weekRow}>
+            {days.slice(weekIdx * 7, weekIdx * 7 + 7).map((dayObj, i) => {
+              const today = isToday(dayObj.date);
+              const selected = isSelected(dayObj.date);
+              const disabled = isPastDate(dayObj.date);
+              const isPaddingDate = !dayObj.isCurrentMonth;
 
-          return (
-            <View key={i} style={styles.dayCell}>
-              {!isPaddingDate && (
-                <TouchableOpacity
-                  style={[
-                    styles.dayButton,
-                    today && !selected && styles.todayButton,
-                    selected && styles.selectedButton,
-                  ]}
-                  onPress={() => handleDateSelect(dayObj.date)}
-                  disabled={disabled}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      today && !selected && styles.todayText,
-                      selected && styles.selectedText,
-                      disabled && styles.disabledDayText,
-                    ]}
-                  >
-                    {dayObj.date.day}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })}
+              return (
+                <View key={i} style={styles.dayCell}>
+                  {!isPaddingDate && (
+                    <TouchableOpacity
+                      style={[
+                        styles.dayButton,
+                        today && !selected && styles.todayButton,
+                        selected && styles.selectedButton,
+                      ]}
+                      onPress={() => handleDateSelect(dayObj.date)}
+                      disabled={disabled}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          today && !selected && styles.todayText,
+                          selected && styles.selectedText,
+                          disabled && styles.disabledDayText,
+                        ]}
+                      >
+                        {dayObj.date.day}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ))}
       </View>
     </View>
   );

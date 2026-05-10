@@ -2,7 +2,7 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
 /**
- * handleCombinedPayload — process todos, alerts, and notifications in one POST.
+ * handleCombinedPayload — process todos and reminders in one POST.
  *
  * Expected body:
  * {
@@ -16,16 +16,7 @@ const admin = require("firebase-admin");
  *       userId: string,
  *       deliveryMode: "alert" | "push" | "alert+push",
  *       alert?: { id, title, message, scheduledTime, ... },
- *       notification?: { title, body, scheduledTime, data }
- *     }
- *   ],
- *   notifications?: [
- *     {
- *       userId: string,
- *       title: string,
- *       body: string,
- *       scheduledTime?: ISO string,
- *       data?: object
+ *       notification?: { title, body, scheduledTime, screen, data }
  *     }
  *   ]
  * }
@@ -43,7 +34,7 @@ exports.handleCombinedPayload = functions.https.onRequest(async (req, res) => {
     return res.status(405).json({error: "Method not allowed"});
   }
 
-  const {todos, notifications} = req.body || {};
+  const {todos} = req.body || {};
   let alerts = req.body?.alerts;
   const db = admin.firestore();
   const results = {};
@@ -52,26 +43,21 @@ exports.handleCombinedPayload = functions.https.onRequest(async (req, res) => {
   if (todos) {
     const {todoResults, extractedAlerts} = await processTodos(db, todos);
     results.todos = todoResults;
-    // Merge item-level alerts with any top-level alerts for unified processing
+    // Merge item-level alerts with top-level alerts for unified processing
     if (extractedAlerts.length > 0) {
       alerts = [...(alerts || []), ...extractedAlerts];
     }
   }
 
-  // ─── Process alerts / notifications ──────────────────────────────────────
+  // ─── Process reminders ───────────────────────────────────────────────────
   if (Array.isArray(alerts) && alerts.length > 0) {
-    results.alerts = await processAlerts(db, alerts);
+    results.reminders = await processReminders(db, alerts);
   }
 
-  if (Array.isArray(notifications) && notifications.length > 0) {
-    results.notifications = await processNotifications(db, notifications);
-  }
-
-  const hasAny = todos || (alerts?.length) || (notifications?.length);
+  const hasAny = todos || alerts?.length;
   if (!hasAny) {
     return res.status(400).json({
-      error: "Payload must include at least one of: " +
-        "todos, alerts, notifications",
+      error: "Payload must include at least one of: todos, alerts",
     });
   }
 
@@ -220,145 +206,109 @@ async function processTodos(db, todosPayload) {
 }
 
 /**
- * Process alerts — write to masterConfig.alerts and/or
- * masterConfig.notifications. Alerts and notifications created together
- * are cross-referenced via linkedNotificationId / linkedAlertId.
+ * Process reminders — upsert to masterConfig.reminders[].
+ * Notification is embedded inside the reminder object.
+ * Matches existing entries by alert.id — re-sending the same id
+ * updates in place rather than creating a duplicate.
  * @param {object} db - Firestore instance
- * @param {Array} alerts - array of alert payload objects
+ * @param {Array} alerts - array of reminder payload objects
  * @return {Array} results
  */
-async function processAlerts(db, alerts) {
+async function processReminders(db, alerts) {
   const results = [];
-  const arrayUnion = admin.firestore.FieldValue.arrayUnion;
 
+  // Validate and group by userId — one Firestore read per user.
+  const byUser = {};
   for (const payload of alerts) {
-    const {userId, deliveryMode, alert, notification} = payload;
-
-    if (!userId || !deliveryMode) {
+    if (!payload.userId || !payload.deliveryMode) {
       results.push({
         status: "error",
         reason: "userId and deliveryMode required",
       });
       continue;
     }
+    if (!byUser[payload.userId]) byUser[payload.userId] = [];
+    byUser[payload.userId].push(payload);
+  }
 
-    try {
-      const entryResult = {};
-      const isPaired = deliveryMode === "alert+push";
+  for (const [userId, payloads] of Object.entries(byUser)) {
+    const configRef = db.doc(`masterConfig/${userId}`);
+    const configSnap = await configRef.get();
+    const configData = configSnap.exists ? configSnap.data() : {};
+    let currentReminders = configData.reminders || [];
 
-      // Pre-generate IDs so alert and notification can cross-reference
-      const alertId = alert?.id ||
-        db.collection("masterConfig").doc().id;
-      const notifId = db.collection("masterConfig").doc().id;
+    for (const payload of payloads) {
+      const {deliveryMode, alert, notification} = payload;
 
-      if (deliveryMode === "alert" || isPaired) {
-        if (!alert) {
-          results.push({userId, status: "error",
-            reason: "alert object required"});
-          continue;
-        }
-
-        const alertData = {
-          ...alert,
-          id: alertId,
-          acknowledged: alert.acknowledged ?? false,
-          createdAt: alert.createdAt || new Date().toISOString(),
-          ...(isPaired && {linkedNotificationId: notifId}),
-        };
-
-        await db.doc(`masterConfig/${userId}`).set(
-            {alerts: arrayUnion(alertData)},
-            {merge: true},
+      try {
+        const reminderId = alert?.id ||
+          db.collection("masterConfig").doc().id;
+        const existing = currentReminders.find(
+            (r) => r.id === reminderId,
         );
 
-        console.log(`✅ Alert "${alertId}" → masterConfig/${userId}`);
-        entryResult.alert = {status: "created", id: alertId};
-      }
-
-      if (deliveryMode === "push" || isPaired) {
-        if (!notification) {
-          results.push({userId, status: "error",
-            reason: "notification object required"});
-          continue;
-        }
-
-        const notificationData = {
-          id: notifId,
+        // Embed notification when deliveryMode includes push.
+        const hasNotif =
+          deliveryMode === "push" || deliveryMode === "alert+push";
+        const notifData = hasNotif && notification ? {
           title: notification.title,
           body: notification.body,
           scheduledTime: notification.scheduledTime ||
-            new Date().toISOString(),
-          createdAt: new Date().toISOString(),
+            alert?.scheduledTime || new Date().toISOString(),
+          screen: notification.screen || null,
+          handlerName: notification.handlerName || null,
+          handlerParams: notification.handlerParams || null,
           data: notification.data || {app: "checklist-app"},
-          ...(isPaired && {linkedAlertId: alertId}),
+        } : undefined;
+
+        const reminderData = {
+          ...(existing || {}),
+          ...(alert || {}),
+          id: reminderId,
+          deliveryMode,
+          acknowledgedAt: alert?.acknowledgedAt ??
+            existing?.acknowledgedAt ?? null,
+          createdAt: existing?.createdAt ||
+            alert?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...(notifData !== undefined && {notification: notifData}),
         };
+        // Strip legacy cross-reference fields if present.
+        delete reminderData.linkedNotificationId;
+        delete reminderData.acknowledged;
 
-        await db.doc(`masterConfig/${userId}`).set(
-            {notifications: arrayUnion(notificationData)},
-            {merge: true},
-        );
-
-        console.log(
-            `✅ Notification "${notifId}" → masterConfig/${userId}`,
-        );
-        entryResult.notification = {status: "created", id: notifId};
+        if (existing) {
+          currentReminders = currentReminders.map((r) =>
+            r.id === reminderId ? reminderData : r,
+          );
+          results.push({
+            userId, deliveryMode,
+            reminder: {status: "updated", id: reminderId},
+          });
+          console.log(`✏️ Reminder "${reminderId}" updated`);
+        } else {
+          currentReminders = [...currentReminders, reminderData];
+          results.push({
+            userId, deliveryMode,
+            reminder: {status: "created", id: reminderId},
+          });
+          console.log(`✅ Reminder "${reminderId}" created`);
+        }
+      } catch (err) {
+        console.error(`❌ Reminder for ${userId}:`, err.message);
+        results.push({userId, status: "error", reason: err.message});
       }
-
-      results.push({userId, deliveryMode, ...entryResult});
-    } catch (err) {
-      console.error(`❌ Alert for ${userId}:`, err.message);
-      results.push({userId, status: "error", reason: err.message});
-    }
-  }
-
-  return results;
-}
-
-/**
- * Process standalone notifications — write to masterConfig.notifications.
- * @param {object} db - Firestore instance
- * @param {Array} notifications - array of notification objects
- * @return {Array} results
- */
-async function processNotifications(db, notifications) {
-  const results = [];
-  const arrayUnion = admin.firestore.FieldValue.arrayUnion;
-
-  for (const notif of notifications) {
-    const {userId, title, body, scheduledTime, data} = notif;
-
-    if (!userId || !title || !body) {
-      results.push({
-        status: "error",
-        reason: "userId, title, and body required",
-      });
-      continue;
     }
 
+    // Single write per user.
     try {
-      const notifId = db.collection("masterConfig").doc().id;
-
-      const notificationData = {
-        id: notifId,
-        title,
-        body,
-        scheduledTime: scheduledTime || new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        data: data || {app: "checklist-app"},
-      };
-
-      await db.doc(`masterConfig/${userId}`).set(
-          {notifications: arrayUnion(notificationData)},
+      await configRef.set(
+          {reminders: currentReminders},
           {merge: true},
       );
-
-      console.log(
-          `✅ Notification "${notifId}" → masterConfig/${userId}`,
-      );
-      results.push({userId, status: "created", id: notifId});
+      console.log(`💾 masterConfig/${userId} reminders written`);
     } catch (err) {
-      console.error(`❌ Notification for ${userId}:`, err.message);
-      results.push({userId, status: "error", reason: err.message});
+      console.error(`❌ Write failed for ${userId}:`, err.message);
     }
   }
 
