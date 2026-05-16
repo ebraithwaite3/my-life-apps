@@ -124,6 +124,14 @@ const TemplatesScreen = () => {
           createdAt: new Date().toISOString(),
         };
 
+    // Explicitly remove reminder fields when cleared — the builder omits them
+    // when null, so the spread above leaves the old values intact without this.
+    if (!template.defaultReminderTime) {
+      delete templateToSave.defaultReminderTime;
+      delete templateToSave.defaultIsRecurring;
+      delete templateToSave.defaultRecurringConfig;
+    }
+
     const success = await saveTemplate(templateToSave, templateContext);
     
     if (success) {

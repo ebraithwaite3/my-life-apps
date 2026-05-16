@@ -1,4 +1,5 @@
 import React, { useMemo, useEffect, useState, useRef, useCallback } from "react";
+import RemindersModal from "../components/reminders/RemindersModal";
 import { SharedCalendarScreen } from "@my-apps/screens";
 import {
   ChecklistModal,
@@ -58,6 +59,9 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
     groups,
     addingToEvent,
     setAddingToEvent,
+    masterConfigReminders,
+    jackMasterConfig,
+    ellieMasterConfig,
   } = useData();
   console.log("Route params:", route.params, "Adding to event:", addingToEvent);
 
@@ -163,6 +167,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
 
   //console.log("🔍 Calendar screen allPinned:", allPinned);
   console.log("🔍 Calendar screen allPinned length:", allPinned?.length);
+  const [showRemindersModal, setShowRemindersModal] = useState(false);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
   const [selectedCalendarIdForMoving, setSelectedCalendarIdForMoving] = useState(null);
   const [carryoverItems, setCarryoverItems] = useState([]);
@@ -547,6 +552,7 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         showKidsBanners={showKidsBanners}
         isAdmin={isAdmin}
         onClaudePress={user?.admin ? handleClaudePress : undefined}
+        onRemindersPress={isAdmin ? () => setShowRemindersModal(true) : undefined}
         onToggleKidsBanners={() => setShowKidsBanners(v => !v)}
         onCreateToDo={handleCreateToDo}
         onKidBannerPress={(banner) => {
@@ -660,6 +666,18 @@ const ChecklistCalendarScreen = ({ navigation, route }) => {
         isUserAdmin={user?.admin === true}
         useQuickAddMode={true}
         pinnedChecklists={allPinned}
+      />
+
+      {/* Reminders Modal */}
+      <RemindersModal
+        visible={showRemindersModal}
+        onClose={() => setShowRemindersModal(false)}
+        selectedDate={selectedDate}
+        isAdmin={isAdmin}
+        ericReminders={masterConfigReminders || []}
+        jackReminders={jackMasterConfig?.reminders || []}
+        ellieReminders={ellieMasterConfig?.reminders || []}
+        ericUserId={user?.userId}
       />
     </>
   );

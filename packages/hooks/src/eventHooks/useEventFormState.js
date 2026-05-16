@@ -322,20 +322,7 @@ export const useEventFormState = ({
       setSelectedCalendarId('internal');
       setIsAllDay(true);
       const eventDay = DateTime.fromJSDate(startDate);
-      const firstReminder = eventDay.set({ hour: 17, minute: 0, second: 0, millisecond: 0 });
-      const reminderISO = firstReminder.toISO();
-      setReminderMinutes({
-        scheduledFor: reminderISO,
-        isRecurring: true,
-        recurringConfig: {
-          intervalSeconds: 3600,
-          totalOccurrences: 5,
-          currentOccurrence: 1,
-          completedCancelsRecurring: true,
-          nextScheduledFor: reminderISO,
-          lastSentAt: null,
-        },
-      });
+      setReminderMinutes(null);
 
       // Compute carryover from yesterday's To Do checklist
       const yesterday = eventDay.minus({ days: 1 }).toISODate();

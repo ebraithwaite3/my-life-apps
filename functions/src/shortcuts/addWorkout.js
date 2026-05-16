@@ -291,34 +291,57 @@ exports.addWorkout = onRequest(
 
         console.log("✅ Event stored in Firestore:", fullEventId);
 
-        // 🔟 Schedule notification if reminder exists
+        // 🔟 Schedule reminder in masterConfig.reminders[] if reminder exists
         if (reminderTime && checklistTemplate) {
-          console.log("📲 Scheduling reminder notification...");
+          console.log("📲 Scheduling reminder in masterConfig...");
 
-          const notificationData = {
-            userId: ERIC_USER_ID,
-            eventId: fullEventId,
-            notificationId: checklistTemplate.id, // Link to checklist
+          const reminderId = `${fullEventId}-checklist-${checklistTemplate.id}`;
+          const now = new Date().toISOString();
+          const newReminder = {
+            id: reminderId,
+            deliveryMode: "push",
             title: `Reminder: ${checklistTemplate.name}`,
-            body: checklistTemplate.name,
-            scheduledFor: admin.firestore.Timestamp.fromDate(reminderTime),
-            createdAt: admin.firestore.Timestamp.now(),
-            sent: false,
-            data: {
+            message: checklistTemplate.name,
+            eventId: fullEventId,
+            scheduledTime: reminderTime.toISOString(),
+            acknowledgedAt: null,
+            notification: {
+              title: `Reminder: ${checklistTemplate.name}`,
+              body: checklistTemplate.name,
               screen: "Calendar",
-              eventId: fullEventId,
-              checklistId: checklistTemplate.id,
-              app: "checklist-app",
-              date: startDate.toISOString(),
+              handlerName: null,
+              handlerParams: null,
+              data: {
+                screen: "Calendar",
+                eventId: fullEventId,
+                checklistId: checklistTemplate.id,
+                app: "checklist-app",
+                date: startDate.toISOString(),
+              },
             },
+            paused: false,
+            pausedUntil: null,
+            reminderType: "oneTime",
+            recurringIntervalMinutes: null,
+            recurringIntervalDays: null,
+            recurringSchedule: null,
+            createdAt: now,
+            updatedAt: now,
+            deletable: true,
           };
 
-          await admin
-              .firestore()
-              .collection("pendingNotifications")
-              .add(notificationData);
+          const configRef = admin.firestore()
+              .doc(`masterConfig/${ERIC_USER_ID}`);
+          const configSnap = await configRef.get();
+          const existing = configSnap.exists ?
+              (configSnap.data().reminders || []) :
+              [];
+          const updated = existing.some((r) => r.id === reminderId) ?
+              existing.map((r) => r.id === reminderId ? newReminder : r) :
+              [...existing, newReminder];
 
-          console.log("✅ Reminder notification scheduled");
+          await configRef.set({reminders: updated}, {merge: true});
+          console.log("✅ Reminder scheduled in masterConfig:", reminderId);
         }
 
         // Success response (Siri-friendly)

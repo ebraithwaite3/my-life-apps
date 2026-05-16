@@ -46,7 +46,17 @@ const ChecklistContent = ({
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const { isUserAdmin, user, groups } = useData();
   const [items, setItems] = useState([]);
+  const [collapsedIds, setCollapsedIds] = useState(new Set());
+  const toggleCollapsed = (id) =>
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const reorderTimeoutRef = useRef(null);
+  const [undoSnapshot, setUndoSnapshot] = useState(null);
+  const undoTimerRef = useRef(null);
 
   // Multiple choice modal state
   const [showMultiChoiceModal, setShowMultiChoiceModal] = useState(false);
@@ -88,6 +98,13 @@ const ChecklistContent = ({
       setItems(reordered);
     }
   }, [checklist]);
+
+  useEffect(() => {
+    return () => {
+      if (reorderTimeoutRef.current) clearTimeout(reorderTimeoutRef.current);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
 
   const reorderItems = (itemsToReorder) => {
     // Sort sub-items first (if they exist)
@@ -264,7 +281,20 @@ const ChecklistContent = ({
     return count;
   };
 
+  const handleUndo = () => {
+    if (!undoSnapshot) return;
+    if (reorderTimeoutRef.current) clearTimeout(reorderTimeoutRef.current);
+    setItems(undoSnapshot);
+    if (onItemToggle) onItemToggle(undoSnapshot);
+    setUndoSnapshot(null);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  };
+
   const toggleItem = (itemId) => {
+    setUndoSnapshot(items);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoSnapshot(null), 6000);
+
     let updatedItems = items.map((item) => {
       if (item.subItems && item.subItems.length > 0) {
         // Depth-1 match
@@ -789,6 +819,20 @@ const ChecklistContent = ({
       marginLeft: getSpacing.xs,
       fontWeight: "600",
     },
+    undoButton: {
+      marginRight: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 12,
+      backgroundColor: "transparent",
+      borderWidth: 1,
+      borderColor: theme.primary,
+    },
+    undoText: {
+      color: theme.primary,
+      fontSize: 13,
+      fontWeight: "600",
+    },
   });
 
   return (
@@ -837,12 +881,19 @@ const ChecklistContent = ({
 
       {/* Sticky Progress Bar */}
       {items.length > 0 && !selectionMode && (
-        <View style={styles.progressBarContainer}>
-          <ProgressBar
-            completed={completedCount}
-            total={totalCount}
-            showCount={false}
-          />
+        <View style={[styles.progressBarContainer, { flexDirection: "row", alignItems: "center" }]}>
+          {undoSnapshot && (
+            <TouchableOpacity onPress={handleUndo} style={styles.undoButton}>
+              <Text style={styles.undoText}>Undo</Text>
+            </TouchableOpacity>
+          )}
+          <View style={{ flex: 1 }}>
+            <ProgressBar
+              completed={completedCount}
+              total={totalCount}
+              showCount={false}
+            />
+          </View>
         </View>
       )}
 
@@ -878,6 +929,8 @@ const ChecklistContent = ({
                 selectedItems={selectedItems}
                 onNavigateToLinkedChecklist={onNavigateToLinkedChecklist}
                 warningItemIds={warningItemIds}
+                isCollapsed={collapsedIds.has(item.id)}
+                onToggleCollapse={toggleCollapsed}
               />
             ))}
           </>

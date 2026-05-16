@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/src/AuthContext';
 import { useData } from '../../../contexts/src/DataContext';
 import { useChecklistData } from '../../../contexts/src/ChecklistDataContext';
@@ -79,24 +79,22 @@ export const usePinnedChecklists = () => {
     const checklistRef = doc(db, 'pinnedChecklists', targetId);
 
     try {
-      // Update the checklist
       const updated = {
         ...updatedChecklist,
         updatedAt: new Date().toISOString(),
-        // Preserve metadata from original
         ...(isGroupChecklist && {
           groupId: originalChecklist.groupId,
           isGroupChecklist: true,
         }),
       };
 
-      // Remove old version and add updated version (Firebase atomic operation)
-      await updateDoc(checklistRef, {
-        pinned: arrayRemove(originalChecklist),
-      });
+      // Read-modify-write by id to avoid Firestore array deep-equality mismatch
+      const snap = await getDoc(checklistRef);
+      const existing = snap.exists() ? (snap.data().pinned || []) : [];
+      const updatedPinned = existing.map((c) => c.id === updated.id ? updated : c);
 
       await updateDoc(checklistRef, {
-        pinned: arrayUnion(updated),
+        pinned: updatedPinned,
         updatedAt: new Date().toISOString(),
       });
 

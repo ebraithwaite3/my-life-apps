@@ -18,6 +18,8 @@ const ChecklistItemRow = ({
   selectedItems = new Set(),
   onNavigateToLinkedChecklist,
   warningItemIds = new Set(),
+  isCollapsed = false,
+  onToggleCollapse = null,
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
 
@@ -356,12 +358,29 @@ const handlePress = () => {
                   />
                 </TouchableOpacity>
               )}
+
+              {/* Collapse chevron for group items */}
+              {isGroup && !selectionMode && onToggleCollapse && subItems.length > 0 && (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onToggleCollapse(item.id);
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                    size={20}
+                    color={theme.text.secondary}
+                  />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </TouchableOpacity>
 
         {/* Sub-items (indented) */}
-        {subItems.map(subItem => (
+        {(!isCollapsed || !isGroup) && subItems.map(subItem => (
           <View key={subItem.id} style={styles.indentedRow}>
             <ChecklistItemRow
               item={subItem}

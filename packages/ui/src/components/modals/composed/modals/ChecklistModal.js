@@ -6,8 +6,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { DateTime } from 'luxon';
 import { useNavigation } from "@react-navigation/native";
-import { useTheme } from "@my-apps/contexts";
+import { useTheme, useData } from "@my-apps/contexts";
 import { calculateChecklistProgress, isChecklistComplete } from "@my-apps/utils";
 import { showSuccessToast } from "@my-apps/utils";
 import ModalWrapper from "../../base/ModalWrapper";
@@ -18,6 +19,41 @@ import PillSelectionButton from "../../../buttons/PillSelectionButton";
 import { generateUUID } from "@my-apps/utils";
 import { useNotificationHandlers, useNotifications } from "@my-apps/hooks";
 import { useAuth } from "@my-apps/contexts";
+import { updateDocument } from "@my-apps/services";
+
+const DAY_TO_WEEKDAY = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
+
+const computeNextOccurrence = (reminder) => {
+  const base = reminder.scheduledTime
+    ? DateTime.fromISO(reminder.scheduledTime, { zone: 'utc' })
+    : DateTime.now();
+  if (reminder.recurringIntervalMinutes) {
+    return base.plus({ minutes: reminder.recurringIntervalMinutes }).toUTC().toISO();
+  }
+  if (reminder.recurringIntervalDays) {
+    return base.plus({ days: reminder.recurringIntervalDays }).toUTC().toISO();
+  }
+  if (reminder.recurringSchedule?.length) {
+    const candidates = reminder.recurringSchedule
+      .map(({ day, time, timezone }) => {
+        const targetWeekday = DAY_TO_WEEKDAY[day];
+        if (!targetWeekday) return null;
+        const [h, m] = (time || '09:00').split(':').map(Number);
+        const tz = timezone || 'America/New_York';
+        const now = DateTime.now().setZone(tz);
+        const candidate = now.set({ hour: h, minute: m, second: 0, millisecond: 0 });
+        const daysUntil = (targetWeekday - now.weekday + 7) % 7;
+        if (daysUntil === 0 && candidate <= now) {
+          return candidate.plus({ days: 7 }).toUTC().toISO();
+        }
+        return candidate.plus({ days: daysUntil }).toUTC().toISO();
+      })
+      .filter(Boolean);
+    if (!candidates.length) return null;
+    return candidates.sort()[0];
+  }
+  return null;
+};
 
 const ChecklistModal = ({
   // From calendarState
@@ -61,6 +97,7 @@ const ChecklistModal = ({
 
   const { theme, getSpacing } = useTheme();
   const { db } = useAuth();
+  const { masterConfigReminders } = useData();
   const navigation = useNavigation();
 
   const handleNavigateToLinkedChecklist = ({ type, id, searchTerm }) => {
@@ -276,6 +313,56 @@ const ChecklistModal = ({
   const handleInternalUpdateFromCompleteMode = async () => {
     setSaving(true);
     try {
+    // Diff to find items that just flipped to completed
+    const oldItems = initialChecklist?.items || [];
+    const newlyCompletedIds = new Set(
+      updatedItems
+        .filter((item) => {
+          const old = oldItems.find((o) => o.id === item.id);
+          return item.completed && old && !old.completed;
+        })
+        .map((item) => item.id)
+    );
+
+    if (newlyCompletedIds.size > 0 && masterConfigReminders?.length) {
+      const matched = masterConfigReminders.filter(
+        (r) => r.linkedItem?.itemId && newlyCompletedIds.has(r.linkedItem.itemId)
+      );
+      if (matched.length > 0) {
+        const now = new Date().toISOString();
+        let updatedReminders = [...masterConfigReminders];
+        for (const reminder of matched) {
+          if (reminder.onTodoComplete === 'delete') {
+            updatedReminders = updatedReminders.filter((r) => r.id !== reminder.id);
+          } else if (reminder.onTodoComplete === 'pause') {
+            updatedReminders = updatedReminders.map((r) =>
+              r.id !== reminder.id ? r : { ...r, paused: true, acknowledgedAt: now }
+            );
+          } else if (reminder.onTodoComplete === 'reschedule') {
+            const nextTime = computeNextOccurrence(reminder);
+            if (nextTime) {
+              updatedReminders = updatedReminders.map((r) =>
+                r.id !== reminder.id ? r : {
+                  ...r,
+                  scheduledTime: nextTime,
+                  acknowledgedAt: null,
+                  ...(r.notification && { notification: { ...r.notification, scheduledTime: nextTime } }),
+                }
+              );
+            }
+          }
+        }
+        const userId = user?.userId;
+        if (userId) {
+          try {
+            await updateDocument('masterConfig', userId, { reminders: updatedReminders });
+          } catch (err) {
+            console.error('❌ onTodoComplete: failed to update reminders:', err);
+          }
+        }
+      }
+    }
+
     const updatedChecklist = {
       ...selectedChecklist,
       items: updatedItems,

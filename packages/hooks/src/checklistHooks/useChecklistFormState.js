@@ -84,7 +84,7 @@ export const useChecklistFormState = (checklist, prefilledTitle, isTemplate, isE
           requiredForScreenTime: item.requiredForScreenTime ?? false,
           requiresParentApproval: item.requiresParentApproval ?? false,
           yesNoConfig: resetYesNoConfig(item.yesNoConfig),
-          subItems: (item.subItems || []).map(sub => ({
+          subItems: (item.subItems || []).filter(sub => !sub.completed).map(sub => ({
             ...sub,
             id: uuidv4(),
             completed: false,

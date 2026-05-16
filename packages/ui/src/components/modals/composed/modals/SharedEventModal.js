@@ -162,7 +162,7 @@ const SharedEventModal = ({
           yesNoConfig: item.yesNoConfig
             ? { ...item.yesNoConfig, answered: false, answer: null }
             : null,
-          subItems: (item.subItems || []).map((sub) => ({
+          subItems: (item.subItems || []).filter((sub) => !sub.completed).map((sub) => ({
             ...sub,
             completed: false,
             yesNoConfig: sub.yesNoConfig

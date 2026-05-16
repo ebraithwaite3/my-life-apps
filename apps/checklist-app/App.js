@@ -393,6 +393,30 @@ const MainApp = () => {
       } catch (err) {
         console.error("❌ pause_indefinitely: failed:", err);
       }
+
+    } else if (action === "done_and_pause") {
+      if (activeAlert.linkedItem) {
+        try {
+          await markLinkedItemComplete(activeAlert.linkedItem);
+        } catch (err) {
+          console.error("❌ done_and_pause: failed to mark item complete:", err);
+        }
+      }
+      try {
+        await updateReminders(
+          masterConfigReminders.map((r) =>
+            r.id !== activeAlert.id ? r : {
+              ...r,
+              paused: true,
+              pausedUntil: null,
+              acknowledgedAt: new Date().toISOString(),
+            }
+          ),
+        );
+        console.log(`✅ Done+paused "${activeAlert.id}"`);
+      } catch (err) {
+        console.error("❌ done_and_pause: failed to pause reminder:", err);
+      }
     }
 
     advanceQueue();

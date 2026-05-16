@@ -90,6 +90,7 @@ const SharedCalendarScreen = ({
   isAdmin = false,
   onCreateToDo,
   onClaudePress,
+  onRemindersPress,
 
   // Loading
   isDeleting = false,
@@ -356,13 +357,21 @@ const SharedCalendarScreen = ({
       });
     }
 
-    // Admin-only: Claude prompt chip (day view only)
+    // Admin-only: Claude prompt chip (day view only) — icon-only to save chip row space
     if (isAdmin && selectedView === "day" && onClaudePress) {
       chips.push({
-        label: "Claude",
         icon: "sparkles-outline",
         active: false,
         onPress: onClaudePress,
+      });
+    }
+
+    // Admin-only: Reminders chip (day view only) — icon-only to save chip row space
+    if (isAdmin && selectedView === "day" && onRemindersPress) {
+      chips.push({
+        icon: "alarm-outline",
+        active: false,
+        onPress: onRemindersPress,
       });
     }
 
@@ -378,6 +387,7 @@ const SharedCalendarScreen = ({
     onToggleKidsBanners,
     onCreateToDo,
     onClaudePress,
+    onRemindersPress,
   ]);
 
   // Build PageHeader subtext for day view

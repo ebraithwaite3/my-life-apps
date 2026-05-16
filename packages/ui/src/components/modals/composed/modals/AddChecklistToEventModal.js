@@ -139,7 +139,7 @@ const AddChecklistToEventModal = ({
           yesNoConfig: item.yesNoConfig
             ? { ...item.yesNoConfig, answered: false, answer: null }
             : null,
-          subItems: (item.subItems || []).map((sub) => ({
+          subItems: (item.subItems || []).filter((sub) => !sub.completed).map((sub) => ({
             ...sub,
             completed: false,
             yesNoConfig: sub.yesNoConfig
@@ -147,7 +147,17 @@ const AddChecklistToEventModal = ({
               : null,
           })),
         }));
-      console.log('[AddChecklist] To Do carryover — raw:', carryoverItems.length, '| template names:', [...templateNames], '| merging:', carryoverToMerge.length, carryoverToMerge.map(i => i.name));
+      console.log('[AddChecklist] To Do carryover — raw:', carryoverItems.length, '| merging:', carryoverToMerge.length, carryoverToMerge.map(i => i.name));
+      carryoverItems.forEach(item => {
+        if (item.subItems?.length) {
+          console.log('[AddChecklist] subItems for', item.name, ':', JSON.stringify(item.subItems.map(s => ({ name: s.name, completed: s.completed }))));
+        }
+      });
+      carryoverToMerge.forEach(item => {
+        if (item.subItems?.length || item.itemType === 'group') {
+          console.log('[AddChecklist] AFTER filter subItems for', item.name, ':', JSON.stringify(item.subItems?.map(s => ({ name: s.name, completed: s.completed }))));
+        }
+      });
     } else {
       console.log('[AddChecklist] Skipping carryover — isToDoEvent:', isToDoEvent, '| carryoverItems:', carryoverItems.length);
     }

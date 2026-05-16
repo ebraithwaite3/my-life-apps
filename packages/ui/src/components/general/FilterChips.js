@@ -89,17 +89,19 @@ const FilterChips = ({ filters, marginTop = 0, chipMarginBottom = 0 }) => {
               name={iconName}
               size={16}
               color={iconColor}
-              style={styles.iconStyle}
+              style={filter.label ? styles.iconStyle : undefined}
             />
-            <Text
-              style={
-                (isAction || filter.active)
-                  ? styles.labelActive
-                  : styles.labelInactive
-              }
-            >
-              {filter.label}
-            </Text>
+            {filter.label ? (
+              <Text
+                style={
+                  (isAction || filter.active)
+                    ? styles.labelActive
+                    : styles.labelInactive
+                }
+              >
+                {filter.label}
+              </Text>
+            ) : null}
           </TouchableOpacity>
         );
       })}
