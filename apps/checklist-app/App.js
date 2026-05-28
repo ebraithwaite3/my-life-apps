@@ -67,11 +67,73 @@ function parseDuration(duration) {
   return { minutes: num };
 }
 
+function roundUpToTenMinutes(date) {
+  const TEN_MIN_MS = 10 * 60 * 1000;
+  return new Date(
+    Math.ceil((date.getTime() - 5 * 60 * 1000) / TEN_MIN_MS) * TEN_MIN_MS,
+  );
+}
+
+function computeNextScheduledTime(reminder) {
+  const { recurrence } = reminder;
+  if (!recurrence) return null;
+
+  const now = new Date();
+
+  if (recurrence.scheduleByDay) {
+    const candidates = recurrence.scheduleByDay.map(({ day, time, timezone }) => {
+      const tz = timezone || "America/New_York";
+      const nowInZone = DateTime.fromJSDate(now).setZone(tz);
+      const [hour, minute] = time.split(":").map(Number);
+      let candidate = nowInZone.set({ hour, minute, second: 0, millisecond: 0 });
+      if (candidate <= nowInZone) candidate = candidate.plus({ days: 1 });
+      let iterations = 0;
+      while (
+        candidate.toFormat("EEE").toUpperCase().slice(0, 2) !== day &&
+        ++iterations <= 14
+      ) {
+        candidate = candidate.plus({ days: 1 });
+      }
+      return candidate;
+    });
+    const soonest = candidates.reduce((min, c) => (c < min ? c : min));
+    return soonest.toISO();
+  }
+
+  if (recurrence.everyNDays) {
+    const { n, time, timezone } = recurrence.everyNDays;
+    const tz = timezone || "America/New_York";
+    const [hour, minute] = time.split(":").map(Number);
+    return DateTime.fromJSDate(now)
+      .setZone(tz)
+      .plus({ days: n })
+      .set({ hour, minute, second: 0, millisecond: 0 })
+      .toISO();
+  }
+
+  if (recurrence.everyNMinutes) {
+    return roundUpToTenMinutes(
+      new Date(now.getTime() + recurrence.everyNMinutes.n * 60_000),
+    ).toISOString();
+  }
+
+  return null;
+}
+
 // Main app component
 const MainApp = () => {
   const { isDarkMode, theme } = useTheme();
   const { logout, user: authUser } = useAuth();
-  const { masterConfigReminders, user: dataUser } = useData();
+  const {
+    masterConfigReminders,
+    masterConfigReminderDefaults,
+    jackMasterConfig,
+    jackMasterConfigReminderDefaults,
+    ellieMasterConfig,
+    ellieMasterConfigReminderDefaults,
+    user: dataUser,
+    getActivitiesForDay,
+  } = useData();
 
   // Register this app when user logs in
   const { db } = useAuth();
@@ -111,10 +173,9 @@ const MainApp = () => {
 
     const newReminders = masterConfigReminders.filter((r) => {
       if (r.paused) return false;
-      if (!r.scheduledTime || new Date(r.scheduledTime) > now) return false;
-      // Pending if never acknowledged, or last acknowledgement is before current scheduledTime
-      const isPending = !r.acknowledgedAt ||
-        new Date(r.acknowledgedAt) < new Date(r.scheduledTime);
+      if (!r.scheduledAlertTime) return false;
+      const isPending =
+        new Date(r.scheduledAlertTime) < now && r.acknowledgedAt === null;
       if (!isPending) return false;
       if (dismissedIdsRef.current.has(r.id)) return false;
       if (alertQueueRef.current.some((q) => q.id === r.id)) return false;
@@ -263,7 +324,8 @@ const MainApp = () => {
     if (!activeAlert) return;
     const { action } = button;
 
-    if (action === "reschedule") {
+    // LEGACY: action === "reschedule" (old schema — no button.scheduledTime)
+    if (action === "reschedule" && !button.scheduledTime) {
       const tz = button.timezone || "America/New_York";
       const [h, m] = (button.rescheduleTime || "15:00").split(":").map(Number);
 
@@ -309,33 +371,67 @@ const MainApp = () => {
       const durationMs = dur.endsWith("d") ? num * 86400000
         : dur.endsWith("h") ? num * 3600000
         : num * 60000;
-      const TEN_MIN = 600000;
-      const newTime = new Date(
-        Math.ceil((Date.now() + durationMs - 5 * 60000) / TEN_MIN) * TEN_MIN
+      const snoozeTarget = roundUpToTenMinutes(
+        new Date(Date.now() + durationMs),
       ).toISOString();
-
-      const modeUpdate = button.onComplete === "set_mode_evening" ? { mode: "evening" }
-        : button.onComplete === "set_mode_morning" ? { mode: "morning" }
-        : {};
 
       const updatedReminders = masterConfigReminders.map((r) => {
         if (r.id !== activeAlert.id) return r;
-        const updated = { ...r, scheduledTime: newTime, ...modeUpdate };
-        if (button.affectsLinked && r.notification) {
-          updated.notification = { ...r.notification, scheduledTime: newTime };
-        }
-        return updated;
+        return {
+          ...r,
+          scheduledTime: snoozeTarget,
+          scheduledAlertTime: snoozeTarget,
+          acknowledgedAt: null,
+          ...(r.notification && {
+            notification: { ...r.notification, scheduledTime: snoozeTarget },
+          }),
+        };
       });
 
       try {
         await updateReminders(updatedReminders);
-        console.log(`✅ Snoozed "${activeAlert.id}" → ${newTime}`);
+        console.log(`✅ Snoozed "${activeAlert.id}" → ${snoozeTarget}`);
       } catch (err) {
         console.error("❌ Snooze failed:", err);
       }
 
     } else if (action === "done") {
-      if (activeAlert.linkedItem) {
+      // linkedTitle is the new schema explicit link; fall back to title only when
+      // no explicit link of either kind is set
+      const checklistMatchKey = activeAlert.linkedTitle ||
+        (!activeAlert.linkedItem ? activeAlert.title : null);
+
+      if (checklistMatchKey) {
+        try {
+          const today = DateTime.now().toISODate();
+          const todayEvents = getActivitiesForDay(today);
+          const toDo = todayEvents.find(
+            (e) => e.title?.trim().toLowerCase().includes("to do"),
+          );
+          if (toDo) {
+            const checklist = toDo.activities?.find(
+              (a) => a.activityType === "checklist",
+            );
+            const match = checklist?.items?.find(
+              (i) => !i.completed &&
+                i.name?.trim().toLowerCase() === checklistMatchKey.trim().toLowerCase(),
+            );
+            if (match) {
+              const monthKey = DateTime.fromISO(toDo.startTime).toFormat("yyyy-LL");
+              await markLinkedItemComplete({
+                userId: dataUser?.userId || authUser?.uid,
+                monthKey,
+                eventId: toDo.eventId,
+                itemId: match.id,
+              });
+              console.log(`✅ done: matched "${checklistMatchKey}" → item "${match.id}"`);
+            }
+          }
+        } catch (err) {
+          console.error("❌ done: checklist match failed:", err);
+        }
+      } else if (activeAlert.linkedItem) {
+        // LEGACY: explicit item reference (old schema)
         try {
           await markLinkedItemComplete(activeAlert.linkedItem);
         } catch (err) {
@@ -343,14 +439,93 @@ const MainApp = () => {
         }
       }
       try {
-        await updateReminders(
-          masterConfigReminders.filter((r) => r.id !== activeAlert.id),
-        );
-        console.log(`✅ Done: deleted reminder "${activeAlert.id}"`);
+        const isRecurring = !!(activeAlert.recurrence && !activeAlert.recurrence.oneTime);
+        if (isRecurring) {
+          const nextTime = computeNextScheduledTime(activeAlert);
+          if (nextTime) {
+            await updateReminders(
+              masterConfigReminders.map((r) =>
+                r.id !== activeAlert.id ? r : {
+                  ...r,
+                  scheduledTime: nextTime,
+                  scheduledAlertTime: nextTime,
+                  acknowledgedAt: null,
+                  ...(r.notification && {
+                    notification: { ...r.notification, scheduledTime: nextTime },
+                  }),
+                }
+              ),
+            );
+            console.log(`✅ Done: advanced "${activeAlert.id}" → ${nextTime}`);
+          } else {
+            await updateReminders(
+              masterConfigReminders.filter((r) => r.id !== activeAlert.id),
+            );
+            console.log(`✅ Done: deleted unresolvable recurring reminder "${activeAlert.id}"`);
+          }
+        } else {
+          await updateReminders(
+            masterConfigReminders.filter((r) => r.id !== activeAlert.id),
+          );
+          console.log(`✅ Done: deleted reminder "${activeAlert.id}"`);
+        }
       } catch (err) {
-        console.error("❌ done: failed to delete reminder:", err);
+        console.error("❌ done: failed to update reminder:", err);
       }
 
+    } else if (action === "remindTomorrow") {
+      const tz = "America/New_York";
+      const variant = button.variant || "morning";
+      const time = activeAlert.actions?.remindTomorrow?.[variant] || button.time || "09:00";
+      const [hour, minute] = time.split(":").map(Number);
+      const target = DateTime.now()
+        .setZone(tz)
+        .plus({ days: 1 })
+        .set({ hour, minute, second: 0, millisecond: 0 })
+        .toISO();
+
+      const updatedReminders = masterConfigReminders.map((r) => {
+        if (r.id !== activeAlert.id) return r;
+        return {
+          ...r,
+          scheduledTime: target,
+          scheduledAlertTime: target,
+          acknowledgedAt: null,
+          ...(r.notification && {
+            notification: { ...r.notification, scheduledTime: target },
+          }),
+        };
+      });
+
+      try {
+        await updateReminders(updatedReminders);
+        console.log(`✅ Remind tomorrow: "${activeAlert.id}" → ${target}`);
+      } catch (err) {
+        console.error("❌ remindTomorrow failed:", err);
+      }
+
+    } else if (action === "reschedule" && button.scheduledTime) {
+      const newTime = button.scheduledTime;
+      const updatedReminders = masterConfigReminders.map((r) => {
+        if (r.id !== activeAlert.id) return r;
+        return {
+          ...r,
+          scheduledTime: newTime,
+          scheduledAlertTime: newTime,
+          acknowledgedAt: null,
+          ...(r.notification && {
+            notification: { ...r.notification, scheduledTime: newTime },
+          }),
+        };
+      });
+      try {
+        await updateReminders(updatedReminders);
+        console.log(`✅ Reschedule: "${activeAlert.id}" → ${newTime}`);
+      } catch (err) {
+        console.error("❌ reschedule failed:", err);
+      }
+
+    // LEGACY: action === "open"
     } else if (action === "open") {
       if (navigationRef?.isReady() && button.target) {
         navigationRef.navigate("Main", {
@@ -367,6 +542,7 @@ const MainApp = () => {
         console.error("❌ open: failed to delete reminder:", err);
       }
 
+    // LEGACY: action === "delete"
     } else if (action === "delete") {
       try {
         await updateReminders(
@@ -377,6 +553,7 @@ const MainApp = () => {
         console.error("❌ delete: failed:", err);
       }
 
+    // LEGACY: action === "pause_indefinitely"
     } else if (action === "pause_indefinitely") {
       try {
         await updateReminders(
@@ -394,8 +571,42 @@ const MainApp = () => {
         console.error("❌ pause_indefinitely: failed:", err);
       }
 
+    // LEGACY: action === "done_and_pause"
     } else if (action === "done_and_pause") {
-      if (activeAlert.linkedItem) {
+      const checklistMatchKey = activeAlert.linkedTitle ||
+        (!activeAlert.linkedItem ? activeAlert.title : null);
+
+      if (checklistMatchKey) {
+        try {
+          const today = DateTime.now().toISODate();
+          const todayEvents = getActivitiesForDay(today);
+          const toDo = todayEvents.find(
+            (e) => e.title?.trim().toLowerCase().includes("to do"),
+          );
+          if (toDo) {
+            const checklist = toDo.activities?.find(
+              (a) => a.activityType === "checklist",
+            );
+            const match = checklist?.items?.find(
+              (i) => !i.completed &&
+                i.name?.trim().toLowerCase() === checklistMatchKey.trim().toLowerCase(),
+            );
+            if (match) {
+              const monthKey = DateTime.fromISO(toDo.startTime).toFormat("yyyy-LL");
+              await markLinkedItemComplete({
+                userId: dataUser?.userId || authUser?.uid,
+                monthKey,
+                eventId: toDo.eventId,
+                itemId: match.id,
+              });
+              console.log(`✅ done_and_pause: matched "${checklistMatchKey}" → item "${match.id}"`);
+            }
+          }
+        } catch (err) {
+          console.error("❌ done_and_pause: checklist match failed:", err);
+        }
+      } else if (activeAlert.linkedItem) {
+        // LEGACY: explicit item reference (old schema)
         try {
           await markLinkedItemComplete(activeAlert.linkedItem);
         } catch (err) {
@@ -420,7 +631,7 @@ const MainApp = () => {
     }
 
     advanceQueue();
-  }, [activeAlert, masterConfigReminders, advanceQueue, markLinkedItemComplete, updateReminders]);
+  }, [activeAlert, masterConfigReminders, advanceQueue, markLinkedItemComplete, updateReminders, getActivitiesForDay, dataUser, authUser]);
 
   const handleEditSubmit = useCallback(async (isoString) => {
     if (!activeAlert) return;
@@ -449,6 +660,13 @@ const MainApp = () => {
     await logout();
   };
 
+  const alertReminderDefaults =
+    jackMasterConfig?.reminders?.some(r => r.id === activeAlert?.id)
+      ? jackMasterConfigReminderDefaults
+      : ellieMasterConfig?.reminders?.some(r => r.id === activeAlert?.id)
+      ? ellieMasterConfigReminderDefaults
+      : masterConfigReminderDefaults;
+
   return (
     <>
       <MainNavigator onLogout={handleLogout} />
@@ -456,6 +674,7 @@ const MainApp = () => {
 
       <AlertModal
         alert={activeAlert}
+        reminderDefaults={alertReminderDefaults}
         onYes={handleAlertYes}
         onNo={handleAlertNo}
         onButtonTap={handleButtonTap}

@@ -36,6 +36,8 @@ const ADMIN_USER_IDS = [
 const JACK_USER_ID  = "ObqbPOKgzwYr2SmlN8UQOaDbkzE2";
 const ELLIE_USER_ID = "CjW9bPGIjrgEqkjE9HxNF6xuxfA3";
 
+export { JACK_USER_ID, ELLIE_USER_ID };
+
 export const useData = () => {
   const context = useContext(DataContext);
   if (!context) {
@@ -152,6 +154,8 @@ export const DataProvider = ({ children }) => {
   const [masterConfigReminders, setMasterConfigReminders] = useState([]);
   const [masterConfigSilentMode, setMasterConfigSilentMode] =
     useState(false);
+  const [masterConfigReminderDefaults, setMasterConfigReminderDefaults] =
+    useState(null);
   useEffect(() => {
     if (!db || !user?.userId) return;
 
@@ -160,11 +164,13 @@ export const DataProvider = ({ children }) => {
       if (!snap.exists()) {
         setMasterConfigReminders([]);
         setMasterConfigSilentMode(false);
+        setMasterConfigReminderDefaults(null);
         return;
       }
       const data = snap.data();
       setMasterConfigReminders(data.reminders || []);
       setMasterConfigSilentMode(data.silentMode || false);
+      setMasterConfigReminderDefaults(data.reminderDefaults || null);
     }, (err) => {
       console.error("❌ masterConfig listener error:", err);
     });
@@ -179,6 +185,10 @@ export const DataProvider = ({ children }) => {
   const [ellieMasterConfig, setEllieMasterConfig] = useState(
     { reminders: [], silentMode: false }
   );
+  const [jackMasterConfigReminderDefaults, setJackMasterConfigReminderDefaults] =
+    useState(null);
+  const [ellieMasterConfigReminderDefaults, setEllieMasterConfigReminderDefaults] =
+    useState(null);
 
   useEffect(() => {
     if (!db || !isAdmin) return;
@@ -188,6 +198,7 @@ export const DataProvider = ({ children }) => {
       (snap) => {
         if (!snap.exists()) {
           setJackMasterConfig({ reminders: [], silentMode: false });
+          setJackMasterConfigReminderDefaults(null);
           return;
         }
         const d = snap.data();
@@ -195,6 +206,7 @@ export const DataProvider = ({ children }) => {
           reminders: d.reminders || [],
           silentMode: d.silentMode || false,
         });
+        setJackMasterConfigReminderDefaults(d.reminderDefaults || null);
       },
       (err) => console.error("❌ jackMasterConfig listener error:", err),
     );
@@ -204,6 +216,7 @@ export const DataProvider = ({ children }) => {
       (snap) => {
         if (!snap.exists()) {
           setEllieMasterConfig({ reminders: [], silentMode: false });
+          setEllieMasterConfigReminderDefaults(null);
           return;
         }
         const d = snap.data();
@@ -211,6 +224,7 @@ export const DataProvider = ({ children }) => {
           reminders: d.reminders || [],
           silentMode: d.silentMode || false,
         });
+        setEllieMasterConfigReminderDefaults(d.reminderDefaults || null);
       },
       (err) => console.error("❌ ellieMasterConfig listener error:", err),
     );
@@ -355,10 +369,13 @@ export const DataProvider = ({ children }) => {
       isAdmin,
       masterConfigReminders,
       masterConfigSilentMode,
+      masterConfigReminderDefaults,
 
       // Kids' masterConfig (admin only)
       jackMasterConfig,
       ellieMasterConfig,
+      jackMasterConfigReminderDefaults,
+      ellieMasterConfigReminderDefaults,
 
       // Date states
       currentDate,
@@ -473,8 +490,11 @@ export const DataProvider = ({ children }) => {
       isAdmin,
       masterConfigReminders,
       masterConfigSilentMode,
+      masterConfigReminderDefaults,
       jackMasterConfig,
       ellieMasterConfig,
+      jackMasterConfigReminderDefaults,
+      ellieMasterConfigReminderDefaults,
       selectedDate,
       selectedMonth,
       selectedYear,

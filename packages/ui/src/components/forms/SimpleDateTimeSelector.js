@@ -11,10 +11,11 @@ const SimpleDateTimeSelector = ({
     onDateChange,
     hideDate = false,
     compact = false,  // set true when inside a card/modal that already has padding
+    defaultOpen = null,  // 'time' | 'date' | null — which picker to start expanded
   }) => {
     const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
-  
-    const [expandedPicker, setExpandedPicker] = useState(null);
+
+    const [expandedPicker, setExpandedPicker] = useState(defaultOpen);
   
     // Time picker state
     const dt = DateTime.fromJSDate(selectedDate);

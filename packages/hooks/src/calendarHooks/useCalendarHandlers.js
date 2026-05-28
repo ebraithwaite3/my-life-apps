@@ -1,4 +1,5 @@
 import { Alert } from "react-native";
+import { DateTime } from "luxon";
 import { useDeleteFromGoogleCalendar } from "../googleCalendarHooks/useDeleteFromGoogleCalendar";
 import { useDeleteInternalEvent } from "../internalCalendarHooks/useDeleteInternalEvent";
 import { useDeleteIcalEvent } from "../useDeleteIcalEvent";
@@ -7,7 +8,7 @@ import { useUpdateExternalActivities } from "../useUpdateExternalActivities";
 import { useDeleteNotification } from "../useDeleteNotification";
 import { useNotifications } from "../notificationHooks/useNotifications";
 import { useData } from "@my-apps/contexts";
-import { scheduleBatchNotification } from "@my-apps/services";
+import { scheduleBatchNotification, updateDocument } from "@my-apps/services";
 import { showSuccessToast, showErrorToast, isChecklistComplete } from "@my-apps/utils";
 
 /**
@@ -21,6 +22,85 @@ const cleanUndefined = (obj) => {
     }
   });
   return cleaned;
+};
+
+const DAY_TO_WEEKDAY = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
+
+const computeNextOccurrence = (reminder) => {
+  // New schema: recurrence object
+  if (reminder.recurrence) {
+    const { recurrence } = reminder;
+    const now = DateTime.now();
+    if (recurrence.scheduleByDay?.length) {
+      const candidates = recurrence.scheduleByDay.map(({ day, time, timezone }) => {
+        const tz = timezone || "America/New_York";
+        const nowInZone = now.setZone(tz);
+        const [h, m] = (time || "09:00").split(":").map(Number);
+        let candidate = nowInZone.set({ hour: h, minute: m, second: 0, millisecond: 0 });
+        if (candidate <= nowInZone) candidate = candidate.plus({ days: 1 });
+        let iterations = 0;
+        while (
+          candidate.toFormat("EEE").toUpperCase().slice(0, 2) !== day &&
+          ++iterations <= 14
+        ) {
+          candidate = candidate.plus({ days: 1 });
+        }
+        return candidate;
+      });
+      const soonest = candidates.reduce((min, c) => (c < min ? c : min));
+      return soonest.toISO();
+    }
+    if (recurrence.everyNDays) {
+      const { n, time, timezone } = recurrence.everyNDays;
+      const tz = timezone || "America/New_York";
+      const [h, m] = (time || "09:00").split(":").map(Number);
+      return now
+        .setZone(tz)
+        .plus({ days: n })
+        .set({ hour: h, minute: m, second: 0, millisecond: 0 })
+        .toISO();
+    }
+    if (recurrence.everyNMinutes) {
+      const TEN_MIN_MS = 10 * 60 * 1000;
+      return new Date(
+        Math.ceil(
+          (Date.now() + recurrence.everyNMinutes.n * 60000 - 5 * 60000) /
+          TEN_MIN_MS,
+        ) * TEN_MIN_MS,
+      ).toISOString();
+    }
+    return null;
+  }
+  // Old schema fallback
+  const base = reminder.scheduledTime
+    ? DateTime.fromISO(reminder.scheduledTime, { zone: "utc" })
+    : DateTime.now();
+  if (reminder.recurringIntervalMinutes) {
+    return base.plus({ minutes: reminder.recurringIntervalMinutes }).toUTC().toISO();
+  }
+  if (reminder.recurringIntervalDays) {
+    return base.plus({ days: reminder.recurringIntervalDays }).toUTC().toISO();
+  }
+  if (reminder.recurringSchedule?.length) {
+    const candidates = reminder.recurringSchedule
+      .map(({ day, time, timezone }) => {
+        const targetWeekday = DAY_TO_WEEKDAY[day];
+        if (!targetWeekday) return null;
+        const [h, m] = (time || "09:00").split(":").map(Number);
+        const tz = timezone || "America/New_York";
+        const now = DateTime.now().setZone(tz);
+        const candidate = now.set({ hour: h, minute: m, second: 0, millisecond: 0 });
+        const daysUntil = (targetWeekday - now.weekday + 7) % 7;
+        if (daysUntil === 0 && candidate <= now) {
+          return candidate.plus({ days: 7 }).toUTC().toISO();
+        }
+        return candidate.plus({ days: daysUntil }).toUTC().toISO();
+      })
+      .filter(Boolean);
+    if (!candidates.length) return null;
+    return candidates.sort()[0];
+  }
+  return null;
 };
 
 /**
@@ -69,7 +149,7 @@ export const useCalendarHandlers = ({
   updatedItems,
   setIsDeleting,
 }) => {
-  const { allCalendars, adminUserId, groups } = useData();
+  const { allCalendars, adminUserId, groups, masterConfigReminders, user: dataUser } = useData();
 
   const deleteFromGoogleCalendar = useDeleteFromGoogleCalendar();
   const deleteInternalEvent = useDeleteInternalEvent();
@@ -451,10 +531,70 @@ export const useCalendarHandlers = ({
       }
   
       if (result.success) {
+        // Direction 2: sync reminders for newly-completed items in To Do events
+        if (eventRef.title?.trim().toLowerCase().includes("to do")) {
+          const oldActivity = currentActivities.find((a) => a.id === updatedChecklist.id);
+          const oldItems = oldActivity?.items || [];
+          const newItems = updatedChecklist.items || [];
+          const newlyCompletedNames = new Set(
+            newItems
+              .filter((ni) => {
+                const old = oldItems.find((o) => o.id === ni.id);
+                return ni.completed && old && !old.completed;
+              })
+              .map((ni) => ni.name?.trim().toLowerCase())
+              .filter(Boolean),
+          );
+
+          if (newlyCompletedNames.size > 0 && masterConfigReminders?.length) {
+            const userId = dataUser?.userId;
+            const matched = masterConfigReminders.filter((r) => {
+              if (!r.onTodoComplete || !r.id) return false;
+              const matchKey = (r.linkedTitle || r.title)?.trim().toLowerCase();
+              return matchKey && newlyCompletedNames.has(matchKey);
+            });
+
+            if (matched.length > 0 && userId) {
+              let updatedReminders = [...masterConfigReminders];
+              const now = new Date().toISOString();
+              for (const reminder of matched) {
+                if (reminder.onTodoComplete === "delete") {
+                  updatedReminders = updatedReminders.filter((r) => r.id !== reminder.id);
+                } else if (reminder.onTodoComplete === "pause") {
+                  updatedReminders = updatedReminders.map((r) =>
+                    r.id !== reminder.id ? r : { ...r, paused: true, acknowledgedAt: now },
+                  );
+                } else if (reminder.onTodoComplete === "reschedule") {
+                  const nextTime = computeNextOccurrence(reminder);
+                  if (nextTime) {
+                    updatedReminders = updatedReminders.map((r) =>
+                      r.id !== reminder.id ? r : {
+                        ...r,
+                        scheduledTime: nextTime,
+                        scheduledAlertTime: nextTime,
+                        acknowledgedAt: null,
+                        ...(r.notification && {
+                          notification: { ...r.notification, scheduledTime: nextTime },
+                        }),
+                      },
+                    );
+                  }
+                }
+              }
+              try {
+                await updateDocument("masterConfig", userId, { reminders: updatedReminders });
+                console.log(`✅ Direction-2 title-match: updated ${matched.length} reminder(s)`);
+              } catch (err) {
+                console.error("❌ Direction-2 title-match: failed to update reminders:", err);
+              }
+            }
+          }
+        }
+
         if (!silent) {
           showSuccessToast(`"${updatedChecklist.name}" updated`, "", 2000, "top");
         }
-  
+
         if (wasJustCompleted && updatedChecklist.notifyAdmin) {
           // Double-check: ensure checklist wasn't already completed
           const currentActivity = currentActivities.find(

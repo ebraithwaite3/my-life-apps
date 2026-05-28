@@ -1,23 +1,32 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateTime } from 'luxon';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@my-apps/contexts';
+import {
+  useTheme,
+  useData,
+  JACK_USER_ID,
+  ELLIE_USER_ID,
+} from '@my-apps/contexts';
 import { updateDocument } from '@my-apps/services';
 import { ModalWrapper, ModalHeader, PillSelectionButton } from '@my-apps/ui';
-
-const JACK_USER_ID  = 'ObqbPOKgzwYr2SmlN8UQOaDbkzE2';
-const ELLIE_USER_ID = 'CjW9bPGIjrgEqkjE9HxNF6xuxfA3';
-// SARAH_USER_ID = '...' — add here when ready
+import ReminderEditorModal from './ReminderEditorModal';
 
 const formatRecurring = (reminder) => {
-  if (reminder.recurringIntervalMinutes) {
-    return `Every ${reminder.recurringIntervalMinutes} min`;
+  // New schema
+  const r = reminder.recurrence;
+  if (r?.everyNMinutes) return `Every ${r.everyNMinutes.n} min`;
+  if (r?.everyNDays) return `Every ${r.everyNDays.n} day${r.everyNDays.n !== 1 ? 's' : ''}`;
+  if (r?.scheduleByDay?.length) {
+    const DAY_LABELS = { MO: 'Mon', TU: 'Tue', WE: 'Wed', TH: 'Thu', FR: 'Fri', SA: 'Sat', SU: 'Sun' };
+    const days = r.scheduleByDay.map(e => DAY_LABELS[e.day] || e.day).join(', ');
+    const time = r.scheduleByDay[0]?.time || '';
+    return `${days} at ${time}`;
   }
-  if (reminder.recurringIntervalDays) {
-    return `Every ${reminder.recurringIntervalDays} day${reminder.recurringIntervalDays !== 1 ? 's' : ''}`;
-  }
+  // Legacy flat schema
+  if (reminder.recurringIntervalMinutes) return `Every ${reminder.recurringIntervalMinutes} min`;
+  if (reminder.recurringIntervalDays) return `Every ${reminder.recurringIntervalDays} day${reminder.recurringIntervalDays !== 1 ? 's' : ''}`;
   if (reminder.recurringSchedule?.length) {
     const DAY_LABELS = { MO: 'Mon', TU: 'Tue', WE: 'Wed', TH: 'Thu', FR: 'Fri', SA: 'Sat', SU: 'Sun' };
     const days = reminder.recurringSchedule.map(e => DAY_LABELS[e.day] || e.day).join(', ');
@@ -27,11 +36,35 @@ const formatRecurring = (reminder) => {
   return null;
 };
 
-const ReminderCard = ({ reminder, isPaused, onTogglePause, theme, getSpacing, getTypography, getBorderRadius }) => {
+const ReminderCard = ({ reminder, isPaused, onTogglePause, onEdit, theme, getSpacing, getTypography, getBorderRadius }) => {
   const scheduledET = reminder.scheduledTime
     ? DateTime.fromISO(reminder.scheduledTime).setZone('America/New_York').toFormat('h:mm a')
     : '—';
   const recurringLabel = formatRecurring(reminder);
+  const isLinked = !!(reminder.linkedTitle || reminder.linkedItem);
+
+  const infoContent = (
+    <>
+      <View style={styles.titleRow}>
+        <Text style={[styles.cardTitle, { color: theme.text.primary, fontSize: getTypography.body.fontSize }]} numberOfLines={1}>
+          {reminder.title || 'Reminder'}
+        </Text>
+        {isLinked && (
+          <Ionicons name="link-outline" size={13} color={theme.text.secondary} style={styles.linkIcon} />
+        )}
+      </View>
+
+      {reminder.message ? (
+        <Text style={[styles.cardMessage, { color: theme.text.secondary, fontSize: getTypography.caption.fontSize }]} numberOfLines={2}>
+          {reminder.message}
+        </Text>
+      ) : null}
+
+      <Text style={[styles.cardTime, { color: theme.text.tertiary, fontSize: getTypography.caption.fontSize }]}>
+        {scheduledET}{recurringLabel ? ` · ${recurringLabel}` : ''}
+      </Text>
+    </>
+  );
 
   return (
     <View style={[
@@ -46,35 +79,16 @@ const ReminderCard = ({ reminder, isPaused, onTogglePause, theme, getSpacing, ge
       },
     ]}>
       <View style={styles.cardRow}>
-        {/* Left: info */}
-        <View style={styles.cardInfo}>
-          {/* Title row with optional link icon */}
-          <View style={styles.titleRow}>
-            <Text style={[styles.cardTitle, { color: theme.text.primary, fontSize: getTypography.body.fontSize }]} numberOfLines={1}>
-              {reminder.title || 'Reminder'}
-            </Text>
-            {reminder.linkedItem && (
-              <Ionicons
-                name="link-outline"
-                size={13}
-                color={theme.text.secondary}
-                style={styles.linkIcon}
-              />
-            )}
+        {onEdit ? (
+          <TouchableOpacity style={styles.cardInfo} onPress={onEdit} activeOpacity={0.6}>
+            {infoContent}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.cardInfo}>
+            {infoContent}
           </View>
+        )}
 
-          {reminder.message ? (
-            <Text style={[styles.cardMessage, { color: theme.text.secondary, fontSize: getTypography.caption.fontSize }]} numberOfLines={2}>
-              {reminder.message}
-            </Text>
-          ) : null}
-
-          <Text style={[styles.cardTime, { color: theme.text.tertiary, fontSize: getTypography.caption.fontSize }]}>
-            {scheduledET}{recurringLabel ? ` · ${recurringLabel}` : ''}
-          </Text>
-        </View>
-
-        {/* Right: pause/unpause button */}
         <TouchableOpacity
           onPress={() => onTogglePause(reminder)}
           style={[
@@ -108,35 +122,73 @@ const RemindersModal = ({
 }) => {
   const { theme, getSpacing, getTypography, getBorderRadius } = useTheme();
   const insets = useSafeAreaInsets();
+  const {
+    allActivities,
+    masterConfigReminderDefaults,
+    jackMasterConfigReminderDefaults,
+    ellieMasterConfigReminderDefaults,
+  } = useData();
+
   const [selectedUser, setSelectedUser] = useState('eric');
   const [pendingChanges, setPendingChanges] = useState({});
+  const [showAllDays, setShowAllDays] = useState(false);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editorReminder, setEditorReminder] = useState(null);
 
-  // Reset state each time modal opens
   useEffect(() => {
     if (visible) {
       setSelectedUser('eric');
       setPendingChanges({});
+      setShowAllDays(false);
+      setEditorVisible(false);
+      setEditorReminder(null);
     }
   }, [visible]);
 
   const familyUsers = useMemo(() => [
-    { key: 'eric',  label: 'Eric',  reminders: ericReminders,  userId: ericUserId },
-    { key: 'jack',  label: 'Jack',  reminders: jackReminders,  userId: JACK_USER_ID },
-    { key: 'ellie', label: 'Ellie', reminders: ellieReminders, userId: ELLIE_USER_ID },
-    // { key: 'sarah', label: 'Sarah', reminders: sarahReminders, userId: SARAH_USER_ID },
-  ], [ericReminders, jackReminders, ellieReminders, ericUserId]);
+    { key: 'eric',  label: 'Eric',  reminders: ericReminders,  userId: ericUserId,  reminderDefaults: masterConfigReminderDefaults },
+    { key: 'jack',  label: 'Jack',  reminders: jackReminders,  userId: JACK_USER_ID, reminderDefaults: jackMasterConfigReminderDefaults },
+    { key: 'ellie', label: 'Ellie', reminders: ellieReminders, userId: ELLIE_USER_ID, reminderDefaults: ellieMasterConfigReminderDefaults },
+  ], [ericReminders, jackReminders, ellieReminders, ericUserId, masterConfigReminderDefaults, jackMasterConfigReminderDefaults, ellieMasterConfigReminderDefaults]);
+
+  const editorUserEntry = familyUsers.find(u => u.key === selectedUser);
 
   const remindersForDay = useMemo(() => {
-    const entry = familyUsers.find(u => u.key === selectedUser);
-    const source = entry?.reminders || [];
+    const source = editorUserEntry?.reminders || [];
+    if (showAllDays) {
+      return [...source].sort((a, b) =>
+        new Date(a.scheduledTime || 0) - new Date(b.scheduledTime || 0)
+      );
+    }
     return source.filter(r => {
       if (!r.scheduledTime) return false;
-      const reminderDay = DateTime.fromISO(r.scheduledTime)
+      return DateTime.fromISO(r.scheduledTime)
         .setZone('America/New_York')
-        .toISODate();
-      return reminderDay === selectedDate;
+        .toISODate() === selectedDate;
     });
-  }, [selectedUser, familyUsers, selectedDate]);
+  }, [editorUserEntry, selectedDate, showAllDays]);
+
+  // Checklist items for the selected user on today's date, for the link picker
+  const todayItems = useMemo(() => {
+    const uid = editorUserEntry?.userId;
+    if (!uid) return [];
+    const today = DateTime.now().toISODate();
+    const monthKey = DateTime.now().toFormat('yyyy-LL');
+    const entityData = allActivities[uid] || {};
+    const monthItems = entityData[monthKey]?.items || {};
+    const dayStart = DateTime.fromISO(today).startOf('day');
+    const dayEnd = DateTime.fromISO(today).endOf('day');
+    const dayEvents = Object.entries(monthItems)
+      .map(([eventId, data]) => ({ eventId, ...data }))
+      .filter(event => {
+        if (!event.startTime) return false;
+        const s = DateTime.fromISO(event.startTime);
+        return s >= dayStart && s <= dayEnd;
+      });
+    const toDo = dayEvents.find(e => e.title?.trim().toLowerCase().includes('to do'));
+    const checklistAct = toDo?.activities?.find(a => a.activityType === 'checklist');
+    return checklistAct?.items || [];
+  }, [allActivities, editorUserEntry?.userId]);
 
   const effectivePaused = (reminder) =>
     reminder.id in pendingChanges
@@ -216,14 +268,37 @@ const RemindersModal = ({
         />
 
         {isAdmin && (
-          <View style={[styles.pillContainer, { paddingHorizontal: getSpacing.lg, paddingVertical: getSpacing.md }]}>
-            <PillSelectionButton
-              options={pillOptions}
-              selectedValue={selectedUser}
-              onSelect={setSelectedUser}
-            />
+          <View style={[styles.pillContainer, { paddingHorizontal: getSpacing.lg, paddingVertical: getSpacing.md, flexDirection: 'row', alignItems: 'center', borderBottomColor: theme.border.primary }]}>
+            <View style={{ flex: 1 }}>
+              <PillSelectionButton
+                options={pillOptions}
+                selectedValue={selectedUser}
+                onSelect={setSelectedUser}
+              />
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                console.log('+ tapped, isAdmin:', isAdmin, 'editorVisible:', editorVisible);
+                setEditorReminder(null);
+                setEditorVisible(true);
+              }}
+              style={{ marginLeft: getSpacing.sm }}
+            >
+              <Ionicons name="add-circle-outline" size={26} color={theme.primary} />
+            </TouchableOpacity>
           </View>
         )}
+
+        <View style={[styles.toggleRow, { paddingHorizontal: getSpacing.lg, paddingVertical: getSpacing.sm, borderBottomWidth: 1, borderBottomColor: theme.border.primary }]}>
+          <Text style={{ color: theme.text.secondary, fontSize: getTypography.caption.fontSize }}>
+            {showAllDays ? 'All Reminders' : 'Today Only'}
+          </Text>
+          <Switch
+            value={showAllDays}
+            onValueChange={setShowAllDays}
+            trackColor={{ false: theme.border.primary, true: theme.primary }}
+          />
+        </View>
 
         <ScrollView contentContainerStyle={[styles.scrollContent, { padding: getSpacing.md }]}>
           {remindersForDay.length === 0 ? (
@@ -240,6 +315,7 @@ const RemindersModal = ({
                 reminder={reminder}
                 isPaused={effectivePaused(reminder)}
                 onTogglePause={handleTogglePause}
+                onEdit={isAdmin ? () => { setEditorReminder(reminder); setEditorVisible(true); } : undefined}
                 theme={theme}
                 getSpacing={getSpacing}
                 getTypography={getTypography}
@@ -249,6 +325,16 @@ const RemindersModal = ({
           )}
         </ScrollView>
       </View>
+
+      <ReminderEditorModal
+        visible={editorVisible}
+        onClose={() => setEditorVisible(false)}
+        reminder={editorReminder}
+        userId={editorUserEntry?.userId}
+        allReminders={editorUserEntry?.reminders || []}
+        reminderDefaults={editorUserEntry?.reminderDefaults ?? null}
+        todayItems={todayItems}
+      />
     </ModalWrapper>
   );
 };
@@ -261,6 +347,11 @@ const styles = StyleSheet.create({
   },
   pillContainer: {
     borderBottomWidth: 1,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   scrollContent: {
     flexGrow: 1,

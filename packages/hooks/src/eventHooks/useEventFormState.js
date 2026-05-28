@@ -244,25 +244,12 @@ export const useEventFormState = ({
       setSelectedActivity(null);
 
       if (isToDo) {
-        const eventDay = DateTime.fromJSDate(newStartDate);
-        const firstReminder = eventDay.set({ hour: 17, minute: 0, second: 0, millisecond: 0 });
-        const reminderISO = firstReminder.toISO();
-        setReminderMinutes({
-          scheduledFor: reminderISO,
-          isRecurring: true,
-          recurringConfig: {
-            intervalSeconds: 3600,
-            totalOccurrences: 5,
-            currentOccurrence: 1,
-            completedCancelsRecurring: true,
-            nextScheduledFor: reminderISO,
-            lastSentAt: null,
-          },
-        });
+        setReminderMinutes(null);
 
         if (externalCarryoverItems !== null) {
           setCarryoverItems(externalCarryoverItems);
         } else {
+          const eventDay = DateTime.fromJSDate(newStartDate);
           const yesterday = eventDay.minus({ days: 1 }).toISODate();
           const yesterdayActivities = getActivitiesForDay(yesterday);
           const yesterdayToDo = yesterdayActivities.find(

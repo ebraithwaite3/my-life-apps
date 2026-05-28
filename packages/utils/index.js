@@ -1,4 +1,5 @@
 export * from './src/dateFormatters';
+export { validateReminder } from './src/reminderValidator';
 export * from './src/dateNavigation';
 export * from './src/toastUtils';
 export * from './src/checklistUtils';

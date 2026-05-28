@@ -277,6 +277,14 @@ async function processReminders(db, alerts) {
         delete reminderData.linkedNotificationId;
         delete reminderData.acknowledged;
 
+        // Initialize lastScheduledOccurrence for retry-mode reminders.
+        // Only set on first creation — existing value is preserved on updates.
+        if (reminderData.unacknowledgedRetryMinutes != null &&
+            !reminderData.lastScheduledOccurrence) {
+          reminderData.lastScheduledOccurrence =
+            reminderData.scheduledTime || new Date().toISOString();
+        }
+
         if (existing) {
           currentReminders = currentReminders.map((r) =>
             r.id === reminderId ? reminderData : r,
