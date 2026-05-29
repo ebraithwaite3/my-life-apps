@@ -304,7 +304,9 @@ const ReminderEditorModal = ({
     setIsSaving(true);
 
     const now = new Date().toISOString();
-    const isoTime = scheduledTime.toISOString();
+    const roundedTime = new Date(scheduledTime);
+    roundedTime.setSeconds(0, 0);
+    const isoTime = roundedTime.toISOString();
     const tz = reminderDefaults?.timezone || 'America/New_York';
 
     // Recurrence object

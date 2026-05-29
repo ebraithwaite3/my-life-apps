@@ -381,10 +381,14 @@ async function runScheduler(now, db, filterUserId = null) {
             );
 
             let sendSuccess = response.ok;
-            if (responseData.data?.[0]?.status === "error") {
+            // Expo returns a single object { data: { status, id } } when
+            // sending one notification (not an array), so handle both forms.
+            const expoData = Array.isArray(responseData.data) ?
+              responseData.data[0] :
+              responseData.data;
+            if (expoData?.status === "error") {
               console.log(
-                  `[reminders] ❌ Expo error: ` +
-                  `${responseData.data[0].message}`,
+                  `[reminders] ❌ Expo error: ${expoData.message}`,
               );
               sendSuccess = false;
             } else if (responseData.errors) {
