@@ -138,8 +138,8 @@ export const buildChecklistObject = ({
       newChecklist.notifyAdmin = true;
     }
 
-    // Note: Reminders for regular checklists are now handled via pendingNotifications collection
-    // These fields (reminderMinutes, reminderTime) are legacy and only used for calendar events
+    // Reminder creation for calendar template events is not yet implemented.
+    // Will be added in a future update using the masterConfig.reminders[] schema.
     if (hasEventTime && reminderMinutes !== null) {
       const eventTime = DateTime.fromISO(eventStartTime.toISOString());
       const reminderTimeObj = DateTime.fromISO(reminderMinutes);

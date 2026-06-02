@@ -109,7 +109,11 @@ directly on the reminder — no separate notification array, no cross-reference 
     "message": "...",
 
     // ─── TIMING ───────────────────────────────────────────────
-    "scheduledTime": "ISO 8601 UTC",
+    "scheduledAlertTime": "ISO 8601 UTC", // REQUIRED — scheduler fires when this is past + acknowledgedAt === null.
+                                          // Set same as scheduledTime on creation.
+                                          // Stays anchored until user taps Done (app then advances it).
+    "scheduledTime": "ISO 8601 UTC",      // Same as scheduledAlertTime on creation.
+                                          // App advances this after each occurrence.
     "acknowledgedAt": null,             // always null on creation / rescheduling.
                                         // App writes an ISO timestamp when user confirms.
                                         // Never set to anything other than null.
@@ -119,21 +123,26 @@ directly on the reminder — no separate notification array, no cross-reference 
     "paused": false,                    // true = dormant until planning chat reactivates
     "pausedUntil": null,                // ISO UTC — Cloud Timer auto-unpauses at this time
 
-    // ─── RECURRING — use ONE, never more than one ─────────────
-    "recurringIntervalMinutes": null,   // fires every N minutes
-    "recurringIntervalDays": null,      // fires every N days (DST-safe)
-    "recurringSchedule": [              // fires on specific days at specific times
-      { "day": "MO", "time": "15:30", "timezone": "America/New_York" },
-      { "day": "WE", "time": "18:00", "timezone": "America/New_York" }
-    ],                                  // array — each day can have its own time
-                                        // mutually exclusive with interval fields
-
-    // ─── REMINDER TYPE ────────────────────────────────────────
-    // "persistent" → never deleted, always rescheduled. Use buttons to control lifecycle.
-    // "oneTime"    → fires once, deleted after user acts on it
-    // "simple"     → Yes/No only, no buttons array
-    "reminderType": "persistent",
-    "confirmLabel": null,               // custom label for primary confirm button
+    // ─── RECURRENCE — use exactly ONE type ────────────────────
+    "recurrence": {
+      // Pick exactly one of these shapes (mutually exclusive):
+      "oneTime": true,                    // fires once, deleted after user acts on it
+      "everyNMinutes": { "n": 30 },       // fires every N minutes (minimum 10)
+      "everyNDays": {                     // fires every N days at a specific wall-clock time
+        "n": 1,
+        "time": "06:30",
+        "timezone": "America/New_York"
+      },
+      "scheduleByDay": [                  // fires on specific days at specific times
+        { "day": "MO", "time": "15:30", "timezone": "America/New_York" },
+        { "day": "WE", "time": "18:00", "timezone": "America/New_York" }
+      ]                                   // each entry can have its own time
+    },
+    // ─── RETRY (optional) — unacknowledged retry loop ─────────
+    "retry": {
+      "intervalMinutes": 20,              // re-fire every N minutes while unacknowledged
+      "retryUntil": "22:00"              // stop retrying after this wall-clock time
+    },
 
     // ─── NAVIGATION ───────────────────────────────────────────
     "deepLinkTarget": null,             // "Pinned" | "Calendar" | "Workouts" | null
@@ -196,7 +205,7 @@ directly on the reminder — no separate notification array, no cross-reference 
   "notification": {
     "title": "...",
     "body": "...",
-    "scheduledTime": "ISO 8601 UTC",   // always match alert.scheduledTime on creation and reschedule
+    "scheduledTime": "ISO 8601 UTC",   // always match alert.scheduledAlertTime on creation and reschedule
     "screen": null                     // "Calendar" | "Pinned" | "Workouts" | null
   }
 }
@@ -216,9 +225,9 @@ Do NOT include a userId on scheduledAlert — derived from the parent todo entry
       "id": "laundry-reminder-1",
       "title": "Ready to start laundry?",
       "message": "You scheduled laundry for now.",
+      "scheduledAlertTime": "ISO 8601 UTC",
       "scheduledTime": "ISO 8601 UTC",
-      "recurringIntervalMinutes": 30,
-      "reminderType": "persistent",
+      "recurrence": { "everyNMinutes": { "n": 30 } },
       "paused": false,
       "pausedUntil": null,
       "acknowledgedAt": null,
@@ -232,10 +241,13 @@ Do NOT include a userId on scheduledAlert — derived from the parent todo entry
   }
 }
 
-═══ REMINDER TYPES ═══
-persistent        → never deleted. Use buttons to control lifecycle. Good for recurring tasks.
-oneTime           → fires once, deleted after user acts on it. Good for one-off reminders.
-simple            → Yes/No only, no buttons array.
+═══ RECURRENCE TYPES ═══
+recurrence.oneTime: true       → fires once, deleted after user acts on it. Good for one-off reminders.
+recurrence.everyNMinutes       → fires every N minutes (min 10). Good for frequent nudges.
+recurrence.everyNDays          → fires every N days at a specific time. Good for daily/weekly habits.
+recurrence.scheduleByDay       → fires on specific days of the week at specific times.
+(no recurrence.oneTime)        → persistent — never auto-deleted. Use buttons to control lifecycle.
+(omit "buttons" array)         → simple Yes/No UI only.
 
 ═══ DELIVERY MODES ═══
 "alert"           → in-app modal only, no push notification

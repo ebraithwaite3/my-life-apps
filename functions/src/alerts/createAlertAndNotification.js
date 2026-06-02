@@ -97,8 +97,12 @@ exports.createAlertAndNotification = functions.https.onRequest(
           scheduledTime: notification.scheduledTime ||
             alert.scheduledTime || new Date().toISOString(),
           screen: notification.screen || null,
-          handlerName: notification.handlerName || null,
-          handlerParams: notification.handlerParams || null,
+          handlerName: notification.handlerName ??
+            alert?.notification?.handlerName ??
+            existing?.notification?.handlerName ?? null,
+          handlerParams: notification.handlerParams ??
+            alert?.notification?.handlerParams ??
+            existing?.notification?.handlerParams ?? null,
           data: notification.data || {app: "checklist-app"},
         } : undefined;
 
@@ -114,6 +118,20 @@ exports.createAlertAndNotification = functions.https.onRequest(
           updatedAt: new Date().toISOString(),
           ...(notifData !== undefined && {notification: notifData}),
         };
+        // For alert-only delivery mode, notifData is undefined so the
+        // notification object comes from the raw ...alert spread without the
+        // ?? fallback. Patch handlerName/handlerParams from existing so they
+        // are never silently dropped on upsert regardless of deliveryMode.
+        if (reminderData.notification && existing?.notification) {
+          reminderData.notification = {
+            ...reminderData.notification,
+            handlerName: reminderData.notification.handlerName ??
+              existing.notification.handlerName ?? null,
+            handlerParams: reminderData.notification.handlerParams ??
+              existing.notification.handlerParams ?? null,
+          };
+        }
+
         // Strip legacy cross-reference fields if present.
         delete reminderData.linkedNotificationId;
         delete reminderData.acknowledged;

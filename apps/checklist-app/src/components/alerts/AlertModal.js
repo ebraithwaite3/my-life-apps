@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
-  Modal,
+  Animated,
+  BackHandler,
   View,
   Text,
   TouchableOpacity,
@@ -201,6 +202,28 @@ const AlertModal = ({ alert, reminderDefaults, onYes, onNo, onButtonTap, onEditS
       setSelectedDateTime(null);
     }
   }, [alert?.id, reminderDefaults]);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!alert) return;
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [alert]);
+
+  useEffect(() => {
+    if (!alert) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (editMode) handleCancel();
+      else onNo();
+      return true;
+    });
+    return () => sub.remove();
+  }, [alert, editMode]);
 
   // ── New schema handlers ──
 
@@ -497,32 +520,30 @@ const AlertModal = ({ alert, reminderDefaults, onYes, onNo, onButtonTap, onEditS
     );
   };
 
-  return (
-    <Modal
-      visible={!!alert}
-      transparent
-      animationType="fade"
-      onRequestClose={editMode ? handleCancel : onNo}
-    >
-      <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.surface || "#fff" }]}>
-          <ScrollView
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={[styles.title, { color: theme.text?.primary || "#111" }]}>
-              {alert?.title}
-            </Text>
-            <Text style={[styles.body, { color: theme.text?.secondary || "#444" }]}>
-              {alert?.message}
-            </Text>
+  if (!alert) return null;
 
-            {alert?.actions ? renderNewSchemaUI() : renderLegacyUI()}
-          </ScrollView>
-        </View>
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, styles.overlay, { zIndex: 9999, opacity: fadeAnim }]}
+      onStartShouldSetResponder={() => true}
+    >
+      <View style={[styles.card, { backgroundColor: theme.surface || "#fff" }]}>
+        <ScrollView
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={[styles.title, { color: theme.text?.primary || "#111" }]}>
+            {alert?.title}
+          </Text>
+          <Text style={[styles.body, { color: theme.text?.secondary || "#444" }]}>
+            {alert?.message}
+          </Text>
+
+          {alert?.actions ? renderNewSchemaUI() : renderLegacyUI()}
+        </ScrollView>
       </View>
-    </Modal>
+    </Animated.View>
   );
 };
 

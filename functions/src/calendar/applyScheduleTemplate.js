@@ -10,22 +10,6 @@ const {
   googleRefreshToken,
 } = require("../utils/googleCalendarHelpers");
 
-// Helper: Get all subscribers for a calendar
-const getCalendarSubscribers = async (firestoreCalendarId) => {
-  const calendarDoc = await admin
-      .firestore()
-      .collection("calendars")
-      .doc(firestoreCalendarId)
-      .get();
-
-  if (!calendarDoc.exists) {
-    return [];
-  }
-
-  const calendarData = calendarDoc.data();
-  return calendarData.subscribingUsers || [];
-};
-
 // Helper: Find Firestore calendar ID from Google Calendar ID
 const findFirestoreCalendarId = async (googleCalendarId) => {
   // First, try direct lookup
@@ -295,54 +279,6 @@ exports.applyScheduleTemplate = onCall(
             await monthRef.set({events: existingEvents}, {merge: true});
 
             console.log("✅ Event stored:", fullEventId);
-
-            // 🔔 Schedule notifications if reminder exists
-            if (eventDoc.reminder && eventDoc.reminder.scheduledFor) {
-              console.log("📲 Scheduling notifications for reminder...");
-
-              // Get all calendar subscribers
-              const subscribers = await getCalendarSubscribers(
-                  firestoreCalendarId,
-              );
-              console.log(`📋 Found ${subscribers.length} subscriber(s)`);
-
-              // Schedule notification for each subscriber
-              for (const subscriberId of subscribers) {
-                const reminderData = {
-                  userId: subscriberId,
-                  eventId: fullEventId,
-                  title: `Reminder: ${templateEvent.title}`,
-                  body: templateEvent.title,
-                  scheduledFor: eventDoc.reminder.scheduledFor,
-                  createdAt: Timestamp.now(),
-                  data: {
-                    screen: "Calendar",
-                    eventId: fullEventId,
-                    app: "checklist-app",
-                    date: eventDoc.startTime,
-                  },
-                };
-
-                // Add recurring config if present
-                if (
-                  eventDoc.reminder.isRecurring &&
-                  eventDoc.reminder.recurringConfig
-                ) {
-                  reminderData.isRecurring = true;
-                  reminderData.recurringConfig =
-                    eventDoc.reminder.recurringConfig;
-                }
-
-                await admin
-                    .firestore()
-                    .collection("pendingNotifications")
-                    .add(reminderData);
-
-                console.log(
-                    `✅ Notification scheduled for user: ${subscriberId}`,
-                );
-              }
-            }
 
             results.push({success: true, title: templateEvent.title});
             console.log("✅ Created:", templateEvent.title);

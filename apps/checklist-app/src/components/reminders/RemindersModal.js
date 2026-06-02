@@ -172,12 +172,12 @@ const RemindersModal = ({
   const todayItems = useMemo(() => {
     const uid = editorUserEntry?.userId;
     if (!uid) return [];
-    const today = DateTime.now().toISODate();
-    const monthKey = DateTime.now().toFormat('yyyy-LL');
+    const dateKey = selectedDate || DateTime.now().toISODate();
+    const monthKey = dateKey.slice(0, 7);
     const entityData = allActivities[uid] || {};
     const monthItems = entityData[monthKey]?.items || {};
-    const dayStart = DateTime.fromISO(today).startOf('day');
-    const dayEnd = DateTime.fromISO(today).endOf('day');
+    const dayStart = DateTime.fromISO(dateKey).startOf('day');
+    const dayEnd = DateTime.fromISO(dateKey).endOf('day');
     const dayEvents = Object.entries(monthItems)
       .map(([eventId, data]) => ({ eventId, ...data }))
       .filter(event => {
@@ -188,7 +188,7 @@ const RemindersModal = ({
     const toDo = dayEvents.find(e => e.title?.trim().toLowerCase().includes('to do'));
     const checklistAct = toDo?.activities?.find(a => a.activityType === 'checklist');
     return checklistAct?.items || [];
-  }, [allActivities, editorUserEntry?.userId]);
+  }, [allActivities, editorUserEntry?.userId, selectedDate]);
 
   const effectivePaused = (reminder) =>
     reminder.id in pendingChanges

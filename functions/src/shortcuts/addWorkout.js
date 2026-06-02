@@ -297,17 +297,21 @@ exports.addWorkout = onRequest(
 
           const reminderId = `${fullEventId}-checklist-${checklistTemplate.id}`;
           const now = new Date().toISOString();
+          const isoTime = reminderTime.toISOString();
           const newReminder = {
             id: reminderId,
             deliveryMode: "push",
             title: `Reminder: ${checklistTemplate.name}`,
             message: checklistTemplate.name,
             eventId: fullEventId,
-            scheduledTime: reminderTime.toISOString(),
+            scheduledTime: isoTime,
+            scheduledAlertTime: isoTime,
             acknowledgedAt: null,
+            recurrence: {oneTime: true},
             notification: {
               title: `Reminder: ${checklistTemplate.name}`,
               body: checklistTemplate.name,
+              scheduledTime: isoTime,
               screen: "Calendar",
               handlerName: null,
               handlerParams: null,
@@ -321,10 +325,6 @@ exports.addWorkout = onRequest(
             },
             paused: false,
             pausedUntil: null,
-            reminderType: "oneTime",
-            recurringIntervalMinutes: null,
-            recurringIntervalDays: null,
-            recurringSchedule: null,
             createdAt: now,
             updatedAt: now,
             deletable: true,
