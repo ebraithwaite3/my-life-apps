@@ -7,7 +7,62 @@ import { updateDocument } from '@my-apps/services';
 
 const DAY_TO_WEEKDAY = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
 
+const TEN_MIN_MS = 10 * 60 * 1000;
+function roundUpToTenMinutes(date) {
+  return new Date(
+    Math.ceil((date.getTime() - 5 * 60 * 1000) / TEN_MIN_MS) * TEN_MIN_MS
+  );
+}
+
 const computeNextOccurrence = (reminder) => {
+  const now = new Date();
+
+  // New schema — recurrence object
+  if (reminder.recurrence) {
+    if (reminder.recurrence.oneTime) return null;
+
+    if (reminder.recurrence.everyNMinutes) {
+      const n = reminder.recurrence.everyNMinutes.n;
+      return roundUpToTenMinutes(
+        new Date(now.getTime() + n * 60_000)
+      ).toISOString();
+    }
+
+    if (reminder.recurrence.everyNDays) {
+      const { n, time, timezone } = reminder.recurrence.everyNDays;
+      const [hour, minute] = time.split(':').map(Number);
+      return DateTime.fromJSDate(now)
+        .setZone(timezone)
+        .plus({ days: n })
+        .set({ hour, minute, second: 0, millisecond: 0 })
+        .toISO();
+    }
+
+    if (reminder.recurrence.scheduleByDay) {
+      const schedule = reminder.recurrence.scheduleByDay;
+      let soonest = null;
+      for (const entry of schedule) {
+        const tz = entry.timezone || 'America/New_York';
+        const [hour, minute] = entry.time.split(':').map(Number);
+        const nowInZone = DateTime.fromJSDate(now).setZone(tz);
+        let candidate = nowInZone.set({ hour, minute, second: 0, millisecond: 0 });
+        if (candidate <= nowInZone) candidate = candidate.plus({ days: 1 });
+        let iterations = 0;
+        while (candidate.toFormat('EEE').toUpperCase().slice(0, 2) !== entry.day && iterations < 14) {
+          candidate = candidate.plus({ days: 1 });
+          iterations++;
+        }
+        if (!soonest || candidate < DateTime.fromISO(soonest)) {
+          soonest = candidate.toISO();
+        }
+      }
+      return soonest;
+    }
+
+    return null;
+  }
+
+  // Old schema — flat fields
   const base = reminder.scheduledTime
     ? DateTime.fromISO(reminder.scheduledTime, { zone: 'utc' })
     : DateTime.now();
@@ -24,11 +79,10 @@ const computeNextOccurrence = (reminder) => {
         if (!targetWeekday) return null;
         const [h, m] = (time || '09:00').split(':').map(Number);
         const tz = timezone || 'America/New_York';
-        const now = DateTime.now().setZone(tz);
-        const candidate = now.set({ hour: h, minute: m, second: 0, millisecond: 0 });
-        const daysUntil = (targetWeekday - now.weekday + 7) % 7;
-        // Same weekday but time already passed → next week
-        if (daysUntil === 0 && candidate <= now) {
+        const nowDt = DateTime.now().setZone(tz);
+        const candidate = nowDt.set({ hour: h, minute: m, second: 0, millisecond: 0 });
+        const daysUntil = (targetWeekday - nowDt.weekday + 7) % 7;
+        if (daysUntil === 0 && candidate <= nowDt) {
           return candidate.plus({ days: 7 }).toUTC().toISO();
         }
         return candidate.plus({ days: daysUntil }).toUTC().toISO();
@@ -36,7 +90,6 @@ const computeNextOccurrence = (reminder) => {
       .filter(Boolean);
 
     if (!candidates.length) return null;
-    // ISO strings are lexicographically sortable — earliest wins
     return candidates.sort()[0];
   }
   return null;
@@ -143,6 +196,7 @@ export const usePinnedChecklistModal = (handleSaveChecklist) => {
                 r.id !== reminder.id ? r : {
                   ...r,
                   scheduledTime: nextTime,
+                  scheduledAlertTime: nextTime,
                   acknowledgedAt: null,
                   ...(r.notification && { notification: { ...r.notification, scheduledTime: nextTime } }),
                 }

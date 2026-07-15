@@ -7,6 +7,7 @@ import { getCategoriesFromTemplate } from "../../utils/exerciseUtils";
 import { ModalDropdown } from "@my-apps/ui";
 import { formatLastUsed } from "@my-apps/utils";
 import { Swipeable } from "react-native-gesture-handler";
+// Comment
 
 const WorkoutTemplateCard = ({ 
   template, 
